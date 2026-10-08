@@ -1,0 +1,237 @@
+@import 'tailwindcss';
+@import '@fontsource/libre-caslon-display/400.css';
+@import '@fontsource/libre-caslon-text/400.css';
+@import '@fontsource/libre-caslon-text/400-italic.css';
+@import '@fontsource/libre-caslon-text/700.css';
+@import '@fontsource-variable/schibsted-grotesk';
+
+/*
+ * Palette (brief §10). Components use only the semantic tokens below, never raw hex.
+ * Brand: burgundy #7B1E28, gold #C4A95B, emerald #166D3B, ivory #F8F4E3,
+ * charcoal #3D3D3D, sage #98AE87, rose #B77C87. Lime is reserved for "New".
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ground: #14130f; /* reading-room green-black */
+  --ground-raised: #1c1b16;
+  --surface: #25241e;
+  --surface-strong: #3d3d3d; /* charcoal */
+  --rule: #3d3d3d;
+  --rule-gold: rgb(196 169 91 / 0.38);
+
+  --text: #f8f4e3; /* ivory */
+  --text-muted: #98ae87; /* sage */
+  --text-faint: #8f8a78;
+
+  --gold: #c4a95b;
+  --gold-ink: #c4a95b; /* gold used as text */
+  --burgundy: #7b1e28;
+  --burgundy-hover: #8f2531;
+  --emerald: #166d3b;
+  --emerald-ink: #6fb98a; /* emerald lifted for text on dark (7:1) */
+  --rose: #b77c87;
+  --rose-ink: #c99aa3;
+  --sage: #98ae87;
+  --lime: #c6e04a; /* "New" only */
+
+  --on-cloth: #f8f4e3; /* text on burgundy / emerald fills */
+  --on-lime: #14130f;
+  --shelf-shadow: 0 10px 18px -8px rgb(0 0 0 / 0.7);
+  --grain-opacity: 0.06;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ground: #f8f4e3; /* ivory */
+  --ground-raised: #f1ebd5;
+  --surface: #fbf8ec;
+  --surface-strong: #e4dcc2;
+  --rule: #d9d0b3;
+  --rule-gold: rgb(138 115 48 / 0.45);
+
+  --text: #1c1b16;
+  --text-muted: #55684a; /* sage darkened to 5.6:1 on ivory */
+  --text-faint: #6d6858;
+
+  --gold: #c4a95b;
+  --gold-ink: #7a6528; /* gold darkened for text on ivory */
+  --burgundy: #7b1e28;
+  --burgundy-hover: #651820;
+  --emerald: #166d3b;
+  --emerald-ink: #166d3b;
+  --rose: #b77c87;
+  --rose-ink: #8b4f5c;
+  --sage: #98ae87;
+  --lime: #c6e04a;
+
+  --on-cloth: #f8f4e3;
+  --on-lime: #14130f;
+  --shelf-shadow: 0 10px 16px -10px rgb(60 45 20 / 0.45);
+  --grain-opacity: 0.045;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-ground-raised: var(--ground-raised);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-rule: var(--rule);
+  --color-rule-gold: var(--rule-gold);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-burgundy: var(--burgundy);
+  --color-burgundy-hover: var(--burgundy-hover);
+  --color-emerald: var(--emerald);
+  --color-emerald-ink: var(--emerald-ink);
+  --color-rose: var(--rose);
+  --color-rose-ink: var(--rose-ink);
+  --color-sage: var(--sage);
+  --color-lime: var(--lime);
+  --color-on-cloth: var(--on-cloth);
+  --color-on-lime: var(--on-lime);
+
+  --font-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, serif;
+  --font-serif: 'Libre Caslon Text', Georgia, serif;
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-board: 3px; /* book boards: nearly square, used everywhere */
+  --shadow-shelf: var(--shelf-shadow);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    background: var(--ground);
+    scrollbar-gutter: stable; /* keeps the header from shifting between short and long pages */
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.55;
+    font-feature-settings: 'ss01', 'tnum' 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Bookcloth grain: fixed, non-interactive, never on a scrolling layer. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: var(--gold);
+    color: var(--ground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: var(--radius-board);
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: 1px;
+  }
+
+  textarea,
+  input {
+    caret-color: var(--gold);
+  }
+
+  ::placeholder {
+    color: var(--text-faint);
+    opacity: 1;
+  }
+
+  * {
+    scrollbar-color: var(--surface-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  /* Foil-stamped lettering: flat gold, debossed by a hairline shadow. No gradient text. */
+  .foil {
+    font-family: var(--font-display);
+    color: var(--gold-ink);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    text-shadow: 0 1px 0 rgb(0 0 0 / 0.55);
+  }
+
+  :root[data-theme='light'] .foil {
+    text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+  }
+}
+
+@keyframes shelf-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* The empty shelf's one authored moment: ghost spines settle onto the shelf in turn. */
+@keyframes spine-settle {
+  from {
+    transform: translateY(14px) rotate(var(--lean, 0deg));
+    opacity: 0.35;
+  }
+  to {
+    transform: translateY(0) rotate(var(--lean, 0deg));
+    opacity: 1;
+  }
+}
+
+.ghost-spine {
+  transform: rotate(var(--lean, 0deg));
+  transform-origin: bottom left;
+  animation: spine-settle 0.7s var(--ease-out-expo) both;
+  animation-delay: calc(var(--i) * 70ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,87 @@
+import { z } from 'zod';
+
+const csv = z
+  .string()
+  .transform((value) =>
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+
+const optionalString = z
+  .string()
+  .optional()
+  .transform((value) => (value?.trim() ? value.trim() : undefined));
+
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(8787),
+  HOST: z.string().default('0.0.0.0'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** Number of reverse proxies in front of the API whose X-Forwarded-For we trust. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
+  REGISTRATIONS_PER_IP_PER_HOUR: z.coerce.number().int().positive().default(60),
+
+  // Accept either the project URL or the Data API URL Supabase also shows (…/rest/v1/):
+  // supabase-js wants the bare origin and appends its own paths.
+  SUPABASE_URL: optionalString.pipe(
+    z
+      .string()
+      .url()
+      .transform((value) => new URL(value).origin)
+      .optional(),
+  ),
+  SUPABASE_SERVICE_ROLE_KEY: optionalString,
+  // Used from phase 2 on. Optional here so the foundation runs without them.
+  APIFY_TOKEN: optionalString,
+  ANTHROPIC_API_KEY: optionalString,
+  GOOGLE_BOOKS_API_KEY: optionalString,
+
+  ALLOWED_ORIGIN: csv.default(['http://localhost:5180']),
+  DAILY_LINK_CAP_PER_DEVICE: z.coerce.number().int().positive().default(40),
+  DAILY_LINK_CAP_PER_IP: z.coerce.number().int().positive().default(120),
+  /** Estimated Apify + Claude spend per calendar month before processing pauses for everyone. */
+  MONTHLY_BUDGET_USD: z.coerce.number().positive().default(20),
+  MAX_LINKS_PER_SUBMISSION: z.coerce.number().int().positive().default(30),
+  MAX_VIDEOS_PER_COLLECTION: z.coerce.number().int().positive().default(100),
+  /** Claude model that reads the posts. Sonnet 5.5 matched Opus 5.5 on the Phase 2 fixtures at half the cost. */
+  EXTRACTION_MODEL: z.string().default('claude-sonnet-5-5'),
+  EXTRACTION_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
+  /** Also add books only visible in the background of a post (e.g. a shelf behind the creator). */
+  INCLUDE_BACKGROUND_BOOKS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  UNSURE_BELOW_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
+  JOB_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+  GLOBAL_SPEND_KILL_SWITCH: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+});
+
+export type Config = ReturnType<typeof loadConfig>;
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = EnvSchema.safeParse(env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => `  ${issue.path.join('.')}: ${issue.message}`);
+    throw new Error(`Invalid environment configuration:\n${issues.join('\n')}`);
+  }
+  const config = parsed.data;
+
+  const hasSupabase = Boolean(config.SUPABASE_URL && config.SUPABASE_SERVICE_ROLE_KEY);
+  if (Boolean(config.SUPABASE_URL) !== Boolean(config.SUPABASE_SERVICE_ROLE_KEY)) {
+    throw new Error('Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or neither.');
+  }
+  if (config.NODE_ENV === 'production' && !hasSupabase) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.');
+  }
+
+  return {
+    ...config,
+    TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.NODE_ENV === 'production' ? 1 : 0),
+    storage: hasSupabase ? ('supabase' as const) : ('memory' as const),
+  };
+}

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          # Any real https origin satisfies the production-build guard in web/vite.config.ts.
+          VITE_API_URL: https://api.booktrap.invalid
+      - name: No secrets in the web bundle
+        run: |
+          # Literal key prefixes, plus any JWT (legacy Supabase keys are JWTs whose
+          # "service_role" claim is base64-encoded and would not match literally).
+          if grep -rEl "sb_secret_|service_role|sk-ant-|apify_api_|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\." web/dist; then
+            echo "A server-side key pattern was found in the web build." >&2
+            exit 1
+          fi

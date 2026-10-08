@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Local review captures (Playwright / Impeccable)
+**/.impeccable/review/
+**/.impeccable/questions/
