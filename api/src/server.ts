@@ -5,8 +5,10 @@ import { DEVICE_ID_HEADER, DEVICE_SECRET_HEADER, ERROR_CODES } from '@booktrap/s
 import type { Config } from './config';
 import { HttpError, errorBody } from './errors';
 import type { JobQueue } from './pipeline/queue';
+import type { verifyBook } from './pipeline/verify';
 import type { DeviceRepo } from './repo/types';
 import { jobRoutes } from './routes/jobs';
+import { libraryRoutes } from './routes/library';
 import type { LibraryStore } from './store/types';
 import { deviceRoutes } from './routes/devices';
 import { healthRoutes } from './routes/health';
@@ -16,9 +18,11 @@ export interface AppDeps {
   devices: DeviceRepo;
   store: LibraryStore;
   queue: JobQueue;
+  /** Test seam for book re-verification. */
+  verifyBook?: typeof verifyBook;
 }
 
-export async function buildApp({ config, devices, store, queue }: AppDeps) {
+export async function buildApp({ config, devices, store, queue, verifyBook: verify }: AppDeps) {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'test' ? 'silent' : config.LOG_LEVEL,
@@ -78,6 +82,7 @@ export async function buildApp({ config, devices, store, queue }: AppDeps) {
       pipelineConfigured: Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
     },
   });
+  libraryRoutes(app, { devices, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify });
 
   return app;
 }

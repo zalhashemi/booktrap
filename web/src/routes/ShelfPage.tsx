@@ -1,7 +1,15 @@
-import type { CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { Checks, ListChecks } from '@phosphor-icons/react';
+import type { Book } from '@booktrap/shared';
 import { BookRow } from '../components/BookRow';
-import { ButtonLink } from '../components/Button';
-import { useBooks } from '../library/hooks';
+import { BookSheet } from '../components/BookSheet';
+import { Button, ButtonLink } from '../components/Button';
+import { SelectionBar } from '../components/SelectionBar';
+import { ShelfGrid } from '../components/ShelfGrid';
+import { ShelfToolbar, type ViewMode } from '../components/ShelfToolbar';
+import { useToast } from '../components/Toaster';
+import { DEFAULT_QUERY, applyQuery, flagCounts, isFiltered, type ShelfQuery, type SortKey } from '../library/filters';
+import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBooks, useTags } from '../library/hooks';
 
 /** Ghost spines for the empty shelf: height (% of shelf), width (px) and an optional lean. */
 const GHOST_SPINES: { h: number; w: number; lean?: number }[] = [
@@ -14,20 +22,118 @@ const GHOST_SPINES: { h: number; w: number; lean?: number }[] = [
   { h: 88, w: 30, lean: 9 },
 ];
 
+const PREFS_KEY = 'booktrap.shelf.prefs';
+
+/** View and sort are per-browser conveniences: remembered when possible, fine when not. */
+function loadPrefs(): { view: ViewMode; sort: SortKey } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<{ view: ViewMode; sort: SortKey }>;
+    return {
+      view: saved.view === 'list' ? 'list' : 'shelf',
+      sort: saved.sort === 'title' || saved.sort === 'author' ? saved.sort : 'added',
+    };
+  } catch {
+    return { view: 'shelf', sort: 'added' };
+  }
+}
+
+function savePrefs(prefs: { view: ViewMode; sort: SortKey }) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Private mode: preferences simply aren't remembered.
+  }
+}
+
 export function ShelfPage() {
   const books = useBooks();
-  const list = books.data ?? [];
-  const newCount = list.filter((book) => book.isNew).length;
+  const tags = useTags();
+  const toast = useToast();
+  const deleteBooks = useDeleteBooks();
+  const restoreBooks = useRestoreBooks();
+  const markAllSeen = useMarkAllSeen();
+  const mergeBooks = useMergeBooks();
+
+  const [prefs, setPrefs] = useState(loadPrefs);
+  const [query, setQuery] = useState<ShelfQuery>(() => ({ ...DEFAULT_QUERY, sort: prefs.sort }));
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const all = useMemo(() => books.data ?? [], [books.data]);
+  const counts = useMemo(() => flagCounts(all), [all]);
+  const visible = useMemo(() => applyQuery([...all], query), [all, query]);
+  const openBook = all.find((book) => book.id === openId) ?? null;
+
+  const updateQuery = (next: ShelfQuery) => {
+    setQuery(next);
+    if (next.sort !== prefs.sort) {
+      const updated = { ...prefs, sort: next.sort };
+      setPrefs(updated);
+      savePrefs(updated);
+    }
+  };
+  const setView = (view: ViewMode) => {
+    const updated = { ...prefs, view };
+    setPrefs(updated);
+    savePrefs(updated);
+  };
+
+  const toggle = useCallback((book: Book) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(book.id)) next.delete(book.id);
+      else next.add(book.id);
+      return next;
+    });
+  }, []);
+
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  /** Deletes with an Undo toast (brief §7). The server keeps deleted books for 30 days. */
+  const remove = (ids: string[]) => {
+    // mutateAsync, not per-call callbacks: overlapping deletes each keep their own Undo toast.
+    deleteBooks.mutateAsync(ids).then(
+      () =>
+        toast(ids.length === 1 ? 'Book deleted' : `${ids.length} books deleted`, {
+          action: { label: 'Undo', run: () => restoreBooks.mutate(ids) },
+        }),
+      () => toast('Couldn’t delete. Check your connection and try again.'),
+    );
+  };
+
+  const newCount = counts.new;
 
   return (
-    <div>
-      <div className="flex max-w-[720px] flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h1 className="font-display text-[2.15rem] leading-[1.08] tracking-[-0.01em] md:text-[2.9rem]">Your shelf</h1>
-        {list.length > 0 && (
-          <p className="text-sm text-text-muted">
-            {list.length} {list.length === 1 ? 'book' : 'books'}
-            {newCount > 0 && <span className="text-text"> · {newCount} new</span>}
-          </p>
+    <div className={selecting ? 'pb-20' : undefined}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3">
+        <div>
+          <h1 className="font-display text-[2.15rem] leading-[1.08] tracking-[-0.01em] md:text-[2.9rem]">Your shelf</h1>
+          {all.length > 0 && (
+            <p className="mt-1 text-sm text-text-muted">
+              {all.length} {all.length === 1 ? 'book' : 'books'}
+              {newCount > 0 && <span className="text-text">, {newCount} new</span>}
+            </p>
+          )}
+        </div>
+        {all.length > 0 && (
+          <div className="flex gap-2">
+            {newCount > 0 && (
+              <Button type="button" variant="quiet" onClick={() => markAllSeen.mutate()} className="min-h-11 px-4">
+                <Checks size={18} aria-hidden="true" />
+                Mark all as seen
+              </Button>
+            )}
+            {!selecting && (
+              <Button type="button" variant="quiet" onClick={() => setSelecting(true)} className="min-h-11 px-4">
+                <ListChecks size={18} aria-hidden="true" />
+                Select
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -40,14 +146,14 @@ export function ShelfPage() {
             Try again
           </button>
         </div>
-      ) : list.length === 0 ? (
+      ) : all.length === 0 ? (
         <>
           <EmptyShelf />
           <div className="mt-8 max-w-[34rem]">
             <h2 className="font-serif text-[1.3rem]">Nothing shelved yet</h2>
             <p className="mt-2 text-text-muted">
-              Every book BookTrap finds in your TikToks stands here as a spine. The newest arrivals wear a ribbon so
-              you can spot them.
+              Every book BookTrap finds in your TikToks stands here. The newest arrivals wear a lime ribbon so you can spot
+              them.
             </p>
             <ButtonLink to="/" className="mt-6">
               Paste links
@@ -55,11 +161,69 @@ export function ShelfPage() {
           </div>
         </>
       ) : (
-        <ul className="mt-8 max-w-[720px] divide-y divide-rule">
-          {list.map((book) => (
-            <BookRow key={book.id} book={book} />
-          ))}
-        </ul>
+        <>
+          <ShelfToolbar query={query} onChange={updateQuery} counts={counts} tags={tags.data ?? []} view={prefs.view} onViewChange={setView} />
+
+          {visible.length === 0 ? (
+            <div className="mt-12 max-w-[34rem]">
+              <h2 className="font-serif text-[1.3rem]">No books match</h2>
+              <p className="mt-2 text-text-muted">Try a different search, or clear the filters to see your whole shelf.</p>
+              {isFiltered(query) && (
+                <Button type="button" variant="quiet" onClick={() => setQuery({ ...DEFAULT_QUERY, sort: query.sort })} className="mt-5">
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          ) : prefs.view === 'shelf' ? (
+            <ShelfGrid books={visible} onOpen={(book) => setOpenId(book.id)} selecting={selecting} selected={selected} onToggle={toggle} />
+          ) : (
+            <ul className="mt-6 max-w-[760px] divide-y divide-rule">
+              {visible.map((book) => (
+                <BookRow
+                  key={book.id}
+                  book={book}
+                  onOpen={(b) => setOpenId(b.id)}
+                  selecting={selecting}
+                  selected={selected.has(book.id)}
+                  onToggle={toggle}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      <BookSheet
+        book={openBook}
+        onClose={() => setOpenId(null)}
+        onDelete={(book) => {
+          setOpenId(null);
+          remove([book.id]);
+        }}
+      />
+
+      {selecting && (
+        <SelectionBar
+          selected={all.filter((book) => selected.has(book.id))}
+          busy={deleteBooks.isPending || mergeBooks.isPending}
+          onCancel={stopSelecting}
+          onDelete={() => {
+            remove([...selected]);
+            stopSelecting();
+          }}
+          onMerge={(keep, others) =>
+            mergeBooks.mutate(
+              { keepId: keep.id, mergeIds: others.map((book) => book.id) },
+              {
+                onSuccess: () => {
+                  toast(`Merged into “${keep.title}”`);
+                  stopSelecting();
+                },
+                onError: () => toast('Couldn’t merge. Try again.'),
+              },
+            )
+          }
+        />
       )}
     </div>
   );

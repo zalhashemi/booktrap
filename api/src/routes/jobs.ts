@@ -4,7 +4,6 @@ import {
   CreateJobRequestSchema,
   ERROR_CODES,
   parseTikTokUrl,
-  type BookListResponseSchema,
   type Job,
   type JobListResponseSchema,
 } from '@booktrap/shared';
@@ -161,7 +160,4 @@ export function jobRoutes(
     },
   );
 
-  app.get('/v1/books', auth, async (request): Promise<z.infer<typeof BookListResponseSchema>> => {
-    return { books: await store.listBooks(request.device!.id) };
-  });
 }

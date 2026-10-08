@@ -1,7 +1,12 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   ApiErrorSchema,
   BookListResponseSchema,
+  BookSchema,
+  CountResponseSchema,
+  TagListResponseSchema,
+  TagSchema,
+  type UpdateBookRequest,
   DEVICE_ID_HEADER,
   DEVICE_SECRET_HEADER,
   HealthResponseSchema,
@@ -111,6 +116,24 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
       }),
     listBooks: (credentials: DeviceCredentials, signal?: AbortSignal) =>
       request('/v1/books', { schema: BookListResponseSchema, credentials, signal }),
+    updateBook: (credentials: DeviceCredentials, bookId: string, patch: UpdateBookRequest) =>
+      request(`/v1/books/${encodeURIComponent(bookId)}`, { method: 'PATCH', body: patch, schema: BookSchema, credentials }),
+    deleteBooks: (credentials: DeviceCredentials, ids: string[]) =>
+      request('/v1/books/delete', { method: 'POST', body: { ids }, schema: CountResponseSchema, credentials }),
+    restoreBooks: (credentials: DeviceCredentials, ids: string[]) =>
+      request('/v1/books/restore', { method: 'POST', body: { ids }, schema: CountResponseSchema, credentials }),
+    markAllSeen: (credentials: DeviceCredentials) =>
+      request('/v1/books/mark-seen', { method: 'POST', body: {}, schema: CountResponseSchema, credentials }),
+    mergeBooks: (credentials: DeviceCredentials, keepId: string, mergeIds: string[]) =>
+      request('/v1/books/merge', { method: 'POST', body: { keepId, mergeIds }, schema: BookSchema, credentials }),
+    listTags: (credentials: DeviceCredentials, signal?: AbortSignal) =>
+      request('/v1/tags', { schema: TagListResponseSchema, credentials, signal }),
+    createTag: (credentials: DeviceCredentials, name: string) =>
+      request('/v1/tags', { method: 'POST', body: { name }, schema: TagSchema, credentials }),
+    renameTag: (credentials: DeviceCredentials, tagId: string, name: string) =>
+      request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'PATCH', body: { name }, schema: TagSchema, credentials }),
+    deleteTag: (credentials: DeviceCredentials, tagId: string) =>
+      request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'DELETE', schema: z.unknown(), credentials }),
   };
 }
 

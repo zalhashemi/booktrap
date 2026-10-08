@@ -5,17 +5,13 @@ import { createCredentialStore } from './credentials';
 
 const ME = { deviceId: 'x', createdAt: '2026-10-08T00:00:00.000Z' };
 
+/** Only the calls bootstrap makes are faked; anything else would throw if touched. */
 function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
-    health: vi.fn(),
     registerDevice: vi.fn().mockResolvedValue({ deviceId: 'x', created: true }),
     me: vi.fn().mockResolvedValue(ME),
-    createJob: vi.fn(),
-    listJobs: vi.fn(),
-    retryItem: vi.fn(),
-    listBooks: vi.fn(),
     ...overrides,
-  };
+  } as Partial<ApiClient> as ApiClient;
 }
 
 describe('bootstrapDevice', () => {

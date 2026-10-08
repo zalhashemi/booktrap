@@ -3,7 +3,10 @@ import { extractTikTokLinks, type TikTokLink } from '@booktrap/shared';
 import { ApiRequestError, NetworkError } from '../api/client';
 import { Button } from '../components/Button';
 import { JobPanel } from '../components/JobPanel';
-import { useCreateJob } from '../library/hooks';
+import { ShieldCheck } from '@phosphor-icons/react';
+import { Link } from 'react-router';
+import { backupSaved } from '../device/backupPrompt';
+import { useCreateJob, useJobs } from '../library/hooks';
 
 function summarize(links: TikTokLink[]): string {
   if (links.length === 0) return 'One per line, or paste a whole message. BookTrap picks out the links.';
@@ -94,8 +97,33 @@ export function AddPage() {
       </div>
 
       <div className="border-t border-rule pt-6 lg:mt-3 lg:self-start lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
+        <BackupReminder />
         <JobPanel />
       </div>
+    </div>
+  );
+}
+
+/**
+ * After the first import that found books (brief §3): the shelf now holds something worth keeping,
+ * and a cleared browser would lose it without the backup code.
+ */
+function BackupReminder() {
+  const jobs = useJobs();
+  const foundBooks = (jobs.data ?? []).some((job) => job.items.some((item) => item.status === 'done' && item.booksFound > 0));
+  if (!foundBooks || backupSaved()) return null;
+  return (
+    <div className="mb-8 rounded-board bg-surface p-4 shadow-[inset_0_0_0_1px_var(--rule-gold)]">
+      <p className="flex items-start gap-2.5 text-[0.95rem]">
+        <ShieldCheck size={22} className="mt-0.5 shrink-0 text-gold-ink" aria-hidden="true" />
+        Save your backup code so you can never lose your list.
+      </p>
+      <p className="mt-1 pl-[2.1rem] text-sm text-text-muted">
+        BookTrap has no accounts. If this browser’s data is cleared, the code is the only way back to your shelf.
+      </p>
+      <Link to="/settings#backup" className="mt-2 ml-[2.1rem] inline-flex min-h-11 items-center text-sm font-semibold text-gold-ink underline-offset-4 hover:underline">
+        Get my backup code
+      </Link>
     </div>
   );
 }

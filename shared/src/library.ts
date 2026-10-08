@@ -51,6 +51,12 @@ export const BookSourceSchema = z.object({
 });
 export type BookSource = z.infer<typeof BookSourceSchema>;
 
+export const TagSchema = z.object({ id: z.string(), name: z.string() });
+export type Tag = z.infer<typeof TagSchema>;
+export const TagListResponseSchema = z.object({ tags: z.array(TagSchema) });
+export const TAG_NAME_MAX = 60;
+export const TagNameSchema = z.string().trim().min(1, 'Give the shelf a name.').max(TAG_NAME_MAX);
+
 export const BookSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -67,7 +73,49 @@ export const BookSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   sources: z.array(BookSourceSchema),
+  tags: z.array(TagSchema),
 });
 export type Book = z.infer<typeof BookSchema>;
+
+const isbn = (digits: number) =>
+  z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/[\s-]/g, '').toUpperCase())
+    .refine((value) => value === '' || new RegExp(digits === 10 ? '^[0-9]{9}[0-9X]$' : '^97[89][0-9]{10}$').test(value), {
+      message: `ISBN-${digits} should be ${digits} digits.`,
+    })
+    .transform((value) => (value === '' ? null : value));
+
+/** Everything a reader can change on a book (brief §7 Editing). Omitted fields are left alone. */
+export const UpdateBookRequestSchema = z
+  .object({
+    title: z.string().trim().min(1, 'A book needs a title.').max(500),
+    author: z
+      .string()
+      .trim()
+      .max(300)
+      .transform((value) => value || null)
+      .nullable(),
+    isbn10: isbn(10).nullable(),
+    isbn13: isbn(13).nullable(),
+    status: BookStatusSchema,
+    notes: z
+      .string()
+      .max(5000)
+      .transform((value) => value.trim() || null)
+      .nullable(),
+    /** false = the reader confirmed an "unsure" book. */
+    unsure: z.literal(false),
+    /** false = seen (opening or editing a book clears its "new" highlight). */
+    isNew: z.literal(false),
+    tagIds: z.array(z.string()).max(50),
+  })
+  .partial();
+export type UpdateBookRequest = z.input<typeof UpdateBookRequestSchema>;
+
+export const BookIdsRequestSchema = z.object({ ids: z.array(z.string()).min(1).max(500) });
+export const MergeBooksRequestSchema = z.object({ keepId: z.string(), mergeIds: z.array(z.string()).min(1).max(20) });
+export const CountResponseSchema = z.object({ count: z.number().int() });
 
 export const BookListResponseSchema = z.object({ books: z.array(BookSchema) });

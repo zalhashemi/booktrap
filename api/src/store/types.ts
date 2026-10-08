@@ -1,4 +1,4 @@
-import type { Book, BookStatus, Evidence, JobItemStatus } from '@booktrap/shared';
+import type { Book, BookStatus, Evidence, JobItemStatus, Tag } from '@booktrap/shared';
 import type { ExtractedBook } from '../pipeline/extract';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -113,6 +113,49 @@ export interface LibraryStore {
   /** False when this post is already a source of the book. */
   addSource(bookId: string, source: NewSource): Promise<boolean>;
   listBooks(deviceId: string): Promise<Book[]>;
+
+  // Phase 3: the reader's own edits. Every method is scoped to the device; unknown ids are ignored.
+  getBook(deviceId: string, bookId: string): Promise<Book | null>;
+  updateBook(deviceId: string, bookId: string, patch: BookPatch): Promise<Book | null>;
+  /** Soft delete (undo-able). Returns how many were deleted. */
+  deleteBooks(deviceId: string, bookIds: string[]): Promise<number>;
+  restoreBooks(deviceId: string, bookIds: string[]): Promise<number>;
+  markAllSeen(deviceId: string): Promise<number>;
+  /** Moves sources and tags onto `keepId`, fills its empty fields, then removes the others. */
+  mergeBooks(deviceId: string, keepId: string, mergeIds: string[]): Promise<Book | null>;
+
+  listTags(deviceId: string): Promise<Tag[]>;
+  /** Returns the existing tag when the name already exists (case-insensitive). */
+  createTag(deviceId: string, name: string): Promise<Tag>;
+  /** Null when the tag doesn't exist; throws TagNameTakenError when another tag has the name. */
+  renameTag(deviceId: string, tagId: string, name: string): Promise<Tag | null>;
+  deleteTag(deviceId: string, tagId: string): Promise<boolean>;
+  /** Replaces a book's tags. Tag ids that aren't this device's are ignored. */
+  setBookTags(deviceId: string, bookId: string, tagIds: string[]): Promise<void>;
+  /** Permanently removes books deleted more than 30 days ago. Returns how many. */
+  purgeDeletedBooks(): Promise<number>;
+}
+
+export interface BookPatch {
+  title?: string;
+  author?: string | null;
+  isbn10?: string | null;
+  isbn13?: string | null;
+  coverUrl?: string | null;
+  publishedYear?: number | null;
+  status?: BookStatus;
+  notes?: string | null;
+  verified?: boolean;
+  unsure?: boolean;
+  isNew?: boolean;
+  normalizedKey?: string;
+}
+
+export class TagNameTakenError extends Error {
+  constructor() {
+    super('A shelf with that name already exists.');
+    this.name = 'TagNameTakenError';
+  }
 }
 
 export const TERMINAL_STATUSES: readonly JobItemStatus[] = ['done', 'failed'];

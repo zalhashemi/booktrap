@@ -6,7 +6,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 |---|---|---|
 | 1 | Foundation | Done |
 | 2 | Single-link pipeline | Done |
-| 3 | List experience | Not started |
+| 3 | List experience | Done |
 | 4 | Bulk and collections | Not started |
 | 5 | Exports | Not started |
 | 6 | Design pass | Not started |
@@ -32,6 +32,53 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Phase 3: List experience
+
+Done:
+- Shelf view (the Gilt Spines signature): 2:3 cover plates standing on gold planks, titles below like shelf labels, and rows that reflow by whole cells. Also a list view. The chosen view and sort are remembered per browser.
+- Search across title, author and shelf names (accent- and case-insensitive). Chips: All / New / Unsure / Verified with counts. Status and shelf filters. Sort by date added, title (ignoring articles) or author (by surname). On phones the pickers fold behind "Filter & sort".
+- Book sheet (native dialog: bottom sheet on phones, side panel on desktop). Edit title, author, status, shelves, notes and ISBNs. Changing the title or author re-verifies; when no match is found, old identifiers are cleared and the book is marked Unsure. The Unsure banner has "Looks right". Opening a book clears its New flag. Sources link to the original TikToks.
+- Multi-select: delete with Undo (soft delete, purged after 30 days on a 6-hourly timer) and manual merge (pick the copy to keep; sources, shelves and notes move over). "Mark all as seen".
+- Shelves (tags): create from the sheet or Settings, rename, delete. A restored book that duplicates a re-imported copy merges into it.
+- Backup code (brief §3): Crockford base32 of the device credentials with a checksum, shown on request, copy or download. Restore from code in Settings, forgiving of case, spaces and I/L/O. A "Save your backup code" prompt appears after the first import that finds books.
+- Schema: `supabase/migrations/0003_list.sql` (user ran it).
+- Tests: 17 shared, 83 API, 24 web.
+
+Code review (high) found 10 issues, all fixed:
+- Restoring a backup code didn't switch the open app until a reload. Fix: device-scoped query keys and a session reset.
+- A rename that failed verification kept the old book's ISBN and cover. Fix: they're cleared.
+- Non-UUID ids caused Postgres 500s. Fix: they now return 404 or count 0.
+- Purge ran on every list request. Fix: a 6-hour timer.
+- Bulk ids could overflow URL limits. Fix: chunks of 100.
+- Overlapping deletes lost their Undo toast. Fix: mutateAsync.
+- Whole-list rollbacks undid other changes. Fix: targeted rollbacks.
+- Tag replacement could strip all tags on failure. Fix: add first, then remove.
+- A restore could create a duplicate. Fix: it merges into the live copy.
+- The toast timer reset on every re-render. Fix: a stable dismiss.
+
+Also fixed from Playwright runs:
+- Shelf covers rendered at 0x0 (buttons don't stretch). Fix: `w-full`.
+- The phone toolbar pushed books below the fold. Fix: pickers fold away.
+- The selection bar's Merge was icon-only. Fix: it has a label.
+- Entrance animations started invisible. Fix: they're transform-only and skipped under reduced motion.
+
+Playwright MCP (390px and 1280px, dark and light, real Supabase):
+- Edit, re-verify and Unsure → confirm.
+- Shelves and notes persist after reload.
+- Search, filters and sorting.
+- List view, and the view is remembered.
+- Delete → Undo, including two overlapping deletes.
+- Merge.
+- Mark all as seen.
+- Backup code → restore in a fresh browser with no reload; a typo is caught.
+- No overflow, and every tap target is at least 40px.
+
+Impeccable detector: 0 findings.
+
+Test-harness note: the Playwright MCP window runs in the background, which freezes CSS animations and transitions. Visual checks use CDP focus emulation (`Emulation.setFocusEmulationEnabled`).
+
+Open: the backup code is long (102 characters) because it encodes the full credentials, as the brief specifies. A shorter server-issued code is possible if wanted.
 
 ## Phase 2: Single-link pipeline
 

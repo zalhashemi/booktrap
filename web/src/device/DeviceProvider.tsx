@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { DeviceCredentials } from '@booktrap/shared';
 import { api, NetworkError } from '../api/client';
 import { bootstrapDevice, requestPersistentStorage, type DeviceSession } from './bootstrap';
 import { CREDENTIALS_KEY, createCredentialStore } from './credentials';
@@ -16,6 +17,8 @@ interface DeviceContextValue {
   retry: () => void;
   /** Discards this device's credentials and starts a new, empty shelf. */
   startFresh: () => void;
+  /** Switches this browser to the shelf a backup code belongs to. Throws if the code is rejected. */
+  restore: (credentials: DeviceCredentials) => Promise<void>;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -63,6 +66,19 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     void queryClient.resetQueries({ queryKey: SESSION_KEY });
   }, [queryClient]);
 
+  const restore = useCallback(
+    async (credentials: DeviceCredentials) => {
+      // Prove the code works before replacing anything on this browser.
+      await api.me(credentials);
+      store.save({ ...credentials, registered: true });
+      // Re-run bootstrap with the restored credentials. Library data is keyed by device, so the
+      // old shelf's cache can never be shown under the new one; it is dropped to free memory.
+      await queryClient.resetQueries({ queryKey: SESSION_KEY });
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
+    },
+    [queryClient],
+  );
+
   const value: DeviceContextValue = {
     status: query.isSuccess ? 'ready' : query.isError ? 'error' : 'loading',
     session: query.data,
@@ -70,6 +86,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     persisted,
     retry,
     startFresh,
+    restore,
   };
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;

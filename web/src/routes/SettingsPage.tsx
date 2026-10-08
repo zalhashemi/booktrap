@@ -1,31 +1,29 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useDevice } from '../device/DeviceProvider';
+import { BackupSection, Section, ShelvesSection } from '../components/SettingsSections';
 import { useTheme, type Theme } from '../theme';
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 
 export function SettingsPage() {
+  const { hash } = useLocation();
+  // Deep links like /settings#backup land on that section.
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+  }, [hash]);
+
   return (
     <div className="max-w-[640px]">
       <h1 className="font-display text-[2.15rem] leading-[1.08] tracking-[-0.01em] md:text-[2.9rem]">Settings</h1>
       <DeviceSection />
+      <BackupSection />
+      <ShelvesSection />
       <AppearanceSection />
       <ServerSection />
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="mt-10 border-t border-rule pt-6">
-      <h2 id={id} className="font-serif text-[1.3rem]">
-        {title}
-      </h2>
-      {children}
-    </section>
   );
 }
 

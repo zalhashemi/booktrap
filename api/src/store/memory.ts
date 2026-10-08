@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Book, BookSource } from '@booktrap/shared';
+import type { Book, BookSource, Tag } from '@booktrap/shared';
 import {
   TERMINAL_STATUSES,
+  TagNameTakenError,
   deriveJobStatus,
   type CachedPost,
   type JobItemRecord,
@@ -10,14 +11,18 @@ import {
   type LibraryStore,
 } from './types';
 
+type BookRow = Omit<Book, 'sources' | 'tags'> & { deviceId: string; normalizedKey: string; deletedAt: string | null };
+
 /** Development and test storage. Data is lost when the process exits. */
 export function createMemoryLibraryStore(): LibraryStore {
   const jobs = new Map<string, JobRecord & { ipHash: string | null }>();
   const items = new Map<string, JobItemRecord>();
   const cache = new Map<string, CachedPost>();
   const spend: { usd: number; at: Date }[] = [];
-  const books = new Map<string, Omit<Book, 'sources'> & { deviceId: string; normalizedKey: string }>();
+  const books = new Map<string, BookRow>();
   const sources = new Map<string, (BookSource & { bookId: string })[]>();
+  const tags = new Map<string, Tag & { deviceId: string }>();
+  const bookTags = new Map<string, Set<string>>();
 
   const now = () => new Date().toISOString();
   const withItems = (job: JobRecord): JobWithItems => ({
@@ -25,8 +30,22 @@ export function createMemoryLibraryStore(): LibraryStore {
     items: [...items.values()].filter((item) => item.jobId === job.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   });
   const strip = ({ ipHash: _ipHash, ...job }: JobRecord & { ipHash: string | null }): JobRecord => job;
+  const liveBook = (deviceId: string, bookId: string) => {
+    const book = books.get(bookId);
+    return book && book.deviceId === deviceId && !book.deletedAt ? book : null;
+  };
+  const toBook = ({ deviceId: _device, normalizedKey: _key, deletedAt: _deleted, ...book }: BookRow): Book => ({
+    ...book,
+    sources: (sources.get(book.id) ?? []).map(({ bookId: _bookId, ...source }) => source),
+    tags: [...(bookTags.get(book.id) ?? [])]
+      .map((tagId) => tags.get(tagId))
+      .filter((tag): tag is Tag & { deviceId: string } => Boolean(tag))
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  });
+  const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-  return {
+  const store: LibraryStore = {
     async createJob(deviceId, ipHash, newItems) {
       const job = { id: randomUUID(), deviceId, status: 'queued' as const, clearedNew: false, createdAt: now(), ipHash };
       jobs.set(job.id, job);
@@ -101,7 +120,7 @@ export function createMemoryLibraryStore(): LibraryStore {
     },
     async dedupCandidates(deviceId) {
       return [...books.values()]
-        .filter((book) => book.deviceId === deviceId)
+        .filter((book) => book.deviceId === deviceId && !book.deletedAt)
         .map(({ id, title, author, isbn10, isbn13, coverUrl, publishedYear }) => ({ id, title, author, isbn10, isbn13, coverUrl, publishedYear }));
     },
     async insertBook(deviceId, book) {
@@ -124,6 +143,7 @@ export function createMemoryLibraryStore(): LibraryStore {
         normalizedKey: book.normalizedKey,
         createdAt: stamp,
         updatedAt: stamp,
+        deletedAt: null,
       });
       return id;
     },
@@ -143,12 +163,123 @@ export function createMemoryLibraryStore(): LibraryStore {
     },
     async listBooks(deviceId) {
       return [...books.values()]
-        .filter((book) => book.deviceId === deviceId)
+        .filter((book) => book.deviceId === deviceId && !book.deletedAt)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map(({ deviceId: _device, normalizedKey: _key, ...book }) => ({
-          ...book,
-          sources: (sources.get(book.id) ?? []).map(({ bookId: _bookId, ...source }) => source),
-        }));
+        .map(toBook);
+    },
+
+    async getBook(deviceId, bookId) {
+      const book = liveBook(deviceId, bookId);
+      return book ? toBook(book) : null;
+    },
+    async updateBook(deviceId, bookId, patch) {
+      const book = liveBook(deviceId, bookId);
+      if (!book) return null;
+      Object.assign(book, Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)), { updatedAt: now() });
+      return toBook(book);
+    },
+    async deleteBooks(deviceId, bookIds) {
+      let count = 0;
+      for (const id of bookIds) {
+        const book = liveBook(deviceId, id);
+        if (book) {
+          book.deletedAt = now();
+          count++;
+        }
+      }
+      return count;
+    },
+    async restoreBooks(deviceId, bookIds) {
+      let count = 0;
+      for (const id of bookIds) {
+        const book = books.get(id);
+        if (book && book.deviceId === deviceId && book.deletedAt) {
+          book.deletedAt = null;
+          count++;
+        }
+      }
+      return count;
+    },
+    async markAllSeen(deviceId) {
+      let count = 0;
+      for (const book of books.values()) {
+        if (book.deviceId === deviceId && book.isNew && !book.deletedAt) {
+          book.isNew = false;
+          count++;
+        }
+      }
+      return count;
+    },
+    async mergeBooks(deviceId, keepId, mergeIds) {
+      const keep = liveBook(deviceId, keepId);
+      if (!keep) return null;
+      for (const id of mergeIds) {
+        if (id === keepId) continue;
+        const other = liveBook(deviceId, id);
+        if (!other) continue;
+        for (const source of sources.get(id) ?? []) {
+          const { bookId: _bookId, id: _id, createdAt: _createdAt, ...rest } = source;
+          await store.addSource(keepId, rest);
+        }
+        const keepTags = bookTags.get(keepId) ?? new Set<string>();
+        for (const tagId of bookTags.get(id) ?? []) keepTags.add(tagId);
+        bookTags.set(keepId, keepTags);
+        await store.fillBookGaps(keepId, { isbn10: other.isbn10, isbn13: other.isbn13, coverUrl: other.coverUrl, publishedYear: other.publishedYear });
+        if (!keep.notes && other.notes) keep.notes = other.notes;
+        books.delete(id);
+        sources.delete(id);
+        bookTags.delete(id);
+      }
+      return toBook(keep);
+    },
+
+    async listTags(deviceId) {
+      return [...tags.values()]
+        .filter((tag) => tag.deviceId === deviceId)
+        .map(({ id, name }) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    async createTag(deviceId, name) {
+      const existing = [...tags.values()].find((tag) => tag.deviceId === deviceId && sameName(tag.name, name));
+      if (existing) return { id: existing.id, name: existing.name };
+      const tag = { id: randomUUID(), deviceId, name };
+      tags.set(tag.id, tag);
+      return { id: tag.id, name };
+    },
+    async renameTag(deviceId, tagId, name) {
+      const tag = tags.get(tagId);
+      if (!tag || tag.deviceId !== deviceId) return null;
+      if ([...tags.values()].some((other) => other.deviceId === deviceId && other.id !== tagId && sameName(other.name, name))) {
+        throw new TagNameTakenError();
+      }
+      tag.name = name;
+      return { id: tag.id, name };
+    },
+    async deleteTag(deviceId, tagId) {
+      const tag = tags.get(tagId);
+      if (!tag || tag.deviceId !== deviceId) return false;
+      tags.delete(tagId);
+      for (const set of bookTags.values()) set.delete(tagId);
+      return true;
+    },
+    async purgeDeletedBooks() {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      let count = 0;
+      for (const [id, book] of books) {
+        if (book.deletedAt && new Date(book.deletedAt).getTime() < cutoff) {
+          books.delete(id);
+          sources.delete(id);
+          bookTags.delete(id);
+          count++;
+        }
+      }
+      return count;
+    },
+    async setBookTags(deviceId, bookId, tagIds) {
+      if (!liveBook(deviceId, bookId)) return;
+      const owned = tagIds.filter((id) => tags.get(id)?.deviceId === deviceId);
+      bookTags.set(bookId, new Set(owned));
     },
   };
+  return store;
 }

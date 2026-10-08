@@ -1,6 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Book, BookSource } from '@booktrap/shared';
-import { TERMINAL_STATUSES, deriveJobStatus, type JobItemRecord, type JobRecord, type JobWithItems, type LibraryStore } from './types';
+import type { Book, BookSource, Tag } from '@booktrap/shared';
+import {
+  TERMINAL_STATUSES,
+  TagNameTakenError,
+  deriveJobStatus,
+  type BookPatch,
+  type JobItemRecord,
+  type JobRecord,
+  type JobWithItems,
+  type LibraryStore,
+} from './types';
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -55,6 +64,7 @@ interface BookRow {
   created_at: string;
   updated_at: string;
   book_sources?: SourceRow[];
+  book_tags?: { tags: { id: string; name: string } | null }[];
 }
 
 interface SourceRow {
@@ -120,7 +130,31 @@ const toBook = (row: BookRow): Book => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   sources: (row.book_sources ?? []).map(toSource).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  tags: (row.book_tags ?? [])
+    .map((link) => link.tags)
+    .filter((tag): tag is Tag => Boolean(tag))
+    .sort((a, b) => a.name.localeCompare(b.name)),
 });
+
+const BOOK_SELECT =
+  'id, title, author, isbn10, isbn13, cover_url, published_year, status, verified, unsure, is_new, notes, created_at, updated_at, ' +
+  'book_sources (id, tiktok_post_id, tiktok_url, creator_handle, thumbnail_url, evidence, confidence, created_at), ' +
+  'book_tags (tags (id, name))';
+
+const PATCH_COLUMNS: Record<keyof BookPatch, string> = {
+  title: 'title',
+  author: 'author',
+  isbn10: 'isbn10',
+  isbn13: 'isbn13',
+  coverUrl: 'cover_url',
+  publishedYear: 'published_year',
+  status: 'status',
+  notes: 'notes',
+  verified: 'verified',
+  unsure: 'unsure',
+  isNew: 'is_new',
+  normalizedKey: 'normalized_key',
+};
 
 export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
   const jobSelect = `id, device_id, status, cleared_new, created_at, job_items (${ITEM_COLUMNS})`;
@@ -269,7 +303,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
 
     async dedupCandidates(deviceId) {
       const rows = check(
-        await db.from('books').select('id, title, author, isbn10, isbn13, cover_url, published_year').eq('device_id', deviceId),
+        await db.from('books').select('id, title, author, isbn10, isbn13, cover_url, published_year').eq('device_id', deviceId).is('deleted_at', null),
         'books.candidates',
       ) as Pick<BookRow, 'id' | 'title' | 'author' | 'isbn10' | 'isbn13' | 'cover_url' | 'published_year'>[];
       return rows.map((row) => ({
@@ -335,15 +369,189 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       const rows = check(
         await db
           .from('books')
-          .select(
-            'id, title, author, isbn10, isbn13, cover_url, published_year, status, verified, unsure, is_new, notes, created_at, updated_at, book_sources (id, tiktok_post_id, tiktok_url, creator_handle, thumbnail_url, evidence, confidence, created_at)',
-          )
+          .select(BOOK_SELECT)
           .eq('device_id', deviceId)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(5000),
         'books.list',
-      ) as BookRow[];
+      ) as unknown as BookRow[];
       return rows.map(toBook);
     },
+
+    async purgeDeletedBooks() {
+      const count = check(await db.rpc('purge_deleted_books'), 'purge_deleted_books');
+      return Number(count ?? 0);
+    },
+
+    async getBook(deviceId, bookId) {
+      const row = check(
+        await db.from('books').select(BOOK_SELECT).eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null).maybeSingle(),
+        'books.get',
+      ) as unknown as BookRow | null;
+      return row ? toBook(row) : null;
+    },
+
+    async updateBook(deviceId, bookId, patch) {
+      const row: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(patch)) {
+        if (value !== undefined) row[PATCH_COLUMNS[key as keyof BookPatch]] = value;
+      }
+      if (Object.keys(row).length) {
+        check(await db.from('books').update(row).eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null), 'books.update');
+      }
+      return this.getBook(deviceId, bookId);
+    },
+
+    async deleteBooks(deviceId, bookIds) {
+      let count = 0;
+      // Ids travel in the URL (PostgREST `in` filter): keep each request well under URL limits.
+      for (const chunk of chunks(bookIds, ID_CHUNK)) {
+        const rows = check(
+          await db
+            .from('books')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('device_id', deviceId)
+            .in('id', chunk)
+            .is('deleted_at', null)
+            .select('id'),
+          'books.delete',
+        ) as { id: string }[];
+        count += rows.length;
+      }
+      return count;
+    },
+
+    async restoreBooks(deviceId, bookIds) {
+      let count = 0;
+      for (const chunk of chunks(bookIds, ID_CHUNK)) {
+        const rows = check(
+          await db
+            .from('books')
+            .update({ deleted_at: null })
+            .eq('device_id', deviceId)
+            .in('id', chunk)
+            .not('deleted_at', 'is', null)
+            .select('id'),
+          'books.restore',
+        ) as { id: string }[];
+        count += rows.length;
+      }
+      return count;
+    },
+
+    async markAllSeen(deviceId) {
+      const rows = check(
+        await db.from('books').update({ is_new: false }).eq('device_id', deviceId).eq('is_new', true).is('deleted_at', null).select('id'),
+        'books.mark_seen',
+      ) as { id: string }[];
+      return rows.length;
+    },
+
+    async mergeBooks(deviceId, keepId, mergeIds) {
+      const keep = await this.getBook(deviceId, keepId);
+      if (!keep) return null;
+      for (const id of mergeIds) {
+        if (id === keepId) continue;
+        const other = await this.getBook(deviceId, id);
+        if (!other) continue;
+        for (const source of other.sources) {
+          await this.addSource(keepId, {
+            postId: source.postId,
+            url: source.url,
+            creatorHandle: source.creatorHandle,
+            thumbnailUrl: source.thumbnailUrl,
+            evidence: source.evidence,
+            confidence: source.confidence,
+          });
+        }
+        if (other.tags.length) {
+          check(
+            await db.from('book_tags').upsert(
+              other.tags.map((tag) => ({ book_id: keepId, tag_id: tag.id })),
+              { ignoreDuplicates: true },
+            ),
+            'book_tags.merge',
+          );
+        }
+        await this.fillBookGaps(keepId, {
+          isbn10: other.isbn10,
+          isbn13: other.isbn13,
+          coverUrl: other.coverUrl,
+          publishedYear: other.publishedYear,
+        });
+        if (other.notes) {
+          check(await db.from('books').update({ notes: other.notes }).eq('id', keepId).is('notes', null), 'books.merge_notes');
+        }
+        check(await db.from('books').delete().eq('id', id).eq('device_id', deviceId), 'books.merge_delete');
+      }
+      return this.getBook(deviceId, keepId);
+    },
+
+    async listTags(deviceId) {
+      return check(await db.from('tags').select('id, name').eq('device_id', deviceId).order('name'), 'tags.list') as Tag[];
+    },
+
+    async createTag(deviceId, name) {
+      const { data, error } = await db.from('tags').insert({ device_id: deviceId, name }).select('id, name').single<Tag>();
+      if (!error && data) return data;
+      if (error?.code !== UNIQUE_VIOLATION) throw new Error(`tags.insert failed: ${error?.message}`);
+      const existing = (await this.listTags(deviceId)).find((tag) => tag.name.toLowerCase() === name.toLowerCase());
+      if (!existing) throw new Error('tags.insert conflicted but no tag was found');
+      return existing;
+    },
+
+    async renameTag(deviceId, tagId, name) {
+      const { data, error } = await db
+        .from('tags')
+        .update({ name })
+        .eq('id', tagId)
+        .eq('device_id', deviceId)
+        .select('id, name')
+        .maybeSingle<Tag>();
+      if (error?.code === UNIQUE_VIOLATION) throw new TagNameTakenError();
+      if (error) throw new Error(`tags.rename failed: ${error.message}`);
+      return data;
+    },
+
+    async deleteTag(deviceId, tagId) {
+      const rows = check(await db.from('tags').delete().eq('id', tagId).eq('device_id', deviceId).select('id'), 'tags.delete') as {
+        id: string;
+      }[];
+      return rows.length > 0;
+    },
+
+    async setBookTags(deviceId, bookId, tagIds) {
+      const book = check(
+        await db.from('books').select('id').eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null).maybeSingle(),
+        'books.owner',
+      );
+      if (!book) return;
+      const owned = tagIds.length
+        ? (check(await db.from('tags').select('id').eq('device_id', deviceId).in('id', tagIds), 'tags.owned') as { id: string }[]).map(
+            (tag) => tag.id,
+          )
+        : [];
+      // Add the wanted links first, then drop the rest: a failure part-way never strips every tag.
+      if (owned.length) {
+        check(
+          await db.from('book_tags').upsert(
+            owned.map((tagId) => ({ book_id: bookId, tag_id: tagId })),
+            { ignoreDuplicates: true },
+          ),
+          'book_tags.add',
+        );
+      }
+      const removal = db.from('book_tags').delete().eq('book_id', bookId);
+      check(await (owned.length ? removal.not('tag_id', 'in', `(${owned.join(',')})`) : removal), 'book_tags.remove');
+    },
   };
+}
+
+const ID_CHUNK = 100;
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }
