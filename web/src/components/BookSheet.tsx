@@ -6,7 +6,7 @@ import { STATUS_LABELS } from '../library/filters';
 import { useCreateTag, useTags, useUpdateBook } from '../library/hooks';
 import { BookFlags, CoverPlate } from './BookRow';
 import { Button } from './Button';
-import { useToast } from './Toaster';
+import { useToast } from './toast-context';
 
 const EVIDENCE_LABELS: Record<string, string> = {
   cover: 'cover shown',
@@ -82,7 +82,7 @@ export function BookSheet({ book, onClose, onDelete }: Props) {
         if (event.target === dialog.current) onClose();
       }}
       aria-labelledby="book-sheet-title"
-      className="sheet m-0 mt-auto h-[calc(100dvh-1.5rem)] max-h-none w-full max-w-none overflow-hidden rounded-t-[6px] bg-ground-raised p-0 text-text shadow-[0_-12px_40px_-12px_rgb(0_0_0/0.7)] backdrop:bg-[rgb(10_9_7/0.66)] md:mt-0 md:mr-0 md:ml-auto md:h-dvh md:w-[480px] md:rounded-none md:border-l md:border-rule-gold"
+      className="sheet m-0 mt-auto h-[calc(100dvh-1.5rem)] max-h-none w-full max-w-none overflow-hidden rounded-t-[26px] bg-ground-raised p-0 text-text shadow-[0_-12px_40px_-12px_rgb(0_0_0/0.7)] backdrop:bg-[rgb(10_9_7/0.66)] md:mt-0 md:mr-0 md:ml-auto md:h-dvh md:w-[480px] md:rounded-l-[26px] md:rounded-r-none"
     >
       {book && <SheetBody key={book.id} book={book} onClose={onClose} onDelete={onDelete} />}
     </dialog>
@@ -136,7 +136,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
         <div className="flex min-w-0 gap-4">
           <CoverPlate book={book} className="w-16" />
           <div className="min-w-0 pt-1">
-            <h2 id="book-sheet-title" className="font-display text-[1.45rem] leading-tight">
+            <h2 id="book-sheet-title" className="font-display text-[1.55rem] leading-tight">
               {book.title}
             </h2>
             <p className="mt-1 text-sm text-text-muted">{book.author ?? 'Author unknown'}</p>
@@ -150,7 +150,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="-mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-board text-text-muted hover:text-text"
+          className="-mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-pill text-text-muted hover:text-text"
         >
           <X size={22} aria-hidden="true" />
         </button>
@@ -158,7 +158,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
       <div className="flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6">
         {book.unsure && (
-          <div className="rounded-board bg-surface p-4 shadow-[inset_0_0_0_1px_var(--rose)]">
+          <div className="rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rose)]">
             <p className="flex items-start gap-2 text-[0.95rem]">
               <Question size={20} weight="bold" className="mt-0.5 shrink-0 text-rose-ink" aria-hidden="true" />
               BookTrap isn’t sure it read this one right. Check the title and author, then confirm or fix them.
@@ -196,12 +196,12 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
         <fieldset>
           <legend className="text-[0.95rem] font-medium">Status</legend>
-          <div className="mt-2 grid grid-cols-3 rounded-board p-1 shadow-[inset_0_0_0_1px_var(--rule)]">
+          <div className="mt-2 grid grid-cols-3 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]">
             {BOOK_STATUSES.map((status) => (
               <label
                 key={status}
-                className={`flex min-h-11 cursor-pointer items-center justify-center rounded-[2px] px-2 text-center text-[0.9rem] transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
-                  draft.status === status ? 'bg-surface-strong text-text' : 'text-text-muted hover:text-text'
+                className={`flex min-h-11 cursor-pointer items-center justify-center rounded-pill px-2 text-center text-[0.9rem] font-bold transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
+                  draft.status === status ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
                 }`}
               >
                 <input
@@ -284,7 +284,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
           <button
             type="button"
             onClick={() => onDelete(book)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-board px-2 text-sm text-rose-ink hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-2 text-sm text-rose-ink hover:underline"
           >
             <Trash size={18} aria-hidden="true" />
             Delete
@@ -342,8 +342,8 @@ function TagPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
               type="button"
               aria-pressed={on}
               onClick={() => toggle(tag.id)}
-              className={`min-h-11 rounded-board px-3.5 text-[0.9rem] transition-colors duration-150 ${
-                on ? 'bg-emerald text-on-cloth' : 'text-text-muted shadow-[inset_0_0_0_1px_var(--rule)] hover:text-text'
+              className={`min-h-11 rounded-pill px-4 text-[0.9rem] font-bold transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.97] ${
+                on ? 'bg-sage text-on-tab' : 'text-text-muted shadow-[inset_0_0_0_1.5px_var(--rule)] hover:text-text'
               }`}
             >
               {tag.name}
@@ -382,7 +382,7 @@ function TagPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-board px-3 text-[0.9rem] text-gold-ink hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-3 text-[0.9rem] text-gold-ink hover:underline"
           >
             <Plus size={16} aria-hidden="true" />
             New shelf

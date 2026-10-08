@@ -27,91 +27,86 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: 'author', label: 'Author' },
 ];
 
-/** Active chip colours carry meaning: lime only for New, rose for Unsure, emerald for Verified. */
-const ACTIVE: Record<Flag, string> = {
-  all: 'bg-surface-strong text-text',
-  new: 'bg-lime text-on-lime',
-  unsure: 'bg-rose text-ground',
-  verified: 'bg-emerald text-on-cloth',
+/**
+ * Each page-tab wears the colour of the state it stands for (lime only for New, rose for Unsure,
+ * emerald for Verified, gold for everything): a soft tint at rest, full colour when pulled up.
+ */
+const TAB_FILL: Record<Flag, string> = {
+  all: 'bg-[color-mix(in_srgb,var(--gold)_22%,var(--surface))] aria-pressed:bg-gold',
+  new: 'bg-[color-mix(in_srgb,var(--lime)_20%,var(--surface))] aria-pressed:bg-lime',
+  unsure: 'bg-[color-mix(in_srgb,var(--rose)_26%,var(--surface))] aria-pressed:bg-rose',
+  verified: 'bg-[color-mix(in_srgb,var(--emerald)_34%,var(--surface))] aria-pressed:bg-emerald aria-pressed:text-on-cloth',
 };
 
 export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange }: Props) {
-  const ids = { search: useId(), status: useId(), tag: useId(), sort: useId() };
+  const ids = { search: useId(), status: useId(), tag: useId(), sort: useId(), pickers: useId() };
   const set = <K extends keyof ShelfQuery>(key: K, value: ShelfQuery[K]) => onChange({ ...query, [key]: value });
   // Phones fold the pickers away so books start near the top; desktop always shows them.
   const [pickersOpen, setPickersOpen] = useState(false);
   const activePickers = Number(query.status !== 'any') + Number(query.tagId !== 'any') + Number(query.sort !== 'added');
-  const pickersId = useId();
 
   return (
-    <div className="mt-6 space-y-4">
-      <div className="relative">
-        <label htmlFor={ids.search} className="sr-only">
-          Search your shelf
-        </label>
-        <MagnifyingGlass size={20} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-text-faint" aria-hidden="true" />
-        <input
-          id={ids.search}
-          type="search"
-          value={query.search}
-          onChange={(event) => set('search', event.target.value)}
-          placeholder="Search titles, authors, shelves"
-          autoComplete="off"
-          className="field pl-11"
-        />
-        {query.search && (
-          <button
-            type="button"
-            onClick={() => set('search', '')}
-            aria-label="Clear search"
-            className="absolute top-1/2 right-1 flex size-10 -translate-y-1/2 items-center justify-center text-text-muted hover:text-text"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label="Show">
-        {FLAGS.map((flag) => {
-          const active = query.flag === flag.value;
-          return (
+    <div className="mt-6 space-y-5">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <label htmlFor={ids.search} className="sr-only">
+            Search your shelf
+          </label>
+          <MagnifyingGlass size={20} weight="bold" className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-text-faint" aria-hidden="true" />
+          <input
+            id={ids.search}
+            type="search"
+            value={query.search}
+            onChange={(event) => set('search', event.target.value)}
+            placeholder="Search your shelf"
+            autoComplete="off"
+            className="field rounded-pill pr-11 pl-12"
+          />
+          {query.search && (
             <button
-              key={flag.value}
               type="button"
-              aria-pressed={active}
-              onClick={() => set('flag', flag.value)}
-              className={`flex min-h-11 shrink-0 items-center gap-2 rounded-board px-3.5 text-[0.9rem] transition-colors duration-150 ${
-                active ? `${ACTIVE[flag.value]} font-semibold` : 'text-text-muted shadow-[inset_0_0_0_1px_var(--rule)] hover:text-text'
-              }`}
+              onClick={() => set('search', '')}
+              aria-label="Clear search"
+              className="absolute top-1/2 right-1 flex size-10 -translate-y-1/2 items-center justify-center rounded-pill text-text-muted hover:text-text"
             >
-              {flag.label}
-              <span className={`tabular-nums ${active ? 'opacity-80' : 'text-text-faint'}`}>{counts[flag.value]}</span>
+              <X size={18} weight="bold" aria-hidden="true" />
             </button>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between gap-3 md:hidden">
-        <button
-          type="button"
-          aria-expanded={pickersOpen}
-          aria-controls={pickersId}
-          onClick={() => setPickersOpen((open) => !open)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-board px-3.5 text-[0.9rem] text-text shadow-[inset_0_0_0_1px_var(--rule)]"
-        >
-          <FadersHorizontal size={18} aria-hidden="true" />
-          Filter &amp; sort
-          {activePickers > 0 && <span className="rounded-[2px] bg-surface-strong px-1.5 text-[0.8rem] tabular-nums">{activePickers}</span>}
-        </button>
+          )}
+        </div>
         <ViewToggle view={view} onViewChange={onViewChange} />
       </div>
 
-      <div id={pickersId} className={`${pickersOpen ? 'flex' : 'hidden'} flex-wrap items-end gap-3 md:flex`}>
-        <div className="min-w-[9.5rem] flex-1 md:flex-none">
-          <label htmlFor={ids.status} className="block text-[0.8rem] text-text-muted">
-            Status
-          </label>
-          <select id={ids.status} value={query.status} onChange={(event) => set('status', event.target.value as ShelfQuery['status'])} className="field mt-1">
+      <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">
+        <div className="tab-row min-w-max" role="group" aria-label="Show">
+          {FLAGS.map((flag) => {
+            const active = query.flag === flag.value;
+            return (
+              <button key={flag.value} type="button" aria-pressed={active} onClick={() => set('flag', flag.value)} className={`page-tab ${TAB_FILL[flag.value]}`}>
+                {flag.label}
+                <span className="tabular-nums opacity-80">{counts[flag.value]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          aria-expanded={pickersOpen}
+          aria-controls={ids.pickers}
+          onClick={() => setPickersOpen((open) => !open)}
+          className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-surface px-4 text-[0.92rem] font-bold shadow-[inset_0_0_0_1.5px_var(--rule)]"
+        >
+          <FadersHorizontal size={18} weight="bold" aria-hidden="true" />
+          Filter &amp; sort
+          {activePickers > 0 && <span className="rounded-pill bg-gold px-2 text-[0.78rem] text-on-tab tabular-nums">{activePickers}</span>}
+        </button>
+      </div>
+
+      <div id={ids.pickers} className={`${pickersOpen ? 'grid' : 'hidden'} grid-cols-2 gap-3 md:flex md:flex-wrap md:items-end`}>
+        <Picker id={ids.status} label="Status">
+          <select id={ids.status} value={query.status} onChange={(event) => set('status', event.target.value as ShelfQuery['status'])} className="field">
             <option value="any">Any status</option>
             {BOOK_STATUSES.map((status) => (
               <option key={status} value={status}>
@@ -119,13 +114,10 @@ export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange
               </option>
             ))}
           </select>
-        </div>
+        </Picker>
         {tags.length > 0 && (
-          <div className="min-w-[9.5rem] flex-1 md:flex-none">
-            <label htmlFor={ids.tag} className="block text-[0.8rem] text-text-muted">
-              Shelf
-            </label>
-            <select id={ids.tag} value={query.tagId} onChange={(event) => set('tagId', event.target.value)} className="field mt-1">
+          <Picker id={ids.tag} label="Shelf">
+            <select id={ids.tag} value={query.tagId} onChange={(event) => set('tagId', event.target.value)} className="field">
               <option value="any">All shelves</option>
               {tags.map((tag) => (
                 <option key={tag.id} value={tag.id}>
@@ -133,32 +125,36 @@ export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange
                 </option>
               ))}
             </select>
-          </div>
+          </Picker>
         )}
-        <div className="min-w-[9.5rem] flex-1 md:flex-none">
-          <label htmlFor={ids.sort} className="block text-[0.8rem] text-text-muted">
-            Sort by
-          </label>
-          <select id={ids.sort} value={query.sort} onChange={(event) => set('sort', event.target.value as SortKey)} className="field mt-1">
+        <Picker id={ids.sort} label="Sort by">
+          <select id={ids.sort} value={query.sort} onChange={(event) => set('sort', event.target.value as SortKey)} className="field">
             {SORTS.map((sort) => (
               <option key={sort.value} value={sort.value}>
                 {sort.label}
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="ml-auto hidden md:block">
-          <ViewToggle view={view} onViewChange={onViewChange} />
-        </div>
+        </Picker>
       </div>
+    </div>
+  );
+}
+
+function Picker({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0 md:w-48">
+      <label htmlFor={id} className="mb-1 block pl-1 text-[0.8rem] font-bold text-text-muted">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
 
 function ViewToggle({ view, onViewChange }: { view: ViewMode; onViewChange: (view: ViewMode) => void }) {
   return (
-    <div className="inline-grid grid-cols-2 rounded-board p-1 shadow-[inset_0_0_0_1px_var(--rule)]" role="group" aria-label="View">
+    <div className="inline-flex shrink-0 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]" role="group" aria-label="View">
       {(
         [
           ['shelf', 'Shelf', SquaresFour],
@@ -170,13 +166,13 @@ function ViewToggle({ view, onViewChange }: { view: ViewMode; onViewChange: (vie
           type="button"
           aria-pressed={view === value}
           onClick={() => onViewChange(value)}
-          className={`flex min-h-10 min-w-11 items-center justify-center gap-1.5 rounded-[2px] px-3 text-[0.85rem] transition-colors duration-150 ${
-            view === value ? 'bg-surface-strong text-text' : 'text-text-muted hover:text-text'
+          className={`flex h-10 min-w-11 items-center justify-center gap-1.5 rounded-pill px-3 text-[0.85rem] font-bold transition-colors duration-200 ${
+            view === value ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
           }`}
         >
-          <Icon size={18} weight={view === value ? 'fill' : 'regular'} aria-hidden="true" />
-          <span className="hidden sm:inline">{label}</span>
-          <span className="sr-only sm:hidden">{label}</span>
+          <Icon size={18} weight={view === value ? 'fill' : 'bold'} aria-hidden="true" />
+          <span className="hidden lg:inline">{label}</span>
+          <span className="sr-only lg:hidden">{label}</span>
         </button>
       ))}
     </div>

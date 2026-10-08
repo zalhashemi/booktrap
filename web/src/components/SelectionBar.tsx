@@ -22,19 +22,19 @@ export function SelectionBar({ selected, onDelete, onMerge, onCancel, busy }: Pr
       <div
         role="region"
         aria-label="Selected books"
-        className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule-gold bg-ground-raised md:bottom-0"
+        className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-[640px] rounded-[22px] bg-surface shadow-[var(--elev-lift),inset_0_0_0_1.5px_var(--rule-gold)] md:bottom-6"
       >
-        <div className="mx-auto flex max-w-[1080px] items-center gap-2 px-2 py-2.5 md:px-8">
+        <div className="flex items-center gap-2 px-2 py-2">
           <button
             type="button"
             onClick={onCancel}
             aria-label="Stop selecting"
-            className="flex size-11 shrink-0 items-center justify-center rounded-board text-text-muted hover:text-text"
+            className="flex size-11 shrink-0 items-center justify-center rounded-pill text-text-muted hover:text-text"
           >
             <X size={22} aria-hidden="true" />
           </button>
-          <p className="mr-auto min-w-0 text-[0.9rem] whitespace-nowrap" aria-live="polite">
-            {count === 0 ? 'Tap books to select' : `${count} selected`}
+          <p className="mr-auto min-w-0 truncate text-[0.9rem] font-bold whitespace-nowrap" aria-live="polite">
+            {count === 0 ? 'Pick books' : `${count} selected`}
           </p>
           <Button type="button" variant="quiet" onClick={() => setMerging(true)} disabled={count < 2 || busy} className="min-h-11 px-3">
             <ArrowsMerge size={18} aria-hidden="true" />
@@ -79,7 +79,7 @@ function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: 
         onCancel();
       }}
       aria-labelledby="merge-title"
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-board bg-ground-raised p-0 text-text shadow-[0_24px_60px_-20px_rgb(0_0_0/0.8),inset_0_0_0_1px_var(--rule-gold)] backdrop:bg-[rgb(10_9_7/0.66)]"
+      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[24px] bg-ground-raised p-0 text-text shadow-[0_24px_60px_-20px_rgb(0_0_0/0.8),inset_0_0_0_1px_var(--rule-gold)] backdrop:bg-[rgb(10_9_7/0.66)]"
     >
       <form
         method="dialog"
@@ -100,14 +100,14 @@ function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: 
           {books.map((book) => (
             <label
               key={book.id}
-              className={`flex cursor-pointer items-center gap-3 rounded-board p-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
+              className={`flex cursor-pointer items-center gap-3 rounded-[16px] p-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
                 keepId === book.id ? 'bg-surface shadow-[inset_0_0_0_1px_var(--gold)]' : 'hover:bg-surface'
               }`}
             >
               <input type="radio" name={name} checked={keepId === book.id} onChange={() => setKeepId(book.id)} className="accent-[var(--gold)]" />
-              <CoverPlate book={book} className="w-9" />
+              <CoverPlate book={book} className="w-10" tabs={false} />
               <span className="min-w-0">
-                <span className="block truncate font-serif">{book.title}</span>
+                <span className="block truncate font-display">{book.title}</span>
                 <span className="block truncate text-sm text-text-muted">
                   {book.author ?? 'Author unknown'}, {book.sources.length} {book.sources.length === 1 ? 'TikTok' : 'TikToks'}
                 </span>

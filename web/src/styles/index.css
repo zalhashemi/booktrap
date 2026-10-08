@@ -1,45 +1,48 @@
 @import 'tailwindcss';
-@import '@fontsource/libre-caslon-display/400.css';
-@import '@fontsource/libre-caslon-text/400.css';
-@import '@fontsource/libre-caslon-text/400-italic.css';
-@import '@fontsource/libre-caslon-text/700.css';
-@import '@fontsource-variable/schibsted-grotesk';
+@import '@fontsource/young-serif/400.css';
+@import '@fontsource-variable/nunito';
+@import '@fontsource/kalam/400.css';
 
 /*
- * Palette (brief §10). Components use only the semantic tokens below, never raw hex.
+ * BookTrap: the annotated paperback. Palette (brief §10) kept; ground softened at the user's request.
  * Brand: burgundy #7B1E28, gold #C4A95B, emerald #166D3B, ivory #F8F4E3,
- * charcoal #3D3D3D, sage #98AE87, rose #B77C87. Lime is reserved for "New".
+ * charcoal #3D3D3D, sage #98AE87, rose #B77C87. Lime #C6E04A is reserved for "New".
+ * Components use only the semantic tokens below, never raw hex.
  */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ground: #14130f; /* reading-room green-black */
-  --ground-raised: #1c1b16;
-  --surface: #25241e;
-  --surface-strong: #3d3d3d; /* charcoal */
-  --rule: #3d3d3d;
-  --rule-gold: rgb(196 169 91 / 0.38);
+  --ground: #2a2723; /* softer warm charcoal, never near-black */
+  --ground-raised: #312d28; /* header and tab bar */
+  --surface: #36322c; /* cards */
+  --surface-sunk: #3d3832; /* inputs: a little lighter, like a page under the card */
+  --surface-strong: #4a453d;
+  --rule: #4a453d;
+  --rule-gold: rgb(196 169 91 / 0.45);
 
-  --text: #f8f4e3; /* ivory */
-  --text-muted: #98ae87; /* sage */
-  --text-faint: #8f8a78;
+  --text: #f8f4e3; /* ivory, 13:1 on ground */
+  --text-muted: #c2bca7; /* 7.6:1 */
+  --text-faint: #a39d8a; /* 5.4:1 */
 
   --gold: #c4a95b;
-  --gold-ink: #c4a95b; /* gold used as text */
+  --gold-ink: #d4bb72; /* gold as text, 7.4:1 */
   --burgundy: #7b1e28;
-  --burgundy-hover: #8f2531;
+  --burgundy-hover: #902733;
   --emerald: #166d3b;
-  --emerald-ink: #6fb98a; /* emerald lifted for text on dark (7:1) */
+  --emerald-ink: #7cc499; /* emerald as text, 7.2:1 */
   --rose: #b77c87;
-  --rose-ink: #c99aa3;
+  --rose-ink: #dca8b1; /* rose as text, 7.0:1 */
   --sage: #98ae87;
+  --sage-ink: #b3c6a4;
   --lime: #c6e04a; /* "New" only */
 
   --on-cloth: #f8f4e3; /* text on burgundy / emerald fills */
-  --on-lime: #14130f;
-  --shelf-shadow: 0 10px 18px -8px rgb(0 0 0 / 0.7);
-  --grain-opacity: 0.06;
+  --on-tab: #1f1d1a; /* text on rose, sage, gold and lime tabs */
+  --on-lime: #1f1d1a;
+  --elev-soft: 0 10px 24px -14px rgb(0 0 0 / 0.65);
+  --elev-lift: 0 18px 36px -18px rgb(0 0 0 / 0.75);
+  --grain-opacity: 0.05;
 }
 
 :root[data-theme='light'] {
@@ -47,17 +50,18 @@
 
   --ground: #f8f4e3; /* ivory */
   --ground-raised: #f1ebd5;
-  --surface: #fbf8ec;
-  --surface-strong: #e4dcc2;
-  --rule: #d9d0b3;
-  --rule-gold: rgb(138 115 48 / 0.45);
+  --surface: #fffdf5;
+  --surface-sunk: #f4efdc;
+  --surface-strong: #e6dec6;
+  --rule: #ddd4b9;
+  --rule-gold: rgb(138 115 48 / 0.5);
 
-  --text: #1c1b16;
-  --text-muted: #55684a; /* sage darkened to 5.6:1 on ivory */
-  --text-faint: #6d6858;
+  --text: #262320;
+  --text-muted: #57524a;
+  --text-faint: #6f6a5d;
 
   --gold: #c4a95b;
-  --gold-ink: #7a6528; /* gold darkened for text on ivory */
+  --gold-ink: #7a6528;
   --burgundy: #7b1e28;
   --burgundy-hover: #651820;
   --emerald: #166d3b;
@@ -65,18 +69,22 @@
   --rose: #b77c87;
   --rose-ink: #8b4f5c;
   --sage: #98ae87;
+  --sage-ink: #4f6442;
   --lime: #c6e04a;
 
   --on-cloth: #f8f4e3;
-  --on-lime: #14130f;
-  --shelf-shadow: 0 10px 16px -10px rgb(60 45 20 / 0.45);
-  --grain-opacity: 0.045;
+  --on-tab: #1f1d1a;
+  --on-lime: #1f1d1a;
+  --elev-soft: 0 10px 22px -14px rgb(70 55 25 / 0.35);
+  --elev-lift: 0 18px 34px -18px rgb(70 55 25 / 0.45);
+  --grain-opacity: 0.04;
 }
 
 @theme inline {
   --color-ground: var(--ground);
   --color-ground-raised: var(--ground-raised);
   --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
   --color-surface-strong: var(--surface-strong);
   --color-rule: var(--rule);
   --color-rule-gold: var(--rule-gold);
@@ -92,18 +100,30 @@
   --color-rose: var(--rose);
   --color-rose-ink: var(--rose-ink);
   --color-sage: var(--sage);
+  --color-sage-ink: var(--sage-ink);
   --color-lime: var(--lime);
   --color-on-cloth: var(--on-cloth);
+  /* Bookcloth for placeholder covers: real cloth colours, identical in both themes. */
+  --color-cloth-charcoal: #3d3d3d;
+  --color-cloth-plum: #6e3442;
+  --color-on-tab: var(--on-tab);
   --color-on-lime: var(--on-lime);
 
-  --font-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, serif;
-  --font-serif: 'Libre Caslon Text', Georgia, serif;
-  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Young Serif', Georgia, serif;
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
+  --font-hand: 'Kalam', 'Segoe Print', cursive;
 
-  --radius-board: 3px; /* book boards: nearly square, used everywhere */
-  --shadow-shelf: var(--shelf-shadow);
+  /* One shape system: pills for anything you press, soft cards, gentle fields, book-like covers. */
+  --radius-pill: 999px;
+  --radius-card: 20px;
+  --radius-field: 14px;
+  --radius-cover: 5px;
+  --shadow-soft: var(--elev-soft);
+  --shadow-lift: var(--elev-lift);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Snappy, no overshoot: fast start, soft landing. */
+  --ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
@@ -121,11 +141,10 @@
     font-family: var(--font-sans);
     font-size: 1rem;
     line-height: 1.55;
-    font-feature-settings: 'ss01', 'tnum' 0;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Bookcloth grain: fixed, non-interactive, never on a scrolling layer. */
+  /* Paper grain: fixed, non-interactive, never on a scrolling layer. */
   body::before {
     content: '';
     position: fixed;
@@ -153,13 +172,12 @@
 
   ::selection {
     background: var(--gold);
-    color: var(--ground);
+    color: var(--on-tab);
   }
 
   :focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 3px;
-    border-radius: var(--radius-board);
   }
 
   a {
@@ -184,34 +202,59 @@
 }
 
 @layer components {
-  /* Foil-stamped lettering: flat gold, debossed by a hairline shadow. No gradient text. */
-  .foil {
+  /* The wordmark: Young Serif in gold, debossed by a hairline shadow. */
+  .wordmark {
     font-family: var(--font-display);
     color: var(--gold-ink);
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    text-shadow: 0 1px 0 rgb(0 0 0 / 0.55);
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 0 rgb(0 0 0 / 0.35);
+  }
+  :root[data-theme='light'] .wordmark {
+    text-shadow: none;
   }
 
-  :root[data-theme='light'] .foil {
-    text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+  /* Pencil margin notes: sparing, slightly tilted, never for anything you must read to act. */
+  .marginalia {
+    font-family: var(--font-hand);
+    font-size: 1.05rem;
+    line-height: 1.3;
+    color: var(--rose-ink);
+    transform: rotate(-1.5deg);
   }
 
-  /* Text inputs, selects and textareas share one look: a recessed page with a gold focus. */
+  /* The "New" highlighter stroke behind a title: lime is reserved for this and the New tab. */
+  .highlight-new {
+    color: var(--on-lime);
+    background-image: linear-gradient(transparent 8%, var(--lime) 8%, var(--lime) 94%, transparent 94%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding-inline: 0.12em;
+    margin-inline: -0.12em;
+  }
+  /* The sweep plays once per book per visit (see BookTitle), never on every re-render. */
+  @media (prefers-reduced-motion: no-preference) {
+    .highlight-sweep {
+      animation: highlight-sweep 0.7s var(--ease-out-expo) both;
+    }
+  }
+
+  /* Text inputs, selects and textareas: a lighter page set into the card, gold on focus. */
   .field {
     display: block;
     width: 100%;
-    min-height: 2.75rem;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-board);
-    background: var(--surface);
-    padding: 0.625rem 0.875rem;
+    min-height: 2.875rem;
+    border: 1.5px solid var(--rule);
+    border-radius: var(--radius-field);
+    background: var(--surface-sunk);
+    padding: 0.65rem 0.95rem;
     font-size: 1rem; /* 16px stops iOS zooming into the field */
     line-height: 1.5;
     color: var(--text);
     transition:
-      border-color 200ms,
-      box-shadow 200ms;
+      border-color 180ms,
+      box-shadow 180ms;
   }
   .field:hover {
     border-color: var(--rule-gold);
@@ -219,56 +262,58 @@
   .field:focus {
     outline: none;
     border-color: var(--gold);
-    box-shadow: 0 0 0 3px var(--rule-gold);
+    box-shadow: 0 0 0 4px var(--rule-gold);
   }
   select.field {
     appearance: none;
-    padding-right: 2.25rem;
+    border-radius: var(--radius-pill);
+    padding-left: 1.1rem;
+    padding-right: 2.4rem;
     background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
     background-position:
-      calc(100% - 1.15rem) 50%,
-      calc(100% - 0.8rem) 50%;
+      calc(100% - 1.3rem) 52%,
+      calc(100% - 0.95rem) 52%;
     background-size: 0.35rem 0.35rem;
     background-repeat: no-repeat;
   }
+
+  /* Sticky page-tabs: the signature control. They stand on a gold page edge. */
+  .tab-row {
+    display: flex;
+    gap: 0.4rem;
+    border-bottom: 3px solid var(--gold);
+    padding-inline: 0.25rem;
+  }
+  .page-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.75rem;
+    padding: 0.4rem 0.95rem 0.45rem;
+    border-radius: 12px 12px 3px 3px;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    background: var(--surface);
+    transform: translateY(4px);
+    transition:
+      transform 220ms var(--ease-snappy),
+      background-color 160ms,
+      color 160ms;
+  }
+  .page-tab:hover {
+    transform: translateY(1px);
+    color: var(--text);
+  }
+  .page-tab[aria-pressed='true'] {
+    transform: translateY(0);
+    color: var(--on-tab);
+  }
 }
 
-/* The book sheet slides up from the shelf on phones and in from the side on wider screens.
-   Motion is transform-only: content is fully visible from the first frame. */
-dialog.sheet[open] {
-  animation: sheet-up 0.38s var(--ease-out-expo);
-}
-dialog.sheet[open]::backdrop {
-  animation: backdrop-in 0.3s ease-out;
-}
-@media (min-width: 768px) {
-  dialog.sheet[open] {
-    animation-name: sheet-in;
-  }
-}
-/* Transform-only: the sheet is fully opaque from its first frame, even if animations are paused. */
-@keyframes sheet-up {
+@keyframes highlight-sweep {
   from {
-    transform: translateY(28px);
-  }
-}
-@keyframes sheet-in {
-  from {
-    transform: translateX(36px);
-  }
-}
-@keyframes backdrop-in {
-  from {
-    opacity: 0;
-  }
-}
-
-.toast-in {
-  animation: toast-in 0.32s var(--ease-out-expo);
-}
-@keyframes toast-in {
-  from {
-    transform: translateY(14px);
+    background-size: 15% 100%;
   }
 }
 
@@ -281,20 +326,57 @@ dialog.sheet[open]::backdrop {
   }
 }
 
-/* The empty shelf's one authored moment: ghost spines settle onto the shelf in turn. */
-@keyframes spine-settle {
+/* The book sheet rises from the bottom on phones and slides in from the side on wider screens.
+   Transform-only: content is fully visible from the first frame, even if animations are paused. */
+dialog.sheet[open] {
+  animation: sheet-up 0.42s var(--ease-out-expo);
+}
+dialog.sheet[open]::backdrop {
+  animation: backdrop-in 0.3s ease-out;
+}
+@media (min-width: 768px) {
+  dialog.sheet[open] {
+    animation-name: sheet-in;
+  }
+}
+@keyframes sheet-up {
   from {
-    transform: translateY(14px) rotate(var(--lean, 0deg));
+    transform: translateY(32px);
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateX(40px);
+  }
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.toast-in {
+  animation: toast-in 0.4s var(--ease-snappy);
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(16px) scale(0.98);
+  }
+}
+
+/* Empty shelf: ghost books settle in turn (the only staggered entrance in the app). */
+@keyframes book-settle {
+  from {
+    transform: translateY(16px) rotate(var(--lean, 0deg));
   }
   to {
     transform: translateY(0) rotate(var(--lean, 0deg));
   }
 }
-
-.ghost-spine {
+.ghost-book {
   transform: rotate(var(--lean, 0deg));
-  transform-origin: bottom left;
-  animation: spine-settle 0.7s var(--ease-out-expo) both;
+  transform-origin: bottom center;
+  animation: book-settle 0.7s var(--ease-out-expo) both;
   animation-delay: calc(var(--i) * 70ms);
 }
 
@@ -311,7 +393,7 @@ dialog.sheet[open]::backdrop {
   dialog.sheet[open],
   dialog.sheet[open]::backdrop,
   .toast-in,
-  .ghost-spine {
+  .ghost-book {
     animation: none !important;
   }
 }

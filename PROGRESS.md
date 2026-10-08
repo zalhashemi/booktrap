@@ -17,8 +17,10 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 - 2026-10-08: App name is **BookTrap**.
 - 2026-10-08: Audience is a **public product**, so first-run copy must explain itself and per-IP limits matter, not just per-device ones.
 - 2026-10-08: Render **free plan**: job state lives in Postgres and unfinished jobs resume on wake. Expect cold starts of 30-60s.
-- 2026-10-08: Visual direction **Gilt Spines** (Impeccable direction round, seed 6ce76978): the list is a lit library shelf of clothbound spines with gold-foil titles, and "New" is a lime ribbon. Contract in `web/.impeccable/surfaces/src-app-tsx.md`.
-- 2026-10-08: Type is **Libre Caslon** (Display + Text) for titles and **Schibsted Grotesk** for UI, all self-hosted. Icons are Phosphor.
+- 2026-10-08: First visual direction was **Gilt Spines** (seed 6ce76978), with Libre Caslon + Schibsted Grotesk. Replaced on 2026-10-09 at the user's request (below).
+- 2026-10-09: Visual direction **Annotated Paperback** (seed ed3595ab, user's choice): page-tabs, a highlighter for New, margin notes. Contract in `web/.impeccable/surfaces/src-app-tsx.md`.
+- 2026-10-09: Type is **Young Serif** (user's choice from a 4-font specimen) for headlines and titles, **Nunito** for UI and **Kalam** for annotations, all self-hosted. Icons are Phosphor.
+- 2026-10-09: **Softer dark** is the default (warm charcoal #2A2723, not near-black); ivory light mode is available. Controls are rounded (pills).
 - 2026-10-08: Device secrets are hashed with SHA-256 rather than a slow KDF. They're 256-bit random values, so a slow hash adds nothing but latency on every request.
 - 2026-10-08: Scraper is the Apify actor **clockworks/tiktok-scraper**. Free-plan prices: $0.0037/post + $0.0013/video download + $0.001/run. Paid speech-to-text is off; TikTok's free subtitles are used when present.
 - 2026-10-08: Extraction model is **Claude Sonnet 5.5** at effort medium (user's choice). It matched Opus 5.5 on every featured book in the fixtures at about half the cost: $0.05-0.08/post vs $0.12-0.18.
@@ -32,6 +34,17 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Redesign (brought forward from Phase 6, 2026-10-09)
+
+The user asked for a new look before Phase 4. Their feedback on the first design: "not fun enough, looks generic, feels too AI", with rounder buttons, a more creative font and a background that isn't too dark. The palette is kept.
+
+- Process: ui-ux-pro-max searches (design system, typography, style). The generic book-app result (Swiss + Cormorant + amber) was rejected and noted. Then an Impeccable direction round (seed ed3595ab), where the user chose **Annotated Paperback** over the rolled Reading Journal, and a font specimen of 4 faces opened in the user's browser (they chose **Young Serif**). Taste rules applied throughout.
+- World: the shelf is marked up like an annotated paperback. Filters are sticky page-tabs on a gold page edge (tinted at rest, full colour when active). Covers carry state as tabs peeking from the top edge (lime New, rose Unsure, emerald Reading, sage Read). New titles get a lime highlighter stroke. Kalam handwriting is used sparingly for margin notes (counts, hints, empty states).
+- Tokens: a softer dark ground (#2A2723 warm charcoal, lifted cards), contrast-checked text tints, Young Serif + Nunito + Kalam (self-hosted). One shape system: pills for anything pressable, 20px cards, 14px fields, 5px covers. Placeholder bookcloth colours are fixed so they stay dark in light mode.
+- Shell: a floating rounded tab bar on phones, a pill nav on desktop, pill toasts with a gold Undo, a floating selection bar.
+- Impeccable detector: an overshooting "spring" easing was flagged and replaced with a no-overshoot curve; now 0 findings.
+- Playwright (390px and 1280px, dark and light, real data): paste → 5 shelved, edit → saved, delete → Undo, empty state, no overflow.
 
 ## Phase 3: List experience
 

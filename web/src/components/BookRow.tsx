@@ -1,43 +1,58 @@
 import { useState } from 'react';
 import { Check, CheckCircle, Question } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
+import { claimHighlightSweep, clothFor, coverTabs, type CoverTab } from '../library/covers';
 import { STATUS_LABELS } from '../library/filters';
 
-/** Cover plate at a fixed 2:3 ratio, with a bookcloth placeholder when there is no cover. */
-export function CoverPlate({ book, className = '' }: { book: Book; className?: string }) {
+/** Cover at a fixed 2:3 ratio, with a bookcloth placeholder when there is no cover. */
+export function CoverPlate({
+  book,
+  className = '',
+  tabs = true,
+  flags: givenFlags,
+}: {
+  book: Book;
+  className?: string;
+  tabs?: boolean;
+  /** Precomputed tabs, when the caller already has them. */
+  flags?: CoverTab[];
+}) {
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const flags = tabs ? (givenFlags ?? coverTabs(book)) : [];
   return (
-    <div className={`relative aspect-[2/3] shrink-0 overflow-hidden rounded-[2px] bg-burgundy shadow-shelf ${className}`}>
-      {/* The bookcloth plate is always underneath, so slow or missing covers never leave a blank. */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-1 text-center" aria-hidden="true">
-        <span className="h-px w-3/5 bg-gold/70" />
-        <span className="foil line-clamp-4 text-[0.55rem] leading-tight tracking-[0.08em]">{book.title}</span>
-        <span className="h-px w-3/5 bg-gold/70" />
+    <div className={`relative shrink-0 ${className}`}>
+      {flags.length > 0 && (
+        <div className="absolute -top-2.5 right-2 left-2 flex justify-end gap-1" aria-hidden="true">
+          {flags.map((flag) => (
+            <span key={flag.key} className={`h-5 w-[20%] max-w-6 min-w-3 rounded-t-[5px] shadow-[0_-1px_0_rgb(255_255_255/0.15)_inset] ${flag.className}`} />
+          ))}
+        </div>
+      )}
+      <div className={`relative aspect-[2/3] overflow-hidden rounded-cover shadow-soft ${clothFor(book.title)}`}>
+        {/* The bookcloth plate is always underneath, so slow or missing covers never leave a blank. */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-1.5 text-center" aria-hidden="true">
+          <span className="h-px w-1/2 bg-gold/70" />
+          <span className="line-clamp-4 font-display text-[0.62rem] leading-tight text-on-cloth">{book.title}</span>
+          <span className="h-px w-1/2 bg-gold/70" />
+        </div>
+        {book.coverUrl && state !== 'failed' && (
+          <img
+            src={book.coverUrl}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onLoad={(event) => {
+              // Some catalogues answer with a 1x1 "no cover" pixel instead of a 404.
+              setState(event.currentTarget.naturalWidth > 10 ? 'loaded' : 'failed');
+            }}
+            onError={() => setState('failed')}
+            // Shown the moment it has loaded: no fade, so a paused animation clock can never hide a cover.
+            className={`absolute inset-0 h-full w-full object-cover ${state === 'loaded' ? 'visible' : 'invisible'}`}
+          />
+        )}
+        {/* A soft page-edge sheen on the spine side makes covers read as books, not tiles. */}
+        <span className="pointer-events-none absolute inset-y-0 left-0 w-[7%] bg-gradient-to-r from-black/25 to-transparent" aria-hidden="true" />
       </div>
-      {book.coverUrl && state !== 'failed' && (
-        <img
-          src={book.coverUrl}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onLoad={(event) => {
-            // Some catalogues answer with a 1x1 "no cover" pixel instead of a 404.
-            setState(event.currentTarget.naturalWidth > 10 ? 'loaded' : 'failed');
-          }}
-          onError={() => setState('failed')}
-          // Shown the moment it has loaded: no fade, so a paused animation clock can never hide a cover.
-          className={`absolute inset-0 h-full w-full object-cover ${state === 'loaded' ? 'visible' : 'invisible'}`}
-        />
-      )}
-      {book.isNew && (
-        // The "New" bookmark ribbon: lime is reserved for this and nothing else.
-        <span className="absolute top-0 right-1.5 h-[22%] max-h-6 w-[14%] max-w-3 min-w-2 bg-lime [clip-path:polygon(0_0,100%_0,100%_100%,50%_78%,0_100%)]" aria-hidden="true" />
-      )}
-      {book.unsure && (
-        <span className="absolute bottom-1 left-1 flex size-5 items-center justify-center rounded-full bg-ground/85 text-rose-ink" aria-hidden="true">
-          <Question size={13} weight="bold" />
-        </span>
-      )}
     </div>
   );
 }
@@ -47,11 +62,11 @@ export function SelectMark({ selected }: { selected: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`flex size-6 items-center justify-center rounded-[3px] border transition-colors duration-150 ${
-        selected ? 'border-gold bg-gold text-ground' : 'border-text-faint bg-ground/80 text-transparent'
+      className={`flex size-7 items-center justify-center rounded-pill border-2 transition-[background-color,border-color,transform] duration-200 ease-snappy ${
+        selected ? 'scale-100 border-gold bg-gold text-on-tab' : 'scale-90 border-text-muted bg-ground/70 text-transparent'
       }`}
     >
-      <Check size={14} weight="bold" />
+      <Check size={15} weight="bold" />
     </span>
   );
 }
@@ -59,19 +74,30 @@ export function SelectMark({ selected }: { selected: boolean }) {
 export function BookFlags({ book }: { book: Book }) {
   return (
     <>
-      {book.isNew && <span className="rounded-[2px] bg-lime px-1.5 py-0.5 font-semibold tracking-[0.02em] text-on-lime">New</span>}
+      {book.isNew && <span className="rounded-pill bg-lime px-2 py-0.5 text-[0.78rem] font-extrabold text-on-lime">New</span>}
       {book.unsure ? (
-        <span className="inline-flex items-center gap-1 text-rose-ink">
-          <Question size={14} weight="bold" aria-hidden="true" />
+        <span className="inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[0.78rem] font-bold text-rose-ink shadow-[inset_0_0_0_1.5px_var(--rose)]">
+          <Question size={13} weight="bold" aria-hidden="true" />
           Unsure
         </span>
       ) : book.verified ? (
-        <span className="inline-flex items-center gap-1 text-emerald-ink">
-          <CheckCircle size={14} weight="bold" aria-hidden="true" />
+        <span className="inline-flex items-center gap-1 text-[0.8rem] font-bold text-emerald-ink">
+          <CheckCircle size={15} weight="fill" aria-hidden="true" />
           Verified
         </span>
       ) : null}
     </>
+  );
+}
+
+/** The book's title, with the lime highlighter stroke while it is new. */
+export function BookTitle({ book, className = '' }: { book: Book; className?: string }) {
+  // The sweep is claimed on first render only, so filtering or switching views never replays it.
+  const [sweep] = useState(() => book.isNew && claimHighlightSweep(book.id));
+  return (
+    <span className={className}>
+      <span className={book.isNew ? `highlight-new${sweep ? ' highlight-sweep' : ''}` : undefined}>{book.title}</span>
+    </span>
   );
 }
 
@@ -92,28 +118,32 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
         onClick={() => (selecting ? onToggle(book) : onOpen(book))}
         aria-pressed={selecting ? selected : undefined}
         aria-label={selecting ? `${selected ? 'Deselect' : 'Select'} ${book.title}` : undefined}
-        className={`group flex w-full gap-4 rounded-board py-4 text-left transition-colors duration-150 ${
-          selected ? 'bg-surface' : 'hover:bg-ground-raised'
-        } focus-visible:outline-offset-0`}
+        className={`group flex w-full items-center gap-4 rounded-[18px] p-3 text-left transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.99] ${
+          selected ? 'bg-surface shadow-[inset_0_0_0_2px_var(--gold)]' : 'hover:bg-surface'
+        }`}
       >
-        {selecting && (
-          <span className="flex items-center pl-1">
-            <SelectMark selected={selected} />
-          </span>
-        )}
-        <CoverPlate book={book} className="w-14" />
+        {selecting && <SelectMark selected={selected} />}
+        <CoverPlate book={book} className="w-16" />
         <span className="min-w-0 flex-1">
-          <span className="block font-serif text-[1.1rem] leading-snug group-hover:text-gold-ink">{book.title}</span>
+          <BookTitle book={book} className="block font-display text-[1.12rem] leading-snug" />
           <span className="mt-0.5 block text-sm text-text-muted">{book.author ?? 'Author unknown'}</span>
-          <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.8rem]">
+          <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <BookFlags book={book} />
-            {book.status !== 'want_to_read' && <span className="text-text">{STATUS_LABELS[book.status]}</span>}
+            {book.status !== 'want_to_read' && (
+              <span className={`rounded-pill px-2 py-0.5 text-[0.78rem] font-bold ${book.status === 'reading' ? 'bg-emerald text-on-cloth' : 'bg-sage text-on-tab'}`}>
+                {STATUS_LABELS[book.status]}
+              </span>
+            )}
             {book.tags.map((tag) => (
-              <span key={tag.id} className="text-sage">
-                {tag.name}
+              <span key={tag.id} className="text-[0.8rem] font-bold text-sage-ink">
+                #{tag.name}
               </span>
             ))}
-            <span className="text-text-faint">{sources === 1 ? `From @${book.sources[0]?.creatorHandle ?? 'TikTok'}` : `Seen in ${sources} TikToks`}</span>
+            {sources > 0 && (
+              <span className="text-[0.8rem] text-text-faint">
+                {sources === 1 ? `from @${book.sources[0]?.creatorHandle ?? 'TikTok'}` : `seen in ${sources} TikToks`}
+              </span>
+            )}
           </span>
         </span>
       </button>

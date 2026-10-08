@@ -35,8 +35,10 @@ It reads what's actually on screen: covers, spines, text overlays, captions and 
 ## Brand Commitments
 - Name: **BookTrap**.
 - The visual world is pinned by the build brief (dark academia library: classic and bookish, but fun and modern, not a museum piece) with a fixed palette: Burgundy `#7B1E28`, Antique Gold `#C4A95B`, Emerald `#166D3B`, Ivory `#F8F4E3`, Charcoal `#3D3D3D`, Sage `#98AE87`, Dusty Rose `#B77C87`. Lime is reserved exclusively for "New".
-- Dark mode is the primary experience. Light mode on Ivory if it can be done well.
-- Pinned type direction: a serif for titles and book names, paired with a clean sans for UI.
+- Dark mode is the primary experience, but a **softer** dark: warm charcoal, never near-black (user, 2026-10-09). Light mode on Ivory is offered too.
+- Type (user-chosen 2026-10-09): **Young Serif** for headlines and book titles, a rounded sans (Nunito) for UI, and a handwriting face (Kalam) used sparingly for annotations.
+- Controls are **rounded**: pill buttons and chips, soft-cornered surfaces (user, 2026-10-09).
+- It must feel fun and distinctive, not generic or "AI-made" (user feedback on the first design, 2026-10-09).
 
 ## Evidence on Hand
 None yet: no real users, testimonials, usage numbers or press. Never fabricate any of them. Example book data shown in empty states or demos must be clearly illustrative.

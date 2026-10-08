@@ -17,7 +17,7 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-[640px]">
-      <h1 className="font-display text-[2.15rem] leading-[1.08] tracking-[-0.01em] md:text-[2.9rem]">Settings</h1>
+      <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Settings</h1>
       <DeviceSection />
       <BackupSection />
       <ShelvesSection />
@@ -76,12 +76,12 @@ function AppearanceSection() {
     <Section title="Appearance">
       <fieldset className="mt-4">
         <legend className="sr-only">Theme</legend>
-        <div className="inline-grid grid-cols-2 rounded-board p-1 shadow-[inset_0_0_0_1px_var(--rule)]">
+        <div className="inline-grid grid-cols-2 rounded-pill bg-surface-sunk p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]">
           {options.map((option) => (
             <label
               key={option.value}
-              className={`flex min-h-11 min-w-[7rem] cursor-pointer items-center justify-center rounded-[2px] px-5 text-[0.95rem] transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
-                theme === option.value ? 'bg-surface-strong text-text' : 'text-text-muted hover:text-text'
+              className={`flex min-h-11 min-w-[7rem] cursor-pointer items-center justify-center rounded-pill px-5 text-[0.95rem] font-bold transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
+                theme === option.value ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
               }`}
             >
               <input

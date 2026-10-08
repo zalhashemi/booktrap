@@ -6,13 +6,13 @@ import { markBackupSaved } from '../device/backupPrompt';
 import { useDevice } from '../device/DeviceProvider';
 import { useCreateTag, useDeleteTag, useRenameTag, useTags } from '../library/hooks';
 import { Button } from './Button';
-import { useToast } from './Toaster';
+import { useToast } from './toast-context';
 
 export function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   const headingId = useId();
   return (
-    <section id={id} aria-labelledby={headingId} className="mt-10 scroll-mt-24 border-t border-rule pt-6">
-      <h2 id={headingId} className="font-serif text-[1.3rem]">
+    <section id={id} aria-labelledby={headingId} className="mt-6 scroll-mt-24 rounded-card bg-surface p-5 shadow-[inset_0_0_0_1.5px_var(--rule)] md:p-6">
+      <h2 id={headingId} className="font-display text-[1.5rem]">
         {title}
       </h2>
       {children}
@@ -93,7 +93,7 @@ export function BackupSection() {
       {shown ? (
         <div className="mt-4">
           <p
-            className="rounded-board bg-surface px-4 py-3 font-mono text-[0.95rem] leading-relaxed tracking-[0.04em] break-all shadow-[inset_0_0_0_1px_var(--rule-gold)] select-all"
+            className="rounded-[16px] bg-surface-sunk px-4 py-3 font-mono text-[0.95rem] leading-relaxed tracking-[0.04em] break-all shadow-[inset_0_0_0_1px_var(--rule-gold)] select-all"
             aria-label="Your backup code"
           >
             {code}
@@ -267,7 +267,7 @@ function TagRow({ id, name, onError }: { id: string; name: string; onError: (mes
             type="button"
             onClick={() => setEditing(true)}
             aria-label={`Rename ${name}`}
-            className="flex size-11 items-center justify-center rounded-board text-text-muted hover:text-text"
+            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-text"
           >
             <PencilSimple size={18} aria-hidden="true" />
           </button>
@@ -279,7 +279,7 @@ function TagRow({ id, name, onError }: { id: string; name: string; onError: (mes
               }
             }}
             aria-label={`Delete ${name}`}
-            className="flex size-11 items-center justify-center rounded-board text-text-muted hover:text-rose-ink"
+            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-rose-ink"
           >
             <Trash size={18} aria-hidden="true" />
           </button>

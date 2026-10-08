@@ -7,26 +7,26 @@ related_targets: []
 
 ## Scope
 
-App shell for BookTrap (web PWA, mobile-first): navigation, Add screen (paste box + job area), My List (shelf), Settings, plus first-launch / connecting / offline / error states. Visitor mode: **Operate**. Built up across phases 1-6. Phase 1 ships the shell, tokens, and connection states.
+App shell for BookTrap (web PWA, mobile-first): navigation, Add screen (paste box and progress), Shelf, book sheet, Settings, plus first-launch, connecting, error and empty states. Visitor mode: **Operate**. Redesign of the first world (Gilt Spines), requested by the user on 2026-10-09: "not fun enough, looks generic, feels too AI", with rounder buttons, a more creative font and a background that isn't too dark. The palette is kept.
 
 ## Audience and task
 
-BookTok readers, mostly on a phone, pasting links from TikTok's share sheet. Core loop: paste, glance at progress, come back to a list that grew. Secondary: desktop list clean-up and export.
+BookTok readers, mostly on a phone, pasting links from TikTok's share sheet. Core loop: paste, glance at progress, come back to a shelf that grew. Secondary: desktop clean-up and export.
 
 ## Direction contract
 
-THESIS: Your want-to-read list is a lit library shelf. Every book is a clothbound spine with its title foil-stamped in gold, and new arrivals carry a lime ribbon. It refuses the category default of a grey list of thumbnail rows with a floating add button.
+THESIS: BookTrap is a well-loved, annotated paperback: the reader's shelf is marked up the way BookTok readers mark up books, with coloured sticky page-tabs, highlighter strokes and pencil notes in the margin. It refuses both the generic grey list app and the museum-piece dark-academia library.
 
-OWN-WORLD: Green-black reading-room ground; bookcloth in burgundy, emerald and charcoal; antique-gold foil for the wordmark, hairline rules, focus rings and spine titles; ivory for reading text; sage for quiet text; rose only for Unsure; lime only as the New ribbon. Caslon-cut serif set like foil stamping (caps, tracked, on spines and headings) over a sturdy grotesk for every control. Corners are almost square (book boards, 3px). The only depth is a soft shelf shadow under spines.
+OWN-WORLD: Softer dark ground (warm charcoal, never near-black) with lifted card surfaces; ivory text. Palette roles: burgundy = the action colour, gold = rules, focus and the wordmark, emerald = verified/read, rose = unsure, sage = shelves (tags), lime = New only (as a highlighter stroke and the New tab). Young Serif for headlines and book titles, Nunito (rounded) for every control, and Kalam handwriting for sparing margin notes. Pill buttons and chips; 20px surfaces; covers with small rounded corners.
 
-STORY: The visitor understands in one glance that pasting TikTok links fills a shelf, trusts the progress because it's legible, and returns to find new spines ribboned in lime.
+STORY: In one glance the reader sees their TikToks becoming a marked-up reading list. New books are highlighted like a fresh find, unsure ones carry a pink tab asking for a look, and everything can be tidied by tapping a tab.
 
-FIRST VIEWPORT: Phone. A foil-stamped BOOKTRAP wordmark top-left on a slim header. A paste field fills the upper half with a one-line instruction and a burgundy "Catch books" button full width under it. Below: the job area, empty until a paste, then link lines. A fixed bottom tab bar (Add, Shelf, Settings) at 64px with gold active state. Desktop: a left-aligned 720px column with the tab bar moving into the header.
+FIRST VIEWPORT: Phone. A slim header with the Young Serif gold wordmark. The paste card fills the top: a big rounded field, a handwritten hint in the margin, and a full-width burgundy pill "Catch books". Progress cards below show each link's stage. A floating rounded tab bar (Add, Shelf, Settings) sits above the safe area. Desktop: the same card with progress in a right-hand column, and the nav in the header.
 
-FORM: Gilt Spines (my own top-ranked grounded candidate, chosen by the user over the rolled Circulation Desk); seed key 6ce76978. Kept from the round as product discipline: one fixed state-ink language (emerald = verified/done, rose = unsure, burgundy = act, lime = new); printed capacity (links used today vs cap); covers registered at one 2:3 plate size; grids reflow by whole cells. Signature move: the Shelf. On the list, books stand as spines on a gold-ruled shelf; tapping a spine slides it out into its cover and detail sheet. The empty shelf shows ghost spine outlines between bookends.
+FORM: Annotated Paperback (my own top-ranked grounded candidate, chosen by the user over the rolled Reading Journal); seed key ed3595ab. Signature move: page-tabs. Filters are coloured sticky tabs standing on a gold page edge, and every cover carries its state as a tab peeking from its top edge (lime New, rose Unsure, emerald Reading/Read). New titles get a lime highlighter stroke that sweeps in once. Kept from the round as discipline: status changes stamp or flag the book and nothing silently vanishes (ticket wallet); a small spring when a book takes focus (character catalog); hierarchy by scale contrast, not ornament (type specimen); covers registered at one 2:3 size on a shared baseline (botanical folio).
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 ## Unresolved
 
-Final lime value (start #C6E04A), final ground value; light mode quality on Ivory to be confirmed in the Phase 6 design pass.
+Final lime value (#C6E04A in use). Light mode stays available on ivory and needs a final pass in Phase 6.

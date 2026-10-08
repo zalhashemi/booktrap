@@ -7,19 +7,17 @@ import { Button, ButtonLink } from '../components/Button';
 import { SelectionBar } from '../components/SelectionBar';
 import { ShelfGrid } from '../components/ShelfGrid';
 import { ShelfToolbar, type ViewMode } from '../components/ShelfToolbar';
-import { useToast } from '../components/Toaster';
+import { useToast } from '../components/toast-context';
 import { DEFAULT_QUERY, applyQuery, flagCounts, isFiltered, type ShelfQuery, type SortKey } from '../library/filters';
 import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBooks, useTags } from '../library/hooks';
 
-/** Ghost spines for the empty shelf: height (% of shelf), width (px) and an optional lean. */
-const GHOST_SPINES: { h: number; w: number; lean?: number }[] = [
-  { h: 78, w: 26 },
-  { h: 92, w: 34 },
-  { h: 70, w: 22 },
-  { h: 86, w: 30 },
-  { h: 96, w: 38 },
-  { h: 74, w: 24 },
-  { h: 88, w: 30, lean: 9 },
+/** Ghost books for the empty shelf: an optional page-tab colour and lean. */
+const GHOST_BOOKS: { tab?: string; lean?: number }[] = [
+  { tab: 'bg-lime' },
+  { lean: -2 },
+  { tab: 'bg-rose', lean: 1.5 },
+  {},
+  { tab: 'bg-emerald', lean: 3 },
 ];
 
 const PREFS_KEY = 'booktrap.shelf.prefs';
@@ -108,28 +106,28 @@ export function ShelfPage() {
   const newCount = counts.new;
 
   return (
-    <div className={selecting ? 'pb-20' : undefined}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3">
+    <div className={selecting ? "pb-24" : undefined}>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
-          <h1 className="font-display text-[2.15rem] leading-[1.08] tracking-[-0.01em] md:text-[2.9rem]">Your shelf</h1>
+          <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Your shelf</h1>
           {all.length > 0 && (
-            <p className="mt-1 text-sm text-text-muted">
+            <p className="marginalia mt-1.5 text-[1.1rem]">
               {all.length} {all.length === 1 ? 'book' : 'books'}
-              {newCount > 0 && <span className="text-text">, {newCount} new</span>}
+              {newCount > 0 && <span className="text-text">, {newCount} new!</span>}
             </p>
           )}
         </div>
         {all.length > 0 && (
           <div className="flex gap-2">
             {newCount > 0 && (
-              <Button type="button" variant="quiet" onClick={() => markAllSeen.mutate()} className="min-h-11 px-4">
-                <Checks size={18} aria-hidden="true" />
+              <Button type="button" variant="quiet" onClick={() => markAllSeen.mutate()} className="min-h-11 px-4 text-[0.92rem]">
+                <Checks size={18} weight="bold" aria-hidden="true" />
                 Mark all as seen
               </Button>
             )}
             {!selecting && (
-              <Button type="button" variant="quiet" onClick={() => setSelecting(true)} className="min-h-11 px-4">
-                <ListChecks size={18} aria-hidden="true" />
+              <Button type="button" variant="quiet" onClick={() => setSelecting(true)} className="min-h-11 px-4 text-[0.92rem]">
+                <ListChecks size={18} weight="bold" aria-hidden="true" />
                 Select
               </Button>
             )}
@@ -150,13 +148,13 @@ export function ShelfPage() {
         <>
           <EmptyShelf />
           <div className="mt-8 max-w-[34rem]">
-            <h2 className="font-serif text-[1.3rem]">Nothing shelved yet</h2>
+            <h2 className="font-display text-[1.5rem]">Nothing shelved yet</h2>
             <p className="mt-2 text-text-muted">
-              Every book BookTrap finds in your TikToks stands here. The newest arrivals wear a lime ribbon so you can spot
+              Every book BookTrap finds in your TikToks lands here, and the newest ones get a lime highlight so you can spot
               them.
             </p>
             <ButtonLink to="/" className="mt-6">
-              Paste links
+              Paste your first links
             </ButtonLink>
           </div>
         </>
@@ -166,7 +164,7 @@ export function ShelfPage() {
 
           {visible.length === 0 ? (
             <div className="mt-12 max-w-[34rem]">
-              <h2 className="font-serif text-[1.3rem]">No books match</h2>
+              <h2 className="font-display text-[1.5rem]">No books match</h2>
               <p className="mt-2 text-text-muted">Try a different search, or clear the filters to see your whole shelf.</p>
               {isFiltered(query) && (
                 <Button type="button" variant="quiet" onClick={() => setQuery({ ...DEFAULT_QUERY, sort: query.sort })} className="mt-5">
@@ -177,7 +175,7 @@ export function ShelfPage() {
           ) : prefs.view === 'shelf' ? (
             <ShelfGrid books={visible} onOpen={(book) => setOpenId(book.id)} selecting={selecting} selected={selected} onToggle={toggle} />
           ) : (
-            <ul className="mt-6 max-w-[760px] divide-y divide-rule">
+            <ul aria-label="Books on your shelf" className="mt-5 max-w-[780px] space-y-1">
               {visible.map((book) => (
                 <BookRow
                   key={book.id}
@@ -229,41 +227,23 @@ export function ShelfPage() {
   );
 }
 
+/** The empty shelf: ghost books waiting for their covers, a few already flagged with page-tabs. */
 function EmptyShelf() {
   return (
-    <div className="mt-10 max-w-[560px]" aria-hidden="true">
-      <div className="flex h-44 items-end gap-[6px] px-3 md:h-52">
-        <Bookend />
-        {GHOST_SPINES.map((spine, index) => (
+    <div className="relative mt-10 max-w-[560px]" aria-hidden="true">
+      <div className="flex items-end gap-3 sm:gap-4">
+        {GHOST_BOOKS.map((book, index) => (
           <div
             key={index}
-            className="ghost-spine relative rounded-t-[2px] border border-b-0 border-dashed border-rule-gold"
-            style={
-              {
-                height: `${spine.h}%`,
-                width: spine.w,
-                '--i': index,
-                '--lean': `${spine.lean ?? 0}deg`,
-              } as CSSProperties
-            }
+            className="ghost-book relative flex-1"
+            style={{ '--i': index, '--lean': `${book.lean ?? 0}deg`, maxWidth: 104 } as CSSProperties}
           >
-            <span className="absolute inset-x-[5px] top-[14%] h-px bg-rule-gold" />
-            <span className="absolute inset-x-[5px] bottom-[12%] h-px bg-rule-gold" />
+            {book.tab && <span className={`absolute -top-2 right-3 h-4 w-3 rounded-t-[4px] ${book.tab}`} />}
+            <div className="aspect-[2/3] rounded-cover border-2 border-dashed border-rule-gold bg-surface/60" />
           </div>
         ))}
-        <div className="flex-1" />
-        <Bookend flip />
       </div>
-      <div className="h-[5px] rounded-[1px] bg-gold shadow-shelf" />
-    </div>
-  );
-}
-
-function Bookend({ flip = false }: { flip?: boolean }) {
-  return (
-    <div className={`flex h-[46%] items-end ${flip ? 'flex-row-reverse' : ''}`}>
-      <div className="h-full w-[7px] rounded-t-[1px] bg-surface-strong" />
-      <div className="h-[7px] w-[18px] bg-surface-strong" />
+      <p className="marginalia mt-4 text-[1.1rem]">your next favourite book goes here</p>
     </div>
   );
 }
