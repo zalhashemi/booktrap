@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 export type Theme = 'dark' | 'light';
 
 const THEME_KEY = 'booktrap.theme';
-const THEME_COLORS: Record<Theme, string> = { dark: '#14130F', light: '#F8F4E3' };
+const THEME_COLORS: Record<Theme, string> = { dark: '#2B2733', light: '#F1F7F3' };
 
 function readTheme(): Theme {
   return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';

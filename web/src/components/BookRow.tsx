@@ -31,9 +31,9 @@ export function CoverPlate({
       <div className={`relative aspect-[2/3] overflow-hidden rounded-cover shadow-soft ${clothFor(book.title)}`}>
         {/* The bookcloth plate is always underneath, so slow or missing covers never leave a blank. */}
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-1.5 text-center" aria-hidden="true">
-          <span className="h-px w-1/2 bg-gold/70" />
+          <span className="h-px w-1/2 bg-accent/70" />
           <span className="line-clamp-4 font-display text-[0.62rem] leading-tight text-on-cloth">{book.title}</span>
-          <span className="h-px w-1/2 bg-gold/70" />
+          <span className="h-px w-1/2 bg-accent/70" />
         </div>
         {book.coverUrl && state !== 'failed' && (
           <img
@@ -63,7 +63,7 @@ export function SelectMark({ selected }: { selected: boolean }) {
     <span
       aria-hidden="true"
       className={`flex size-7 items-center justify-center rounded-pill border-2 transition-[background-color,border-color,transform] duration-200 ease-snappy ${
-        selected ? 'scale-100 border-gold bg-gold text-on-tab' : 'scale-90 border-text-muted bg-ground/70 text-transparent'
+        selected ? 'scale-100 border-accent bg-accent text-on-tab' : 'scale-90 border-text-muted bg-ground/70 text-transparent'
       }`}
     >
       <Check size={15} weight="bold" />
@@ -76,12 +76,12 @@ export function BookFlags({ book }: { book: Book }) {
     <>
       {book.isNew && <span className="rounded-pill bg-lime px-2 py-0.5 text-[0.78rem] font-extrabold text-on-lime">New</span>}
       {book.unsure ? (
-        <span className="inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[0.78rem] font-bold text-rose-ink shadow-[inset_0_0_0_1.5px_var(--rose)]">
+        <span className="inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[0.78rem] font-bold text-unsure-ink shadow-[inset_0_0_0_1.5px_var(--unsure)]">
           <Question size={13} weight="bold" aria-hidden="true" />
           Unsure
         </span>
       ) : book.verified ? (
-        <span className="inline-flex items-center gap-1 text-[0.8rem] font-bold text-emerald-ink">
+        <span className="inline-flex items-center gap-1 text-[0.8rem] font-bold text-success-ink">
           <CheckCircle size={15} weight="fill" aria-hidden="true" />
           Verified
         </span>
@@ -119,7 +119,7 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
         aria-pressed={selecting ? selected : undefined}
         aria-label={selecting ? `${selected ? 'Deselect' : 'Select'} ${book.title}` : undefined}
         className={`group flex w-full items-center gap-4 rounded-[18px] p-3 text-left transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.99] ${
-          selected ? 'bg-surface shadow-[inset_0_0_0_2px_var(--gold)]' : 'hover:bg-surface'
+          selected ? 'bg-surface shadow-[inset_0_0_0_2px_var(--accent)]' : 'hover:bg-surface'
         }`}
       >
         {selecting && <SelectMark selected={selected} />}
@@ -130,12 +130,12 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <BookFlags book={book} />
             {book.status !== 'want_to_read' && (
-              <span className={`rounded-pill px-2 py-0.5 text-[0.78rem] font-bold ${book.status === 'reading' ? 'bg-emerald text-on-cloth' : 'bg-sage text-on-tab'}`}>
+              <span className={`rounded-pill px-2 py-0.5 text-[0.78rem] font-bold ${book.status === 'reading' ? 'bg-reading text-on-tab' : 'bg-read text-on-tab'}`}>
                 {STATUS_LABELS[book.status]}
               </span>
             )}
             {book.tags.map((tag) => (
-              <span key={tag.id} className="text-[0.8rem] font-bold text-sage-ink">
+              <span key={tag.id} className="text-[0.8rem] font-bold text-tag-ink">
                 #{tag.name}
               </span>
             ))}

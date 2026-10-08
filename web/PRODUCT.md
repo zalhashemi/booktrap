@@ -34,7 +34,7 @@ It reads what's actually on screen: covers, spines, text overlays, captions and 
 
 ## Brand Commitments
 - Name: **BookTrap**.
-- The visual world is pinned by the build brief (dark academia library: classic and bookish, but fun and modern, not a museum piece) with a fixed palette: Burgundy `#7B1E28`, Antique Gold `#C4A95B`, Emerald `#166D3B`, Ivory `#F8F4E3`, Charcoal `#3D3D3D`, Sage `#98AE87`, Dusty Rose `#B77C87`. Lime is reserved exclusively for "New".
+- Palette (user-supplied 2026-10-09, replacing the brief's dark-academia palette): Dusty Lavender `#67597A`, Vintage Grape `#544E61`, Slate Grey `#6E8894`, Muted Teal `#85BAA1`, Honeydew `#CEEDDB`. Lime `#C6E04A` is kept and reserved exclusively for "New".
 - Dark mode is the primary experience, but a **softer** dark: warm charcoal, never near-black (user, 2026-10-09). Light mode on Ivory is offered too.
 - Type (user-chosen 2026-10-09): **Young Serif** for headlines and book titles, a rounded sans (Nunito) for UI, and a handwriting face (Kalam) used sparingly for annotations.
 - Controls are **rounded**: pill buttons and chips, soft-cornered surfaces (user, 2026-10-09).

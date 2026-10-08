@@ -93,7 +93,7 @@ export function AddPage() {
           />
           <p
             id={helpId}
-            className={`mt-2.5 flex min-h-6 items-center gap-1.5 text-sm ${links.length ? 'font-bold text-emerald-ink' : 'text-text-muted'}`}
+            className={`mt-2.5 flex min-h-6 items-center gap-1.5 text-sm ${links.length ? 'font-bold text-success-ink' : 'text-text-muted'}`}
             aria-live="polite"
           >
             {links.length > 0 && <Sparkle size={16} weight="fill" aria-hidden="true" />}
@@ -104,7 +104,7 @@ export function AddPage() {
             {createJob.isPending ? 'Sending…' : links.length > 1 ? `Catch books from ${links.length} links` : 'Catch books'}
           </Button>
           {createJob.isError && (
-            <p id={errorId} role="alert" className="mt-3 text-sm text-rose-ink">
+            <p id={errorId} role="alert" className="mt-3 text-sm text-unsure-ink">
               {errorMessage(createJob.error)}
             </p>
           )}
@@ -128,9 +128,9 @@ function BackupReminder() {
   const foundBooks = (jobs.data ?? []).some((job) => job.items.some((item) => item.status === 'done' && item.booksFound > 0));
   if (!foundBooks || backupSaved()) return null;
   return (
-    <div className="mb-6 rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule-gold)]">
+    <div className="mb-6 rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule-accent)]">
       <p className="flex items-start gap-2.5 font-bold">
-        <ShieldCheck size={22} weight="fill" className="mt-0.5 shrink-0 text-gold-ink" aria-hidden="true" />
+        <ShieldCheck size={22} weight="fill" className="mt-0.5 shrink-0 text-accent-ink" aria-hidden="true" />
         Save your backup code so you can never lose your list.
       </p>
       <p className="mt-1 pl-[2.1rem] text-sm text-text-muted">
@@ -138,7 +138,7 @@ function BackupReminder() {
       </p>
       <Link
         to="/settings#backup"
-        className="mt-3 ml-[2.1rem] inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-gold px-4 text-sm font-bold text-on-tab transition-transform duration-200 ease-snappy active:scale-[0.97]"
+        className="mt-3 ml-[2.1rem] inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-accent px-4 text-sm font-bold text-on-tab transition-transform duration-200 ease-snappy active:scale-[0.97]"
       >
         Get my backup code
         <ArrowBendLeftUp size={16} weight="bold" className="rotate-90" aria-hidden="true" />

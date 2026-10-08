@@ -41,9 +41,9 @@ function DeviceSection() {
   if (!session) return null;
 
   const storage = !session.durable
-    ? { text: 'Not saved. This browser is blocking storage.', tone: 'text-rose-ink' }
+    ? { text: 'Not saved. This browser is blocking storage.', tone: 'text-unsure-ink' }
     : persisted
-      ? { text: 'Kept on this device', tone: 'text-emerald-ink' }
+      ? { text: 'Kept on this device', tone: 'text-success-ink' }
       : { text: 'Saved, but the browser may clear it if space runs low', tone: 'text-text' };
 
   return (
@@ -80,8 +80,8 @@ function AppearanceSection() {
           {options.map((option) => (
             <label
               key={option.value}
-              className={`flex min-h-11 min-w-[7rem] cursor-pointer items-center justify-center rounded-pill px-5 text-[0.95rem] font-bold transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
-                theme === option.value ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
+              className={`flex min-h-11 min-w-[7rem] cursor-pointer items-center justify-center rounded-pill px-5 text-[0.95rem] font-bold transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${
+                theme === option.value ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
               }`}
             >
               <input
@@ -106,10 +106,10 @@ function ServerSection() {
 
   let status: ReactNode;
   if (health.isPending) status = <span className="text-text-muted">Checking</span>;
-  else if (health.isError) status = <span className="text-rose-ink">Unreachable right now</span>;
+  else if (health.isError) status = <span className="text-unsure-ink">Unreachable right now</span>;
   else
     status = (
-      <span className="text-emerald-ink">
+      <span className="text-success-ink">
         Connected
         {health.data.storage === 'memory' && (
           <span className="text-text-muted"> (development storage, wiped on restart)</span>

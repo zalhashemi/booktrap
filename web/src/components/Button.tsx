@@ -10,12 +10,12 @@ const base =
   'disabled:cursor-not-allowed disabled:active:scale-100';
 
 const variants: Record<Variant, string> = {
-  // Burgundy is the one colour that means "act".
+  // The action colour (teal) is the one colour that means "act".
   primary:
-    'bg-burgundy text-on-cloth shadow-[inset_0_1px_0_rgb(255_255_255/0.12),var(--elev-soft)] hover:bg-burgundy-hover ' +
+    'bg-action text-on-action shadow-[inset_0_1px_0_rgb(255_255_255/0.12),var(--elev-soft)] hover:bg-action-hover ' +
     'disabled:bg-surface-strong disabled:text-text-faint disabled:shadow-none',
   quiet:
-    'bg-surface text-text shadow-[inset_0_0_0_1.5px_var(--rule)] hover:shadow-[inset_0_0_0_1.5px_var(--rule-gold)] ' +
+    'bg-surface text-text shadow-[inset_0_0_0_1.5px_var(--rule)] hover:shadow-[inset_0_0_0_1.5px_var(--rule-accent)] ' +
     'disabled:text-text-faint',
   ghost: 'text-text-muted hover:bg-surface hover:text-text disabled:text-text-faint',
 };

@@ -55,7 +55,7 @@ function ItemCard({ job, item }: { job: Job; item: JobItem }) {
               <span
                 key={step}
                 className={`h-1.5 rounded-pill transition-colors duration-500 ${
-                  step < stage.step ? 'bg-gold' : step === stage.step ? 'animate-pulse bg-rule-gold' : 'bg-surface-strong'
+                  step < stage.step ? 'bg-accent' : step === stage.step ? 'animate-pulse bg-rule-accent' : 'bg-surface-strong'
                 }`}
               />
             ))}
@@ -67,8 +67,8 @@ function ItemCard({ job, item }: { job: Job; item: JobItem }) {
         <p className="mt-2 flex items-center gap-1.5 text-sm font-bold">
           {item.booksFound > 0 ? (
             <>
-              <CheckCircle size={18} weight="fill" className="text-emerald-ink" aria-hidden="true" />
-              <Link to="/shelf" className="text-emerald-ink underline-offset-4 hover:underline">
+              <CheckCircle size={18} weight="fill" className="text-success-ink" aria-hidden="true" />
+              <Link to="/shelf" className="text-success-ink underline-offset-4 hover:underline">
                 {item.booksFound} {item.booksFound === 1 ? 'book' : 'books'} shelved
               </Link>
             </>
@@ -80,7 +80,7 @@ function ItemCard({ job, item }: { job: Job; item: JobItem }) {
 
       {item.status === 'failed' && (
         <div className="mt-2 flex items-start justify-between gap-3">
-          <p className="flex items-start gap-1.5 text-sm text-rose-ink">
+          <p className="flex items-start gap-1.5 text-sm text-unsure-ink">
             <WarningCircle size={18} weight="fill" className="mt-px shrink-0" aria-hidden="true" />
             {item.error ?? 'Something went wrong.'}
           </p>

@@ -46,7 +46,7 @@ function ToastView({ toast, onDone }: { toast: Toast; onDone: (id: number) => vo
   return (
     <div
       role="status"
-      className="toast-in pointer-events-auto flex max-w-[30rem] items-center gap-4 rounded-pill bg-surface-strong py-1.5 pr-1.5 pl-5 text-[0.95rem] text-text shadow-[0_12px_32px_-12px_rgb(0_0_0/0.6),inset_0_0_0_1px_var(--rule-gold)]"
+      className="toast-in pointer-events-auto flex max-w-[30rem] items-center gap-4 rounded-pill bg-surface-strong py-1.5 pr-1.5 pl-5 text-[0.95rem] text-text shadow-[0_12px_32px_-12px_rgb(0_0_0/0.6),inset_0_0_0_1px_var(--rule-accent)]"
     >
       <span className="py-2">{toast.message}</span>
       {toast.action && (
@@ -56,7 +56,7 @@ function ToastView({ toast, onDone }: { toast: Toast; onDone: (id: number) => vo
             toast.action!.run();
             onDone(toast.id);
           }}
-          className="min-h-11 shrink-0 rounded-pill bg-gold px-4 font-bold text-on-tab"
+          className="min-h-11 shrink-0 rounded-pill bg-accent px-4 font-bold text-on-tab"
         >
           {toast.action.label}
         </button>

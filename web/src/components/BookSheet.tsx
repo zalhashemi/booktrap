@@ -158,9 +158,9 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
       <div className="flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6">
         {book.unsure && (
-          <div className="rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rose)]">
+          <div className="rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--unsure)]">
             <p className="flex items-start gap-2 text-[0.95rem]">
-              <Question size={20} weight="bold" className="mt-0.5 shrink-0 text-rose-ink" aria-hidden="true" />
+              <Question size={20} weight="bold" className="mt-0.5 shrink-0 text-unsure-ink" aria-hidden="true" />
               BookTrap isn’t sure it read this one right. Check the title and author, then confirm or fix them.
             </p>
             <Button type="button" variant="quiet" onClick={confirm} disabled={update.isPending} className="mt-3 w-full md:w-auto">
@@ -200,8 +200,8 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
             {BOOK_STATUSES.map((status) => (
               <label
                 key={status}
-                className={`flex min-h-11 cursor-pointer items-center justify-center rounded-pill px-2 text-center text-[0.9rem] font-bold transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${
-                  draft.status === status ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
+                className={`flex min-h-11 cursor-pointer items-center justify-center rounded-pill px-2 text-center text-[0.9rem] font-bold transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${
+                  draft.status === status ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
                 }`}
               >
                 <input
@@ -258,7 +258,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-h-12 items-center justify-between gap-3 py-2 text-sm hover:text-gold-ink"
+                  className="flex min-h-12 items-center justify-between gap-3 py-2 text-sm hover:text-accent-ink"
                 >
                   <span className="min-w-0">
                     <span className="block font-medium">@{source.creatorHandle ?? 'TikTok'}</span>
@@ -276,7 +276,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
       <footer className="border-t border-rule bg-ground-raised px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         {error && (
-          <p role="alert" className="mb-3 text-sm text-rose-ink">
+          <p role="alert" className="mb-3 text-sm text-unsure-ink">
             {error}
           </p>
         )}
@@ -284,7 +284,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
           <button
             type="button"
             onClick={() => onDelete(book)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-2 text-sm text-rose-ink hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-2 text-sm text-unsure-ink hover:underline"
           >
             <Trash size={18} aria-hidden="true" />
             Delete
@@ -343,7 +343,7 @@ function TagPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
               aria-pressed={on}
               onClick={() => toggle(tag.id)}
               className={`min-h-11 rounded-pill px-4 text-[0.9rem] font-bold transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.97] ${
-                on ? 'bg-sage text-on-tab' : 'text-text-muted shadow-[inset_0_0_0_1.5px_var(--rule)] hover:text-text'
+                on ? 'bg-tag text-on-tab' : 'text-text-muted shadow-[inset_0_0_0_1.5px_var(--rule)] hover:text-text'
               }`}
             >
               {tag.name}
@@ -382,7 +382,7 @@ function TagPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-3 text-[0.9rem] text-gold-ink hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-3 text-[0.9rem] text-accent-ink hover:underline"
           >
             <Plus size={16} aria-hidden="true" />
             New shelf

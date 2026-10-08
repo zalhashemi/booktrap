@@ -40,7 +40,7 @@ function Opening() {
     <section aria-live="polite" aria-busy="true" className="max-w-[34rem] pt-10">
       <p className="font-display text-[1.6rem] leading-tight">Opening your shelf</p>
       <div className="mt-5 h-[2px] w-full overflow-hidden rounded-full bg-rule" aria-hidden="true">
-        <div className="h-full w-1/3 animate-[shelf-sweep_1.4s_ease-in-out_infinite] bg-gold" />
+        <div className="h-full w-1/3 animate-[shelf-sweep_1.4s_ease-in-out_infinite] bg-accent" />
       </div>
       {slow && (
         <p className="mt-5 text-text-muted">

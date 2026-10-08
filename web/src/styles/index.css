@@ -4,80 +4,88 @@
 @import '@fontsource/kalam/400.css';
 
 /*
- * BookTrap: the annotated paperback. Palette (brief §10) kept; ground softened at the user's request.
- * Brand: burgundy #7B1E28, gold #C4A95B, emerald #166D3B, ivory #F8F4E3,
- * charcoal #3D3D3D, sage #98AE87, rose #B77C87. Lime #C6E04A is reserved for "New".
- * Components use only the semantic tokens below, never raw hex.
+ * BookTrap: the annotated paperback.
+ * Palette (user-supplied 2026-10-09, replacing brief §10): Dusty Lavender #67597A, Vintage Grape #544E61,
+ * Slate Grey #6E8894, Muted Teal #85BAA1, Honeydew #CEEDDB. Lime #C6E04A stays, reserved for "New".
+ * Every other value below is a tint or shade derived from those five.
+ * Components use only these semantic tokens (by role, never by colour name), never raw hex.
+ * Contrast ratios are against --ground in each theme.
  */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ground: #2a2723; /* softer warm charcoal, never near-black */
-  --ground-raised: #312d28; /* header and tab bar */
-  --surface: #36322c; /* cards */
-  --surface-sunk: #3d3832; /* inputs: a little lighter, like a page under the card */
-  --surface-strong: #4a453d;
-  --rule: #4a453d;
-  --rule-gold: rgb(196 169 91 / 0.45);
+  --ground: #2b2733; /* deep Vintage Grape: softer than near-black */
+  --ground-raised: #332e3d; /* header and tab bar */
+  --surface: #3a3446; /* cards */
+  --surface-sunk: #433c50; /* inputs: a little lighter, like a page under the card */
+  --surface-strong: #544e61; /* Vintage Grape */
+  --rule: #544e61;
+  --rule-accent: rgb(133 186 161 / 0.45);
 
-  --text: #f8f4e3; /* ivory, 13:1 on ground */
-  --text-muted: #c2bca7; /* 7.6:1 */
-  --text-faint: #a39d8a; /* 5.4:1 */
+  --text: #ceeddb; /* Honeydew, 11.8:1 */
+  --text-muted: #a9bcc4; /* Slate Grey lifted, 7.4:1 */
+  --text-faint: #8e9fa8; /* 5.4:1 */
 
-  --gold: #c4a95b;
-  --gold-ink: #d4bb72; /* gold as text, 7.4:1 */
-  --burgundy: #7b1e28;
-  --burgundy-hover: #902733;
-  --emerald: #166d3b;
-  --emerald-ink: #7cc499; /* emerald as text, 7.2:1 */
-  --rose: #b77c87;
-  --rose-ink: #dca8b1; /* rose as text, 7.0:1 */
-  --sage: #98ae87;
-  --sage-ink: #b3c6a4;
+  --accent: #85baa1; /* Muted Teal: wordmark, focus, active states, rules */
+  --accent-ink: #95c7af; /* teal as text, 7.9:1 */
+  --action: #85baa1; /* the one colour that means "act" */
+  --action-hover: #98c9b2;
+  --success: #85baa1; /* verified */
+  --success-ink: #95c7af;
+  --unsure: #b9aacf; /* Dusty Lavender lifted: "check this one" */
+  --unsure-ink: #c9bcdc; /* 8.0:1 */
+  --tag: #9db3bd; /* Slate Grey lifted: shelves */
+  --tag-ink: #afc3cc;
+  --reading: #9db3bd;
+  --read: #ceeddb; /* Honeydew */
   --lime: #c6e04a; /* "New" only */
 
-  --on-cloth: #f8f4e3; /* text on burgundy / emerald fills */
-  --on-tab: #1f1d1a; /* text on rose, sage, gold and lime tabs */
-  --on-lime: #1f1d1a;
-  --elev-soft: 0 10px 24px -14px rgb(0 0 0 / 0.65);
-  --elev-lift: 0 18px 36px -18px rgb(0 0 0 / 0.75);
+  --on-action: #1f1c24; /* dark ink on teal, 7.6:1 */
+  --on-cloth: #f2faf5; /* light text on placeholder bookcloth */
+  --on-tab: #1f1c24; /* dark ink on every tab and state fill */
+  --on-lime: #1f1c24;
+  --elev-soft: 0 10px 24px -14px rgb(12 8 20 / 0.7);
+  --elev-lift: 0 18px 36px -18px rgb(12 8 20 / 0.8);
   --grain-opacity: 0.05;
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ground: #f8f4e3; /* ivory */
-  --ground-raised: #f1ebd5;
-  --surface: #fffdf5;
-  --surface-sunk: #f4efdc;
-  --surface-strong: #e6dec6;
-  --rule: #ddd4b9;
-  --rule-gold: rgb(138 115 48 / 0.5);
+  --ground: #f1f7f3; /* Honeydew, washed out */
+  --ground-raised: #e6f0ea;
+  --surface: #fbfdfc;
+  --surface-sunk: #eaf2ed;
+  --surface-strong: #d4e1da;
+  --rule: #cfdcd5;
+  --rule-accent: rgb(62 122 96 / 0.45);
 
-  --text: #262320;
-  --text-muted: #57524a;
-  --text-faint: #6f6a5d;
+  --text: #2b2733; /* deep Vintage Grape */
+  --text-muted: #54506a; /* 7.1:1 */
+  --text-faint: #6a6680; /* 5.0:1 */
 
-  --gold: #c4a95b;
-  --gold-ink: #7a6528;
-  --burgundy: #7b1e28;
-  --burgundy-hover: #651820;
-  --emerald: #166d3b;
-  --emerald-ink: #166d3b;
-  --rose: #b77c87;
-  --rose-ink: #8b4f5c;
-  --sage: #98ae87;
-  --sage-ink: #4f6442;
+  --accent: #85baa1;
+  --accent-ink: #3e7a60; /* teal deepened for text, 4.8:1 */
+  --action: #85baa1;
+  --action-hover: #74ad92;
+  --success: #85baa1;
+  --success-ink: #3e7a60;
+  --unsure: #b9aacf;
+  --unsure-ink: #67597a; /* Dusty Lavender, 5.9:1 */
+  --tag: #9db3bd;
+  --tag-ink: #4f6670; /* 5.4:1 */
+  --reading: #9db3bd;
+  --read: #ceeddb;
   --lime: #c6e04a;
 
-  --on-cloth: #f8f4e3;
-  --on-tab: #1f1d1a;
-  --on-lime: #1f1d1a;
-  --elev-soft: 0 10px 22px -14px rgb(70 55 25 / 0.35);
-  --elev-lift: 0 18px 34px -18px rgb(70 55 25 / 0.45);
-  --grain-opacity: 0.04;
+  --on-action: #1f1c24;
+  --on-cloth: #f2faf5;
+  --on-tab: #1f1c24;
+  --on-lime: #1f1c24;
+  --elev-soft: 0 10px 22px -14px rgb(43 39 51 / 0.3);
+  --elev-lift: 0 18px 34px -18px rgb(43 39 51 / 0.4);
+  --grain-opacity: 0.035;
 }
 
 @theme inline {
@@ -87,25 +95,30 @@
   --color-surface-sunk: var(--surface-sunk);
   --color-surface-strong: var(--surface-strong);
   --color-rule: var(--rule);
-  --color-rule-gold: var(--rule-gold);
+  --color-rule-accent: var(--rule-accent);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
   --color-text-faint: var(--text-faint);
-  --color-gold: var(--gold);
-  --color-gold-ink: var(--gold-ink);
-  --color-burgundy: var(--burgundy);
-  --color-burgundy-hover: var(--burgundy-hover);
-  --color-emerald: var(--emerald);
-  --color-emerald-ink: var(--emerald-ink);
-  --color-rose: var(--rose);
-  --color-rose-ink: var(--rose-ink);
-  --color-sage: var(--sage);
-  --color-sage-ink: var(--sage-ink);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
+  --color-unsure: var(--unsure);
+  --color-unsure-ink: var(--unsure-ink);
+  --color-tag: var(--tag);
+  --color-tag-ink: var(--tag-ink);
+  --color-reading: var(--reading);
+  --color-read: var(--read);
   --color-lime: var(--lime);
+  --color-on-action: var(--on-action);
   --color-on-cloth: var(--on-cloth);
-  /* Bookcloth for placeholder covers: real cloth colours, identical in both themes. */
-  --color-cloth-charcoal: #3d3d3d;
-  --color-cloth-plum: #6e3442;
+  /* Bookcloth for placeholder covers, identical in both themes; on-cloth text is 4.9:1 or better. */
+  --color-cloth-1: #67597a; /* Dusty Lavender */
+  --color-cloth-2: #544e61; /* Vintage Grape */
+  --color-cloth-3: #4f6670; /* Slate Grey, deepened */
+  --color-cloth-4: #3f6b58; /* Muted Teal, deepened */
   --color-on-tab: var(--on-tab);
   --color-on-lime: var(--on-lime);
 
@@ -171,12 +184,12 @@
   }
 
   ::selection {
-    background: var(--gold);
+    background: var(--accent);
     color: var(--on-tab);
   }
 
   :focus-visible {
-    outline: 2px solid var(--gold);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
   }
 
@@ -187,7 +200,7 @@
 
   textarea,
   input {
-    caret-color: var(--gold);
+    caret-color: var(--accent);
   }
 
   ::placeholder {
@@ -202,10 +215,10 @@
 }
 
 @layer components {
-  /* The wordmark: Young Serif in gold, debossed by a hairline shadow. */
+  /* The wordmark: Young Serif in the accent colour, debossed by a hairline shadow. */
   .wordmark {
     font-family: var(--font-display);
-    color: var(--gold-ink);
+    color: var(--accent-ink);
     letter-spacing: 0.01em;
     text-shadow: 0 1px 0 rgb(0 0 0 / 0.35);
   }
@@ -218,7 +231,7 @@
     font-family: var(--font-hand);
     font-size: 1.05rem;
     line-height: 1.3;
-    color: var(--rose-ink);
+    color: var(--unsure-ink);
     transform: rotate(-1.5deg);
   }
 
@@ -240,7 +253,7 @@
     }
   }
 
-  /* Text inputs, selects and textareas: a lighter page set into the card, gold on focus. */
+  /* Text inputs, selects and textareas: a lighter page set into the card, accent ring on focus. */
   .field {
     display: block;
     width: 100%;
@@ -257,12 +270,12 @@
       box-shadow 180ms;
   }
   .field:hover {
-    border-color: var(--rule-gold);
+    border-color: var(--rule-accent);
   }
   .field:focus {
     outline: none;
-    border-color: var(--gold);
-    box-shadow: 0 0 0 4px var(--rule-gold);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--rule-accent);
   }
   select.field {
     appearance: none;
@@ -277,11 +290,11 @@
     background-repeat: no-repeat;
   }
 
-  /* Sticky page-tabs: the signature control. They stand on a gold page edge. */
+  /* Sticky page-tabs: the signature control. They stand on an accent-coloured page edge. */
   .tab-row {
     display: flex;
     gap: 0.4rem;
-    border-bottom: 3px solid var(--gold);
+    border-bottom: 3px solid var(--accent);
     padding-inline: 0.25rem;
   }
   .page-tab {

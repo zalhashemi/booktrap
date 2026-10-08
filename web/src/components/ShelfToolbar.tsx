@@ -28,14 +28,14 @@ const SORTS: { value: SortKey; label: string }[] = [
 ];
 
 /**
- * Each page-tab wears the colour of the state it stands for (lime only for New, rose for Unsure,
- * emerald for Verified, gold for everything): a soft tint at rest, full colour when pulled up.
+ * Each page-tab wears the colour of the state it stands for (lime only for New, lilac for Unsure,
+ * teal for Verified, the accent for everything): a soft tint at rest, full colour when pulled up.
  */
 const TAB_FILL: Record<Flag, string> = {
-  all: 'bg-[color-mix(in_srgb,var(--gold)_22%,var(--surface))] aria-pressed:bg-gold',
+  all: 'bg-[color-mix(in_srgb,var(--accent)_22%,var(--surface))] aria-pressed:bg-accent',
   new: 'bg-[color-mix(in_srgb,var(--lime)_20%,var(--surface))] aria-pressed:bg-lime',
-  unsure: 'bg-[color-mix(in_srgb,var(--rose)_26%,var(--surface))] aria-pressed:bg-rose',
-  verified: 'bg-[color-mix(in_srgb,var(--emerald)_34%,var(--surface))] aria-pressed:bg-emerald aria-pressed:text-on-cloth',
+  unsure: 'bg-[color-mix(in_srgb,var(--unsure)_26%,var(--surface))] aria-pressed:bg-unsure',
+  verified: 'bg-[color-mix(in_srgb,var(--success)_34%,var(--surface))] aria-pressed:bg-success aria-pressed:text-on-tab',
 };
 
 export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange }: Props) {
@@ -100,7 +100,7 @@ export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange
         >
           <FadersHorizontal size={18} weight="bold" aria-hidden="true" />
           Filter &amp; sort
-          {activePickers > 0 && <span className="rounded-pill bg-gold px-2 text-[0.78rem] text-on-tab tabular-nums">{activePickers}</span>}
+          {activePickers > 0 && <span className="rounded-pill bg-accent px-2 text-[0.78rem] text-on-tab tabular-nums">{activePickers}</span>}
         </button>
       </div>
 
@@ -167,7 +167,7 @@ function ViewToggle({ view, onViewChange }: { view: ViewMode; onViewChange: (vie
           aria-pressed={view === value}
           onClick={() => onViewChange(value)}
           className={`flex h-10 min-w-11 items-center justify-center gap-1.5 rounded-pill px-3 text-[0.85rem] font-bold transition-colors duration-200 ${
-            view === value ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
+            view === value ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
           }`}
         >
           <Icon size={18} weight={view === value ? 'fill' : 'bold'} aria-hidden="true" />

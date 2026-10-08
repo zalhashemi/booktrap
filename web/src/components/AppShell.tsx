@@ -39,7 +39,7 @@ export function AppShell() {
                     end={to === '/'}
                     className={({ isActive }) =>
                       `flex h-10 items-center gap-2 rounded-pill px-4 text-[0.95rem] font-bold transition-colors duration-200 ${
-                        isActive ? 'bg-gold text-on-tab' : 'text-text-muted hover:text-text'
+                        isActive ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
                       }`
                     }
                   >
@@ -75,7 +75,7 @@ export function AppShell() {
                 end={to === '/'}
                 className={({ isActive }) =>
                   `flex h-full flex-col items-center justify-center gap-0.5 rounded-[16px] text-[0.75rem] font-bold transition-colors duration-200 ${
-                    isActive ? 'bg-gold text-on-tab' : 'text-text-muted active:bg-surface'
+                    isActive ? 'bg-accent text-on-tab' : 'text-text-muted active:bg-surface'
                   }`
                 }
               >
@@ -100,7 +100,7 @@ function StorageNotice() {
   if (!session || session.durable) return null;
   return (
     <div role="status" className="mx-auto mt-2 w-full max-w-[1080px] px-4 md:px-8">
-      <p className="rounded-card bg-surface px-4 py-3 text-sm text-rose-ink shadow-[inset_0_0_0_1.5px_var(--rose)]">
+      <p className="rounded-card bg-surface px-4 py-3 text-sm text-unsure-ink shadow-[inset_0_0_0_1.5px_var(--unsure)]">
         This browser isn’t letting BookTrap save anything, so this shelf disappears when you close the tab.
         Private browsing is the usual cause.
       </p>

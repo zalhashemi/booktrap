@@ -93,7 +93,7 @@ export function BackupSection() {
       {shown ? (
         <div className="mt-4">
           <p
-            className="rounded-[16px] bg-surface-sunk px-4 py-3 font-mono text-[0.95rem] leading-relaxed tracking-[0.04em] break-all shadow-[inset_0_0_0_1px_var(--rule-gold)] select-all"
+            className="rounded-[16px] bg-surface-sunk px-4 py-3 font-mono text-[0.95rem] leading-relaxed tracking-[0.04em] break-all shadow-[inset_0_0_0_1px_var(--rule-accent)] select-all"
             aria-label="Your backup code"
           >
             {code}
@@ -141,7 +141,7 @@ export function BackupSection() {
           className="field mt-2 font-mono"
         />
         {restoreError && (
-          <p role="alert" className="mt-2 text-sm text-rose-ink">
+          <p role="alert" className="mt-2 text-sm text-unsure-ink">
             {restoreError}
           </p>
         )}
@@ -207,7 +207,7 @@ export function ShelvesSection() {
         </Button>
       </form>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-rose-ink">
+        <p role="alert" className="mt-2 text-sm text-unsure-ink">
           {error}
         </p>
       )}
@@ -279,7 +279,7 @@ function TagRow({ id, name, onError }: { id: string; name: string; onError: (mes
               }
             }}
             aria-label={`Delete ${name}`}
-            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-rose-ink"
+            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-unsure-ink"
           >
             <Trash size={18} aria-hidden="true" />
           </button>

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const INK = '#14130F';
+const INK = '#2B2733';
 
 /** A production bundle without a real API URL would quietly call each visitor's own localhost. */
 function assertApiUrl(url: string | undefined) {

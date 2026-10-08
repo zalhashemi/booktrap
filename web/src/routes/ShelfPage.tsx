@@ -15,9 +15,9 @@ import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBook
 const GHOST_BOOKS: { tab?: string; lean?: number }[] = [
   { tab: 'bg-lime' },
   { lean: -2 },
-  { tab: 'bg-rose', lean: 1.5 },
+  { tab: 'bg-unsure', lean: 1.5 },
   {},
-  { tab: 'bg-emerald', lean: 3 },
+  { tab: 'bg-success', lean: 3 },
 ];
 
 const PREFS_KEY = 'booktrap.shelf.prefs';
@@ -139,7 +139,7 @@ export function ShelfPage() {
         <p className="mt-10 text-text-muted">Taking books off the shelf…</p>
       ) : books.isError ? (
         <div role="alert" className="mt-10 max-w-[34rem]">
-          <p className="text-rose-ink">Your shelf couldn’t be loaded just now. Your books are safe.</p>
+          <p className="text-unsure-ink">Your shelf couldn’t be loaded just now. Your books are safe.</p>
           <button type="button" onClick={() => void books.refetch()} className="mt-3 min-h-11 text-sm underline underline-offset-4">
             Try again
           </button>
@@ -239,7 +239,7 @@ function EmptyShelf() {
             style={{ '--i': index, '--lean': `${book.lean ?? 0}deg`, maxWidth: 104 } as CSSProperties}
           >
             {book.tab && <span className={`absolute -top-2 right-3 h-4 w-3 rounded-t-[4px] ${book.tab}`} />}
-            <div className="aspect-[2/3] rounded-cover border-2 border-dashed border-rule-gold bg-surface/60" />
+            <div className="aspect-[2/3] rounded-cover border-2 border-dashed border-rule-accent bg-surface/60" />
           </div>
         ))}
       </div>

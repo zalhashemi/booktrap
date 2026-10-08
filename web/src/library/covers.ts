@@ -1,7 +1,7 @@
 import type { Book } from '@booktrap/shared';
 
 /** Bookcloth colours for covers we don't have, picked per title so a shelf of placeholders still varies. */
-const CLOTHS = ['bg-burgundy', 'bg-emerald', 'bg-cloth-charcoal', 'bg-cloth-plum'];
+const CLOTHS = ['bg-cloth-1', 'bg-cloth-2', 'bg-cloth-3', 'bg-cloth-4'];
 
 export function clothFor(title: string): string {
   let hash = 0;
@@ -19,9 +19,9 @@ export interface CoverTab {
 export function coverTabs(book: Book): CoverTab[] {
   const tabs: CoverTab[] = [];
   if (book.isNew) tabs.push({ key: 'new', className: 'bg-lime', label: 'New' });
-  if (book.unsure) tabs.push({ key: 'unsure', className: 'bg-rose', label: 'Unsure' });
-  if (book.status === 'reading') tabs.push({ key: 'reading', className: 'bg-emerald', label: 'Reading' });
-  if (book.status === 'read') tabs.push({ key: 'read', className: 'bg-sage', label: 'Read' });
+  if (book.unsure) tabs.push({ key: 'unsure', className: 'bg-unsure', label: 'Unsure' });
+  if (book.status === 'reading') tabs.push({ key: 'reading', className: 'bg-reading', label: 'Reading' });
+  if (book.status === 'read') tabs.push({ key: 'read', className: 'bg-read', label: 'Read' });
   return tabs;
 }
 

@@ -7,7 +7,7 @@ related_targets: []
 
 ## Scope
 
-App shell for BookTrap (web PWA, mobile-first): navigation, Add screen (paste box and progress), Shelf, book sheet, Settings, plus first-launch, connecting, error and empty states. Visitor mode: **Operate**. Redesign of the first world (Gilt Spines), requested by the user on 2026-10-09: "not fun enough, looks generic, feels too AI", with rounder buttons, a more creative font and a background that isn't too dark. The palette is kept.
+App shell for BookTrap (web PWA, mobile-first): navigation, Add screen (paste box and progress), Shelf, book sheet, Settings, plus first-launch, connecting, error and empty states. Visitor mode: **Operate**. Redesign of the first world (Gilt Spines), requested by the user on 2026-10-09: "not fun enough, looks generic, feels too AI", with rounder buttons, a more creative font and a background that isn't too dark. The palette was later replaced by the user's own five colours (2026-10-09).
 
 ## Audience and task
 
@@ -17,7 +17,7 @@ BookTok readers, mostly on a phone, pasting links from TikTok's share sheet. Cor
 
 THESIS: BookTrap is a well-loved, annotated paperback: the reader's shelf is marked up the way BookTok readers mark up books, with coloured sticky page-tabs, highlighter strokes and pencil notes in the margin. It refuses both the generic grey list app and the museum-piece dark-academia library.
 
-OWN-WORLD: Softer dark ground (warm charcoal, never near-black) with lifted card surfaces; ivory text. Palette roles: burgundy = the action colour, gold = rules, focus and the wordmark, emerald = verified/read, rose = unsure, sage = shelves (tags), lime = New only (as a highlighter stroke and the New tab). Young Serif for headlines and book titles, Nunito (rounded) for every control, and Kalam handwriting for sparing margin notes. Pill buttons and chips; 20px surfaces; covers with small rounded corners.
+OWN-WORLD: Softer dark ground (deep Vintage Grape #2B2733, never near-black) with lifted grape cards; Honeydew text. Palette (user-supplied 2026-10-09): Dusty Lavender, Vintage Grape, Slate Grey, Muted Teal, Honeydew. Roles: teal = the action and accent colour (wordmark, focus, active tabs, page edge), teal ink = verified, lavender = unsure, slate = shelves and reading, honeydew = read, lime = New only (highlighter stroke and New tab). Young Serif for headlines and book titles, Nunito (rounded) for every control, Kalam handwriting for sparing margin notes. Pill buttons and chips, 20px surfaces, covers with small rounded corners.
 
 STORY: In one glance the reader sees their TikToks becoming a marked-up reading list. New books are highlighted like a fresh find, unsure ones carry a pink tab asking for a look, and everything can be tidied by tapping a tab.
 
