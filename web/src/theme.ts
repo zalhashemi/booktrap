@@ -6,7 +6,7 @@ const THEME_KEY = 'booktrap.theme';
 const THEME_COLORS: Record<Theme, string> = { dark: '#2B2733', light: '#F1F7F3' };
 
 function readTheme(): Theme {
-  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 
 function applyTheme(theme: Theme) {
@@ -14,7 +14,7 @@ function applyTheme(theme: Theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme]);
 }
 
-/** Dark is the default. The choice is a per-browser convenience, so storage failures are ignored. */
+/** Light is the default. The choice is a per-browser convenience, so storage failures are ignored. */
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(readTheme);
 

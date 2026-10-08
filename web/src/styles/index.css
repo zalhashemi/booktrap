@@ -11,7 +11,6 @@
  * Components use only these semantic tokens (by role, never by colour name), never raw hex.
  * Contrast ratios are against --ground in each theme.
  */
-:root,
 :root[data-theme='dark'] {
   color-scheme: dark;
 
@@ -50,6 +49,8 @@
   --grain-opacity: 0.05;
 }
 
+/* Light is the default theme (user, 2026-10-09). */
+:root,
 :root[data-theme='light'] {
   color-scheme: light;
 

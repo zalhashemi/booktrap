@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const INK = '#2B2733';
+/** Install splash and browser chrome follow the default (light) theme. */
+const INK = '#F1F7F3';
 
 /** A production bundle without a real API URL would quietly call each visitor's own localhost. */
 function assertApiUrl(url: string | undefined) {

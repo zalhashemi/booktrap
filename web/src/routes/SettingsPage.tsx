@@ -68,8 +68,8 @@ function DeviceSection() {
 function AppearanceSection() {
   const { theme, setTheme } = useTheme();
   const options: { value: Theme; label: string }[] = [
-    { value: 'dark', label: 'Dark' },
     { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
   ];
 
   return (

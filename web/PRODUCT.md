@@ -35,7 +35,7 @@ It reads what's actually on screen: covers, spines, text overlays, captions and 
 ## Brand Commitments
 - Name: **BookTrap**.
 - Palette (user-supplied 2026-10-09, replacing the brief's dark-academia palette): Dusty Lavender `#67597A`, Vintage Grape `#544E61`, Slate Grey `#6E8894`, Muted Teal `#85BAA1`, Honeydew `#CEEDDB`. Lime `#C6E04A` is kept and reserved exclusively for "New".
-- Dark mode is the primary experience, but a **softer** dark: warm charcoal, never near-black (user, 2026-10-09). Light mode on Ivory is offered too.
+- **Light mode is the default** (user, 2026-10-09). A softer dark mode (deep grape, never near-black) is available in Settings.
 - Type (user-chosen 2026-10-09): **Young Serif** for headlines and book titles, a rounded sans (Nunito) for UI, and a handwriting face (Kalam) used sparingly for annotations.
 - Controls are **rounded**: pill buttons and chips, soft-cornered surfaces (user, 2026-10-09).
 - It must feel fun and distinctive, not generic or "AI-made" (user feedback on the first design, 2026-10-09).
