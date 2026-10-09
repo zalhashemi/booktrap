@@ -17,8 +17,6 @@ interface Props {
 const FLAGS: { value: Flag; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'new', label: 'New' },
-  { value: 'unsure', label: 'Unsure' },
-  { value: 'verified', label: 'Verified' },
 ];
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -28,14 +26,12 @@ const SORTS: { value: SortKey; label: string }[] = [
 ];
 
 /**
- * Each page-tab wears the colour of the state it stands for (lime only for New, lilac for Unsure,
- * teal for Verified, the accent for everything): a soft tint at rest, full colour when pulled up.
+ * Each page-tab wears the colour of the state it stands for (lime only for New, the accent for
+ * everything): a soft tint at rest, full colour when pulled up.
  */
 const TAB_FILL: Record<Flag, string> = {
   all: 'bg-[color-mix(in_srgb,var(--accent)_22%,var(--surface))] aria-pressed:bg-accent',
   new: 'bg-[color-mix(in_srgb,var(--lime)_20%,var(--surface))] aria-pressed:bg-lime',
-  unsure: 'bg-[color-mix(in_srgb,var(--unsure)_26%,var(--surface))] aria-pressed:bg-unsure',
-  verified: 'bg-[color-mix(in_srgb,var(--success)_34%,var(--surface))] aria-pressed:bg-success aria-pressed:text-on-tab',
 };
 
 export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange }: Props) {

@@ -53,7 +53,6 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
-  UNSURE_BELOW_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   GLOBAL_SPEND_KILL_SWITCH: z
     .enum(['true', 'false'])

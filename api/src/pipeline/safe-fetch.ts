@@ -1,13 +1,20 @@
 /**
  * Outbound fetch with an allowlist checked on every redirect hop (SSRF guard, brief §4/§11).
- * The server only ever reaches TikTok, TikTok's CDNs and Apify's API through this.
+ * The server only ever reaches TikTok, Instagram, their CDNs and Apify's API through this.
  */
+
+import { INSTAGRAM_HOSTS, TIKTOK_HOSTS } from '@booktrap/shared';
 
 export type HostRule = string | RegExp;
 
-export const TIKTOK_PAGE_HOSTS: HostRule[] = ['tiktok.com', 'www.tiktok.com', 'm.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com'];
+/** Page hosts come from the shared parsers, so a link that validates can always be resolved. */
+export const TIKTOK_PAGE_HOSTS: HostRule[] = [...TIKTOK_HOSTS];
+export const INSTAGRAM_PAGE_HOSTS: HostRule[] = [...INSTAGRAM_HOSTS];
 export const MEDIA_HOSTS: HostRule[] = [
   'api.apify.com',
+  // Instagram media: scontent-xxx.cdninstagram.com and instagram.fxxx-1.fna.fbcdn.net.
+  /^(?:[a-z0-9-]+\.)+cdninstagram\.com$/,
+  /^(?:[a-z0-9-]+\.)+fbcdn\.net$/,
   /^[a-z0-9-]+\.tiktokcdn\.com$/,
   /^[a-z0-9-]+\.tiktokcdn-us\.com$/,
   /^[a-z0-9-]+\.tiktokcdn-eu\.com$/,

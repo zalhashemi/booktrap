@@ -141,7 +141,7 @@ export function BackupSection() {
           className="field mt-2 font-mono"
         />
         {restoreError && (
-          <p role="alert" className="mt-2 text-sm text-unsure-ink">
+          <p role="alert" className="mt-2 text-sm text-note-ink">
             {restoreError}
           </p>
         )}
@@ -207,7 +207,7 @@ export function ShelvesSection() {
         </Button>
       </form>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-unsure-ink">
+        <p role="alert" className="mt-2 text-sm text-note-ink">
           {error}
         </p>
       )}
@@ -279,7 +279,7 @@ function TagRow({ id, name, onError }: { id: string; name: string; onError: (mes
               }
             }}
             aria-label={`Delete ${name}`}
-            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-unsure-ink"
+            className="flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-note-ink"
           >
             <Trash size={18} aria-hidden="true" />
           </button>

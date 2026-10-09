@@ -150,12 +150,59 @@ describe('jobs API', () => {
     await app.close();
   });
 
-  it('rejects links that are not TikTok', async () => {
+  it('rejects links that are not TikTok or Instagram', async () => {
     const app = await testApp(KEYS);
     const headers = await registered(app);
     const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls: ['https://evil.example/x'] } });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.message).toMatch(/aren’t TikTok links/);
+    expect(res.json().error.message).toMatch(/aren’t TikTok or Instagram links/);
+    await app.close();
+  });
+
+  it('takes TikTok and Instagram links in one paste, with the platform on each item', async () => {
+    const app = await testApp(KEYS);
+    const headers = await registered(app);
+    const urls = [VIDEO, 'https://www.instagram.com/reel/DeMTMjJjmqF/?igsh=x', 'https://www.instagram.com/reels/DeMTMjJjmqF/'];
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().items.map((item: { platform: string; postId: string; kind: string }) => [item.platform, item.postId, item.kind])).toEqual([
+      ['tiktok', '7672440936101727519', 'video'],
+      ['instagram', 'DeMTMjJjmqF', 'video'],
+    ]);
+    await app.close();
+  });
+
+  it('counts Instagram links against the same daily cap', async () => {
+    const app = await testApp(KEYS);
+    const headers = await registered(app);
+    const urls = ['https://www.instagram.com/p/DeJvdqUjLd1/', 'https://www.instagram.com/p/DeJhSQfmt6k/', VIDEO];
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls } });
+    expect(res.statusCode).toBe(429);
+    await app.close();
+  });
+
+  it('counts a collection link as room for one post, not as a post of its own', async () => {
+    const app = await testApp(KEYS);
+    const headers = await registered(app);
+    // Cap 2: one video plus one collection fits; the collection reads whatever is left when it expands.
+    const urls = [VIDEO, 'https://www.tiktok.com/@reader/playlist/Books-7442134949027351314'];
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().items.map((item: { kind: string }) => item.kind)).toEqual(['video', 'collection']);
+    await app.close();
+  });
+
+  it('explains that saved Instagram collections are private', async () => {
+    const app = await testApp(KEYS);
+    const headers = await registered(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers,
+      payload: { urls: ['https://www.instagram.com/reader/saved/books/17912345678901234/'] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/saved collections private/);
     await app.close();
   });
 

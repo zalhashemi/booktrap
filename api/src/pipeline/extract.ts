@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
-import { EVIDENCE_KINDS } from '@booktrap/shared';
+import { EVIDENCE_KINDS, PLATFORM_LABELS, type SourcePlatform } from '@booktrap/shared';
 import { PipelineError } from './errors';
 import type { ImageInput } from './media';
 import { claudeCostUsd } from './pricing';
@@ -23,7 +23,7 @@ export type ExtractedBook = z.infer<typeof ExtractedBookSchema>;
 
 const ExtractionSchema = z.object({ books: z.array(ExtractedBookSchema) });
 
-export const EXTRACTION_SYSTEM_PROMPT = `You catalogue the books in a single TikTok post (a video or a photo carousel) so a reader can add them to their want-to-read list.
+export const EXTRACTION_SYSTEM_PROMPT = `You catalogue the books in a single TikTok or Instagram post (a video, a reel, a photo or a photo carousel) so a reader can add them to their want-to-read list.
 
 You get the post's caption and hashtags, any subtitles or speech transcript, and images: carousel slides in order, or frames sampled from the video with their timestamps.
 
@@ -38,7 +38,10 @@ Rules:
 - Confidence: 0.9 or more only when title and author are clearly legible or explicitly stated. Use 0.5 to 0.8 for partial or inferred readings, and below 0.5 for guesses.`;
 
 export interface ExtractionInput {
+  platform: SourcePlatform;
   kind: 'video' | 'carousel';
+  /** Slides in the post (some may have failed to download, so this can exceed images.length). */
+  slideCount?: number;
   caption: string;
   hashtags: string[];
   transcript: string | null;
@@ -60,7 +63,7 @@ export interface ExtractDeps {
 
 function buildContent(input: ExtractionInput): Anthropic.Beta.BetaContentBlockParam[] {
   const context = [
-    `Post type: ${input.kind === 'carousel' ? 'photo carousel' : 'video'}`,
+    `Post: ${PLATFORM_LABELS[input.platform]} ${input.kind === 'carousel' ? ((input.slideCount ?? input.images.length) === 1 ? 'photo' : 'photo carousel') : 'video'}`,
     `Caption: ${input.caption || '(none)'}`,
     `Hashtags: ${input.hashtags.length ? input.hashtags.map((tag) => `#${tag}`).join(' ') : '(none)'}`,
     `Transcript: ${input.transcript ?? '(none available)'}`,

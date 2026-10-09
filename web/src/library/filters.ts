@@ -1,6 +1,6 @@
 import type { Book, BookStatus } from '@booktrap/shared';
 
-export type Flag = 'all' | 'new' | 'unsure' | 'verified';
+export type Flag = 'all' | 'new';
 export type SortKey = 'added' | 'title' | 'author';
 
 export interface ShelfQuery {
@@ -48,8 +48,6 @@ export function matchesSearch(book: Book, search: string): boolean {
 export function applyQuery(books: Book[], query: ShelfQuery): Book[] {
   const filtered = books.filter((book) => {
     if (query.flag === 'new' && !book.isNew) return false;
-    if (query.flag === 'unsure' && !book.unsure) return false;
-    if (query.flag === 'verified' && !book.verified) return false;
     if (query.status !== 'any' && book.status !== query.status) return false;
     if (query.tagId !== 'any' && !book.tags.some((tag) => tag.id === query.tagId)) return false;
     return matchesSearch(book, query.search);
@@ -67,8 +65,6 @@ export function flagCounts(books: Book[]) {
   return {
     all: books.length,
     new: books.filter((book) => book.isNew).length,
-    unsure: books.filter((book) => book.unsure).length,
-    verified: books.filter((book) => book.verified).length,
   };
 }
 

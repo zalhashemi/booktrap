@@ -154,7 +154,7 @@ export interface VerifyDeps {
 }
 
 /**
- * Never throws: a lookup outage just means the book is added unverified (and therefore "unsure"),
+ * Never throws: a lookup outage just means the book is added as read, without a cover or ISBN,
  * which matches the "never lose a book" rule.
  */
 export async function verifyBook(title: string, author: string | null, deps: VerifyDeps = {}): Promise<Verification> {

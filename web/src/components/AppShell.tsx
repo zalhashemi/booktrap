@@ -2,6 +2,7 @@ import { Books, GearSix, Plus, type Icon } from '@phosphor-icons/react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { useDevice } from '../device/DeviceProvider';
 import { ConnectionGate } from './ConnectionGate';
+import { LibraryBackdrop, ShelfFooter } from './LibraryBackdrop';
 
 interface Tab {
   to: string;
@@ -18,6 +19,7 @@ const TABS: Tab[] = [
 export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col">
+      <LibraryBackdrop />
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-pill focus:bg-surface focus:px-4 focus:py-2"
@@ -64,6 +66,7 @@ export function AppShell() {
           <Outlet />
         </ConnectionGate>
       </main>
+      <ShelfFooter />
 
       {/* Phones: a floating tab bar within thumb reach, clear of the home indicator. */}
       <nav aria-label="Main" className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-20 md:hidden">
@@ -100,7 +103,7 @@ function StorageNotice() {
   if (!session || session.durable) return null;
   return (
     <div role="status" className="mx-auto mt-2 w-full max-w-[1080px] px-4 md:px-8">
-      <p className="rounded-card bg-surface px-4 py-3 text-sm text-unsure-ink shadow-[inset_0_0_0_1.5px_var(--unsure)]">
+      <p className="rounded-card bg-surface px-4 py-3 text-sm text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]">
         This browser isn’t letting BookTrap save anything, so this shelf disappears when you close the tab.
         Private browsing is the usual cause.
       </p>

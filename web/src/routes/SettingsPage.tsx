@@ -41,7 +41,7 @@ function DeviceSection() {
   if (!session) return null;
 
   const storage = !session.durable
-    ? { text: 'Not saved. This browser is blocking storage.', tone: 'text-unsure-ink' }
+    ? { text: 'Not saved. This browser is blocking storage.', tone: 'text-note-ink' }
     : persisted
       ? { text: 'Kept on this device', tone: 'text-success-ink' }
       : { text: 'Saved, but the browser may clear it if space runs low', tone: 'text-text' };
@@ -106,7 +106,7 @@ function ServerSection() {
 
   let status: ReactNode;
   if (health.isPending) status = <span className="text-text-muted">Checking</span>;
-  else if (health.isError) status = <span className="text-unsure-ink">Unreachable right now</span>;
+  else if (health.isError) status = <span className="text-note-ink">Unreachable right now</span>;
   else
     status = (
       <span className="text-success-ink">

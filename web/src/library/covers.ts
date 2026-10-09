@@ -19,7 +19,6 @@ export interface CoverTab {
 export function coverTabs(book: Book): CoverTab[] {
   const tabs: CoverTab[] = [];
   if (book.isNew) tabs.push({ key: 'new', className: 'bg-lime', label: 'New' });
-  if (book.unsure) tabs.push({ key: 'unsure', className: 'bg-unsure', label: 'Unsure' });
   if (book.status === 'reading') tabs.push({ key: 'reading', className: 'bg-reading', label: 'Reading' });
   if (book.status === 'read') tabs.push({ key: 'read', className: 'bg-read', label: 'Read' });
   return tabs;

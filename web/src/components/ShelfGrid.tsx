@@ -1,4 +1,3 @@
-import { Question } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
 import { coverTabs } from '../library/covers';
 import { BookTitle, CoverPlate, SelectMark } from './BookRow';
@@ -43,12 +42,6 @@ export function ShelfGrid({ books, onOpen, selecting, selected, onToggle }: Prop
               </span>
               <BookTitle book={book} className="mt-3 line-clamp-2 block font-display text-[0.92rem] leading-snug" />
               <span className="mt-1 block truncate text-[0.8rem] text-text-muted">{book.author ?? 'Author unknown'}</span>
-              {book.unsure && (
-                <span className="mt-1.5 inline-flex items-center gap-1 text-[0.78rem] font-bold text-unsure-ink">
-                  <Question size={13} weight="bold" aria-hidden="true" />
-                  Check this one
-                </span>
-              )}
             </button>
           </li>
         );

@@ -61,7 +61,6 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
       isbn13: body.isbn13,
       status: body.status,
       notes: body.notes,
-      unsure: body.unsure,
       isNew: body.isNew,
     };
 
@@ -77,7 +76,6 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
       // The reader's wording stays. Identifiers, cover and year now describe the new identity:
       // the match's when one is found, and nothing (rather than the old book's) when not.
       patch.verified = result.verified;
-      patch.unsure = !result.verified;
       if (body.isbn13 === undefined) patch.isbn13 = result.verified ? result.isbn13 : null;
       if (body.isbn10 === undefined) patch.isbn10 = result.verified ? result.isbn10 : null;
       patch.coverUrl = result.verified ? result.coverUrl : null;

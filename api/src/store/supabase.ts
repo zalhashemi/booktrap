@@ -39,12 +39,15 @@ interface ItemRow {
   job_id: string;
   device_id: string;
   input_url: string;
-  resolved_post_id: string | null;
+  source_platform: JobItemRecord['platform'];
+  source_post_id: string | null;
   kind: JobItemRecord['kind'];
   status: JobItemRecord['status'];
   error: string | null;
   books_found: number;
   attempts: number;
+  parent_item_id: string | null;
+  note: string | null;
   created_at: string;
 }
 
@@ -57,8 +60,6 @@ interface BookRow {
   cover_url: string | null;
   published_year: number | null;
   status: Book['status'];
-  verified: boolean;
-  unsure: boolean;
   is_new: boolean;
   notes: string | null;
   created_at: string;
@@ -69,8 +70,9 @@ interface BookRow {
 
 interface SourceRow {
   id: string;
-  tiktok_post_id: string;
-  tiktok_url: string;
+  source_platform: BookSource['platform'];
+  source_post_id: string;
+  source_url: string;
   creator_handle: string | null;
   thumbnail_url: string | null;
   evidence: BookSource['evidence'];
@@ -78,19 +80,22 @@ interface SourceRow {
   created_at: string;
 }
 
-const ITEM_COLUMNS = 'id, job_id, device_id, input_url, resolved_post_id, kind, status, error, books_found, attempts, created_at';
+const ITEM_COLUMNS = 'id, job_id, device_id, input_url, source_platform, source_post_id, kind, status, error, books_found, attempts, parent_item_id, note, created_at';
 
 const toItem = (row: ItemRow): JobItemRecord => ({
   id: row.id,
   jobId: row.job_id,
   deviceId: row.device_id,
   inputUrl: row.input_url,
-  postId: row.resolved_post_id,
+  platform: row.source_platform,
+  postId: row.source_post_id,
   kind: row.kind,
   status: row.status,
   error: row.error,
   booksFound: row.books_found,
   attempts: row.attempts,
+  parentItemId: row.parent_item_id,
+  note: row.note,
   createdAt: row.created_at,
 });
 
@@ -105,8 +110,9 @@ const toJob = (row: JobRow): JobWithItems => ({
 
 const toSource = (row: SourceRow): BookSource => ({
   id: row.id,
-  postId: row.tiktok_post_id,
-  url: row.tiktok_url,
+  platform: row.source_platform,
+  postId: row.source_post_id,
+  url: row.source_url,
   creatorHandle: row.creator_handle,
   thumbnailUrl: row.thumbnail_url,
   evidence: row.evidence,
@@ -123,8 +129,6 @@ const toBook = (row: BookRow): Book => ({
   coverUrl: row.cover_url,
   publishedYear: row.published_year,
   status: row.status,
-  verified: row.verified,
-  unsure: row.unsure,
   isNew: row.is_new,
   notes: row.notes,
   createdAt: row.created_at,
@@ -137,8 +141,8 @@ const toBook = (row: BookRow): Book => ({
 });
 
 const BOOK_SELECT =
-  'id, title, author, isbn10, isbn13, cover_url, published_year, status, verified, unsure, is_new, notes, created_at, updated_at, ' +
-  'book_sources (id, tiktok_post_id, tiktok_url, creator_handle, thumbnail_url, evidence, confidence, created_at), ' +
+  'id, title, author, isbn10, isbn13, cover_url, published_year, status, is_new, notes, created_at, updated_at, ' +
+  'book_sources (id, source_platform, source_post_id, source_url, creator_handle, thumbnail_url, evidence, confidence, created_at), ' +
   'book_tags (tags (id, name))';
 
 const PATCH_COLUMNS: Record<keyof BookPatch, string> = {
@@ -151,7 +155,6 @@ const PATCH_COLUMNS: Record<keyof BookPatch, string> = {
   status: 'status',
   notes: 'notes',
   verified: 'verified',
-  unsure: 'unsure',
   isNew: 'is_new',
   normalizedKey: 'normalized_key',
 };
@@ -171,7 +174,8 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
             job_id: job.id,
             device_id: deviceId,
             input_url: item.inputUrl,
-            resolved_post_id: item.postId,
+            source_platform: item.platform,
+            source_post_id: item.postId,
             kind: item.kind,
           })),
         ),
@@ -180,6 +184,41 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       const created = await this.getJob(deviceId, job.id);
       if (!created) throw new Error('job vanished after insert');
       return created;
+    },
+
+    async addChildItems(parent, children) {
+      if (children.length === 0) return [];
+      const rows = check(
+        await db
+          .from('job_items')
+          .insert(
+            children.map((child) => ({
+              job_id: parent.jobId,
+              device_id: parent.deviceId,
+              parent_item_id: parent.id,
+              input_url: child.inputUrl,
+              source_platform: child.platform,
+              source_post_id: child.postId,
+              kind: child.kind,
+            })),
+          )
+          .select(ITEM_COLUMNS),
+        'job_items.insert_children',
+      ) as ItemRow[];
+      return rows.map(toItem);
+    },
+
+    async childItems(parentItemId) {
+      const rows = check(
+        await db.from('job_items').select(ITEM_COLUMNS).eq('parent_item_id', parentItemId).order('created_at', { ascending: true }),
+        'job_items.children',
+      ) as ItemRow[];
+      return rows.map(toItem);
+    },
+
+    async jobIpHash(jobId) {
+      const row = check(await db.from('jobs').select('ip_hash').eq('id', jobId).maybeSingle(), 'jobs.ip_hash') as { ip_hash: string | null } | null;
+      return row?.ip_hash ?? null;
     },
 
     async getJob(deviceId, jobId) {
@@ -208,9 +247,11 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.error !== undefined) row.error = patch.error;
       if (patch.booksFound !== undefined) row.books_found = patch.booksFound;
-      if (patch.postId !== undefined) row.resolved_post_id = patch.postId;
+      if (patch.platform !== undefined) row.source_platform = patch.platform;
+      if (patch.postId !== undefined) row.source_post_id = patch.postId;
       if (patch.kind !== undefined) row.kind = patch.kind;
       if (patch.attempts !== undefined) row.attempts = patch.attempts;
+      if (patch.note !== undefined) row.note = patch.note;
       check(await db.from('job_items').update(row).eq('id', itemId), 'job_items.update');
     },
 
@@ -238,6 +279,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
           .from('job_items')
           .select('id', { count: 'exact', head: true })
           .eq('device_id', filter.deviceId)
+          .or('kind.is.null,kind.neq.collection')
           .gte('created_at', since.toISOString());
         if (error) throw new Error(`job_items.count failed: ${error.message}`);
         return count ?? 0;
@@ -246,24 +288,31 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         .from('job_items')
         .select('id, jobs!inner(ip_hash)', { count: 'exact', head: true })
         .eq('jobs.ip_hash', filter.ipHash)
+        .or('kind.is.null,kind.neq.collection')
         .gte('created_at', since.toISOString());
       if (error) throw new Error(`job_items.count_ip failed: ${error.message}`);
       return count ?? 0;
     },
 
-    async getCachedPost(postId) {
+    async getCachedPost(platform, postId) {
       const row = check(
-        await db.from('post_cache').select('post, extracted_json, model').eq('tiktok_post_id', postId).maybeSingle(),
+        await db
+          .from('post_cache')
+          .select('post, extracted_json, model')
+          .eq('source_platform', platform)
+          .eq('source_post_id', postId)
+          .maybeSingle(),
         'post_cache.get',
-      ) as { post: unknown; extracted_json: unknown; model: string | null } | null;
+      ) as { post: Record<string, unknown> | null; extracted_json: unknown; model: string | null } | null;
       if (!row?.post) return null;
       return { post: row.post, books: (row.extracted_json as { books: unknown }).books, model: row.model ?? 'unknown' } as never;
     },
 
-    async putCachedPost(postId, value) {
+    async putCachedPost(platform, postId, value) {
       check(
         await db.from('post_cache').upsert({
-          tiktok_post_id: postId,
+          source_platform: platform,
+          source_post_id: postId,
           post: value.post,
           extracted_json: { books: value.books },
           model: value.model,
@@ -330,7 +379,6 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
             cover_url: book.coverUrl,
             published_year: book.publishedYear,
             verified: book.verified,
-            unsure: book.unsure,
             is_new: true,
             normalized_key: book.normalizedKey,
           })
@@ -353,8 +401,9 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     async addSource(bookId, source) {
       const { error } = await db.from('book_sources').insert({
         book_id: bookId,
-        tiktok_post_id: source.postId,
-        tiktok_url: source.url,
+        source_platform: source.platform,
+        source_post_id: source.postId,
+        source_url: source.url,
         creator_handle: source.creatorHandle,
         thumbnail_url: source.thumbnailUrl,
         evidence: source.evidence,
@@ -401,6 +450,10 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         check(await db.from('books').update(row).eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null), 'books.update');
       }
       return this.getBook(deviceId, bookId);
+    },
+
+    async removeBook(deviceId, bookId) {
+      check(await db.from('books').delete().eq('id', bookId).eq('device_id', deviceId), 'books.remove');
     },
 
     async deleteBooks(deviceId, bookIds) {
@@ -457,6 +510,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         if (!other) continue;
         for (const source of other.sources) {
           await this.addSource(keepId, {
+            platform: source.platform,
             postId: source.postId,
             url: source.url,
             creatorHandle: source.creatorHandle,

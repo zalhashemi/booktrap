@@ -12,8 +12,6 @@ const book = (overrides: Partial<Book>): Book => ({
   coverUrl: null,
   publishedYear: null,
   status: 'want_to_read',
-  verified: true,
-  unsure: false,
   isNew: false,
   notes: null,
   createdAt: '2026-10-01T00:00:00.000Z',
@@ -26,7 +24,7 @@ const book = (overrides: Partial<Book>): Book => ({
 const books = [
   book({ title: 'The Secret History', author: 'Donna Tartt', createdAt: '2026-10-03T00:00:00Z', isNew: true }),
   book({ title: 'Babel', author: 'R. F. Kuang', createdAt: '2026-10-02T00:00:00Z', tags: [{ id: 't1', name: 'Dark academia' }] }),
-  book({ title: 'A Separate Peace', author: 'John Knowles', createdAt: '2026-10-01T00:00:00Z', status: 'read', unsure: true, verified: false }),
+  book({ title: 'A Separate Peace', author: 'John Knowles', createdAt: '2026-10-01T00:00:00Z', status: 'read' }),
   book({ title: 'Les Misérables', author: null, createdAt: '2026-09-30T00:00:00Z' }),
 ];
 
@@ -62,7 +60,7 @@ describe('applyQuery', () => {
   });
 
   it('combines flag, status and tag filters', () => {
-    expect(titles(applyQuery([...books], { ...DEFAULT_QUERY, flag: 'unsure', status: 'read' }))).toEqual(['A Separate Peace']);
+    expect(titles(applyQuery([...books], { ...DEFAULT_QUERY, flag: 'all', status: 'read' }))).toEqual(['A Separate Peace']);
     expect(titles(applyQuery([...books], { ...DEFAULT_QUERY, tagId: 't1' }))).toEqual(['Babel']);
     expect(applyQuery([...books], { ...DEFAULT_QUERY, flag: 'new', status: 'read' })).toEqual([]);
   });
@@ -70,6 +68,6 @@ describe('applyQuery', () => {
 
 describe('flagCounts', () => {
   it('counts each flag', () => {
-    expect(flagCounts(books)).toEqual({ all: 4, new: 1, unsure: 1, verified: 3 });
+    expect(flagCounts(books)).toEqual({ all: 4, new: 1 });
   });
 });

@@ -60,10 +60,10 @@ export function SelectionBar({ selected, onDelete, onMerge, onCancel, busy }: Pr
   );
 }
 
-/** Picks which copy survives a manual merge. The best-sourced, verified copy is suggested. */
+/** Picks which copy survives a manual merge. The best-sourced copy with a cover is suggested. */
 function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: () => void; onConfirm: (keep: Book) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const suggested = [...books].sort((a, b) => Number(b.verified) - Number(a.verified) || b.sources.length - a.sources.length)[0]!;
+  const suggested = [...books].sort((a, b) => Number(Boolean(b.coverUrl)) - Number(Boolean(a.coverUrl)) || b.sources.length - a.sources.length)[0]!;
   const [keepId, setKeepId] = useState(suggested.id);
   const name = useId();
 
@@ -93,7 +93,7 @@ function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: 
           Merge into one book
         </h2>
         <p className="mt-2 text-sm text-text-muted">
-          Choose the copy to keep. The others’ TikToks, shelves and notes move onto it, then they’re removed.
+          Choose the copy to keep. The others’ posts, shelves and notes move onto it, then they’re removed.
         </p>
         <fieldset className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto">
           <legend className="sr-only">Book to keep</legend>
@@ -109,7 +109,7 @@ function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: 
               <span className="min-w-0">
                 <span className="block truncate font-display">{book.title}</span>
                 <span className="block truncate text-sm text-text-muted">
-                  {book.author ?? 'Author unknown'}, {book.sources.length} {book.sources.length === 1 ? 'TikTok' : 'TikToks'}
+                  {book.author ?? 'Author unknown'}, {book.sources.length} {book.sources.length === 1 ? 'post' : 'posts'}
                 </span>
               </span>
             </label>

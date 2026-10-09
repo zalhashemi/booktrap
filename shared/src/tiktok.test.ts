@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extractTikTokLinks, parseTikTokUrl } from './tiktok';
+import { extractSourceLinks } from './links';
+import { parseTikTokUrl, tiktokCollectionId } from './tiktok';
 
 describe('parseTikTokUrl', () => {
   it.each([
@@ -23,6 +24,12 @@ describe('parseTikTokUrl', () => {
     },
   );
 
+  it('recognises playlist links as collections and reads their id', () => {
+    const link = parseTikTokUrl('https://www.tiktok.com/@reader/playlist/Spooky%20reads-7442134949027351314?lang=en');
+    expect(link).toMatchObject({ kind: 'collection', handle: 'reader' });
+    expect(tiktokCollectionId(link!.url)).toBe('7442134949027351314');
+  });
+
   it('recognises collection links', () => {
     expect(parseTikTokUrl('https://www.tiktok.com/@reader/collection/Dark%20academia-7301234567890123456')).toMatchObject({
       kind: 'collection',
@@ -43,16 +50,16 @@ describe('parseTikTokUrl', () => {
   });
 });
 
-describe('extractTikTokLinks', () => {
+describe('extractSourceLinks (TikTok)', () => {
   it('finds links inside a share message and ignores everything else', () => {
     const text = `omg read these!! https://www.tiktok.com/@a/video/7672440936101727519?_t=8x.
 also https://vm.tiktok.com/ZMabc123/ and https://youtube.com/watch?v=1`;
-    expect(extractTikTokLinks(text).map((l) => l.kind)).toEqual(['video', 'short']);
+    expect(extractSourceLinks(text).map((l) => l.kind)).toEqual(['video', 'short']);
   });
 
   it('de-duplicates the same post pasted twice with different tracking params', () => {
     const text =
       'https://www.tiktok.com/@a/video/7672440936101727519?x=1\nhttps://www.tiktok.com/@a/video/7672440936101727519?x=2';
-    expect(extractTikTokLinks(text)).toHaveLength(1);
+    expect(extractSourceLinks(text)).toHaveLength(1);
   });
 });

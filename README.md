@@ -1,6 +1,6 @@
 # BookTrap
 
-Paste TikTok links, or a public TikTok collection, and BookTrap finds every book shown or mentioned in them. It checks each one against Google Books and Open Library and adds it to a want-to-read shelf you can export to Goodreads, PDF, text, CSV or JSON.
+Paste TikTok or Instagram links (posts, carousels, reels, mixed freely), or a public TikTok collection, and BookTrap finds every book shown or mentioned in them. It adds each one to a want-to-read shelf, with covers and ISBNs from Google Books and Open Library when they match, you can export to Goodreads, PDF, text, CSV or JSON.
 
 The product source of truth is `BUILD_BRIEF_BookCatcher.md` (it uses the working name "BookCatcher"). Build status lives in `PROGRESS.md`.
 

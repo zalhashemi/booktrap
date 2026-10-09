@@ -1,4 +1,4 @@
-import type { Book, BookStatus, Evidence, JobItemStatus, Tag } from '@booktrap/shared';
+import type { Book, BookStatus, Evidence, JobItemStatus, SourcePlatform, Tag } from '@booktrap/shared';
 import type { ExtractedBook } from '../pipeline/extract';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -17,18 +17,30 @@ export interface JobItemRecord {
   jobId: string;
   deviceId: string;
   inputUrl: string;
+  platform: SourcePlatform;
   postId: string | null;
   kind: ItemKind | null;
   status: JobItemStatus;
   error: string | null;
   booksFound: number;
   attempts: number;
+  /** The collection item this video was expanded from. */
+  parentItemId: string | null;
+  note: string | null;
   createdAt: string;
+}
+
+export interface NewItem {
+  inputUrl: string;
+  platform: SourcePlatform;
+  postId: string | null;
+  kind: ItemKind | null;
 }
 
 export type JobWithItems = JobRecord & { items: JobItemRecord[] };
 
 export interface CachedPostMeta {
+  platform: SourcePlatform;
   postId: string;
   url: string;
   kind: 'video' | 'carousel';
@@ -50,12 +62,13 @@ export interface NewBook {
   isbn13: string | null;
   coverUrl: string | null;
   publishedYear: number | null;
+  /** A catalogue match enriched it. Internal only: the reader never sees an "unverified" state. */
   verified: boolean;
-  unsure: boolean;
   normalizedKey: string;
 }
 
 export interface NewSource {
+  platform: SourcePlatform;
   postId: string;
   url: string;
   creatorHandle: string | null;
@@ -87,19 +100,29 @@ export interface LibraryStore {
   createJob(
     deviceId: string,
     ipHash: string | null,
-    items: { inputUrl: string; postId: string | null; kind: ItemKind | null }[],
+    items: NewItem[],
   ): Promise<JobWithItems>;
+  /** Adds the videos a collection expanded into, as children of that item, to the same job. */
+  addChildItems(parent: JobItemRecord, items: NewItem[]): Promise<JobItemRecord[]>;
+  childItems(parentItemId: string): Promise<JobItemRecord[]>;
+  /** The keyed IP hash the job was created from, for the per-IP cap on collection expansion. */
+  jobIpHash(jobId: string): Promise<string | null>;
   getJob(deviceId: string, jobId: string): Promise<JobWithItems | null>;
   listJobs(deviceId: string, limit: number): Promise<JobWithItems[]>;
   getItem(itemId: string): Promise<JobItemRecord | null>;
-  updateItem(itemId: string, patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'postId' | 'kind' | 'attempts'>>): Promise<void>;
+  updateItem(
+    itemId: string,
+    patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'platform' | 'postId' | 'kind' | 'attempts' | 'note'>>,
+  ): Promise<void>;
   /** Items that were queued or mid-flight when the process stopped (free hosting sleeps). */
   unfinishedItems(): Promise<JobItemRecord[]>;
   refreshJobStatus(jobId: string): Promise<void>;
+  /** Posts submitted since `since`. A collection link itself isn't counted; its videos are. */
   countItemsSince(filter: { deviceId: string } | { ipHash: string }, since: Date): Promise<number>;
 
-  getCachedPost(postId: string): Promise<CachedPost | null>;
-  putCachedPost(postId: string, value: CachedPost): Promise<void>;
+  /** Keyed by platform + post id: the same id on two platforms is two different posts. */
+  getCachedPost(platform: SourcePlatform, postId: string): Promise<CachedPost | null>;
+  putCachedPost(platform: SourcePlatform, postId: string, value: CachedPost): Promise<void>;
 
   recordSpend(event: SpendEvent): Promise<void>;
   spendSince(since: Date): Promise<number>;
@@ -110,13 +133,15 @@ export interface LibraryStore {
   insertBook(deviceId: string, book: NewBook): Promise<string>;
   /** Fills only fields that are currently empty, so user edits are never overwritten. */
   fillBookGaps(bookId: string, fields: Partial<Pick<NewBook, 'isbn10' | 'isbn13' | 'coverUrl' | 'publishedYear'>>): Promise<void>;
-  /** False when this post is already a source of the book. */
+  /** False when this post (platform + id) is already a source of the book. */
   addSource(bookId: string, source: NewSource): Promise<boolean>;
   listBooks(deviceId: string): Promise<Book[]>;
 
   // Phase 3: the reader's own edits. Every method is scoped to the device; unknown ids are ignored.
   getBook(deviceId: string, bookId: string): Promise<Book | null>;
   updateBook(deviceId: string, bookId: string, patch: BookPatch): Promise<Book | null>;
+  /** Permanent delete of one just-inserted book (the pipeline's rollback). Not for reader actions. */
+  removeBook(deviceId: string, bookId: string): Promise<void>;
   /** Soft delete (undo-able). Returns how many were deleted. */
   deleteBooks(deviceId: string, bookIds: string[]): Promise<number>;
   restoreBooks(deviceId: string, bookIds: string[]): Promise<number>;
@@ -146,7 +171,6 @@ export interface BookPatch {
   status?: BookStatus;
   notes?: string | null;
   verified?: boolean;
-  unsure?: boolean;
   isNew?: boolean;
   normalizedKey?: string;
 }

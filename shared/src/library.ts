@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { SOURCE_PLATFORMS } from './source';
+
+export const SourcePlatformSchema = z.enum(SOURCE_PLATFORMS);
 
 export const JOB_ITEM_STATUSES = ['queued', 'fetching', 'extracting', 'verifying', 'done', 'failed'] as const;
 export const JobItemStatusSchema = z.enum(JOB_ITEM_STATUSES);
@@ -7,12 +10,17 @@ export type JobItemStatus = z.infer<typeof JobItemStatusSchema>;
 export const JobItemSchema = z.object({
   id: z.string(),
   inputUrl: z.string(),
+  platform: SourcePlatformSchema,
   postId: z.string().nullable(),
   kind: z.enum(['video', 'carousel', 'collection', 'collection_child']).nullable(),
   status: JobItemStatusSchema,
   /** Human-readable reason, only when status is "failed". */
   error: z.string().nullable(),
   booksFound: z.number().int(),
+  /** Set on the videos a collection link expanded into. */
+  parentItemId: z.string().nullable(),
+  /** A note for the reader on a finished item, e.g. that only part of a collection was read. */
+  note: z.string().nullable(),
 });
 export type JobItem = z.infer<typeof JobItemSchema>;
 
@@ -41,6 +49,7 @@ export type Evidence = z.infer<typeof EvidenceSchema>;
 
 export const BookSourceSchema = z.object({
   id: z.string(),
+  platform: SourcePlatformSchema,
   postId: z.string(),
   url: z.string(),
   creatorHandle: z.string().nullable(),
@@ -66,8 +75,6 @@ export const BookSchema = z.object({
   coverUrl: z.string().nullable(),
   publishedYear: z.number().int().nullable(),
   status: BookStatusSchema,
-  verified: z.boolean(),
-  unsure: z.boolean(),
   isNew: z.boolean(),
   notes: z.string().nullable(),
   createdAt: z.string(),
@@ -105,8 +112,6 @@ export const UpdateBookRequestSchema = z
       .max(5000)
       .transform((value) => value.trim() || null)
       .nullable(),
-    /** false = the reader confirmed an "unsure" book. */
-    unsure: z.literal(false),
     /** false = seen (opening or editing a book clears its "new" highlight). */
     isNew: z.literal(false),
     tagIds: z.array(z.string()).max(50),

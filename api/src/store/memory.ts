@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Book, BookSource, Tag } from '@booktrap/shared';
+import { postKey, type Book, type BookSource, type Tag } from '@booktrap/shared';
 import {
   TERMINAL_STATUSES,
   TagNameTakenError,
@@ -11,7 +11,7 @@ import {
   type LibraryStore,
 } from './types';
 
-type BookRow = Omit<Book, 'sources' | 'tags'> & { deviceId: string; normalizedKey: string; deletedAt: string | null };
+type BookRow = Omit<Book, 'sources' | 'tags'> & { deviceId: string; normalizedKey: string; verified: boolean; deletedAt: string | null };
 
 /** Development and test storage. Data is lost when the process exits. */
 export function createMemoryLibraryStore(): LibraryStore {
@@ -34,7 +34,7 @@ export function createMemoryLibraryStore(): LibraryStore {
     const book = books.get(bookId);
     return book && book.deviceId === deviceId && !book.deletedAt ? book : null;
   };
-  const toBook = ({ deviceId: _device, normalizedKey: _key, deletedAt: _deleted, ...book }: BookRow): Book => ({
+  const toBook = ({ deviceId: _device, normalizedKey: _key, verified: _verified, deletedAt: _deleted, ...book }: BookRow): Book => ({
     ...book,
     sources: (sources.get(book.id) ?? []).map(({ bookId: _bookId, ...source }) => source),
     tags: [...(bookTags.get(book.id) ?? [])]
@@ -56,17 +56,50 @@ export function createMemoryLibraryStore(): LibraryStore {
           jobId: job.id,
           deviceId,
           inputUrl: item.inputUrl,
+          platform: item.platform,
           postId: item.postId,
           kind: item.kind,
           status: 'queued',
           error: null,
           booksFound: 0,
           attempts: 0,
+          parentItemId: null,
+          note: null,
           // Keep insertion order stable for equal timestamps.
           createdAt: new Date(Date.now() + index).toISOString(),
         });
       });
       return withItems(strip(job));
+    },
+    async addChildItems(parent, children) {
+      const base = Date.now();
+      return children.map((child, index) => {
+        const id = randomUUID();
+        const record: JobItemRecord = {
+          id,
+          jobId: parent.jobId,
+          deviceId: parent.deviceId,
+          inputUrl: child.inputUrl,
+          platform: child.platform,
+          postId: child.postId,
+          kind: child.kind,
+          status: 'queued',
+          error: null,
+          booksFound: 0,
+          attempts: 0,
+          parentItemId: parent.id,
+          note: null,
+          createdAt: new Date(base + 1000 + index).toISOString(),
+        };
+        items.set(id, record);
+        return record;
+      });
+    },
+    async childItems(parentItemId) {
+      return [...items.values()].filter((item) => item.parentItemId === parentItemId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+    async jobIpHash(jobId) {
+      return jobs.get(jobId)?.ipHash ?? null;
     },
     async getJob(deviceId, jobId) {
       const job = jobs.get(jobId);
@@ -95,16 +128,16 @@ export function createMemoryLibraryStore(): LibraryStore {
     },
     async countItemsSince(filter, since) {
       return [...items.values()].filter((item) => {
-        if (new Date(item.createdAt) < since) return false;
+        if (new Date(item.createdAt) < since || item.kind === 'collection') return false;
         if ('deviceId' in filter) return item.deviceId === filter.deviceId;
         return jobs.get(item.jobId)?.ipHash === filter.ipHash;
       }).length;
     },
-    async getCachedPost(postId) {
-      return cache.get(postId) ?? null;
+    async getCachedPost(platform, postId) {
+      return cache.get(postKey(platform, postId)) ?? null;
     },
-    async putCachedPost(postId, value) {
-      cache.set(postId, value);
+    async putCachedPost(platform, postId, value) {
+      cache.set(postKey(platform, postId), value);
     },
     async recordSpend(event) {
       spend.push({ usd: event.usd, at: new Date() });
@@ -137,7 +170,6 @@ export function createMemoryLibraryStore(): LibraryStore {
         publishedYear: book.publishedYear,
         status: 'want_to_read',
         verified: book.verified,
-        unsure: book.unsure,
         isNew: true,
         notes: null,
         normalizedKey: book.normalizedKey,
@@ -156,7 +188,7 @@ export function createMemoryLibraryStore(): LibraryStore {
     },
     async addSource(bookId, source) {
       const list = sources.get(bookId) ?? [];
-      if (list.some((existing) => existing.postId === source.postId)) return false;
+      if (list.some((existing) => existing.platform === source.platform && existing.postId === source.postId)) return false;
       list.push({ id: randomUUID(), bookId, createdAt: now(), ...source });
       sources.set(bookId, list);
       return true;
@@ -177,6 +209,12 @@ export function createMemoryLibraryStore(): LibraryStore {
       if (!book) return null;
       Object.assign(book, Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)), { updatedAt: now() });
       return toBook(book);
+    },
+    async removeBook(deviceId, bookId) {
+      if (books.get(bookId)?.deviceId !== deviceId) return;
+      books.delete(bookId);
+      sources.delete(bookId);
+      bookTags.delete(bookId);
     },
     async deleteBooks(deviceId, bookIds) {
       let count = 0;

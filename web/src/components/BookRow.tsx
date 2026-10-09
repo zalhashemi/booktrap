@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Check, CheckCircle, Question } from '@phosphor-icons/react';
+import { Check } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
+import { sourceSummary } from '../library/links';
 import { claimHighlightSweep, clothFor, coverTabs, type CoverTab } from '../library/covers';
 import { STATUS_LABELS } from '../library/filters';
 
@@ -75,17 +76,6 @@ export function BookFlags({ book }: { book: Book }) {
   return (
     <>
       {book.isNew && <span className="rounded-pill bg-lime px-2 py-0.5 text-[0.78rem] font-extrabold text-on-lime">New</span>}
-      {book.unsure ? (
-        <span className="inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[0.78rem] font-bold text-unsure-ink shadow-[inset_0_0_0_1.5px_var(--unsure)]">
-          <Question size={13} weight="bold" aria-hidden="true" />
-          Unsure
-        </span>
-      ) : book.verified ? (
-        <span className="inline-flex items-center gap-1 text-[0.8rem] font-bold text-success-ink">
-          <CheckCircle size={15} weight="fill" aria-hidden="true" />
-          Verified
-        </span>
-      ) : null}
     </>
   );
 }
@@ -110,7 +100,6 @@ interface RowProps {
 }
 
 export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProps) {
-  const sources = book.sources.length;
   return (
     <li>
       <button
@@ -139,11 +128,7 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
                 #{tag.name}
               </span>
             ))}
-            {sources > 0 && (
-              <span className="text-[0.8rem] text-text-faint">
-                {sources === 1 ? `from @${book.sources[0]?.creatorHandle ?? 'TikTok'}` : `seen in ${sources} TikToks`}
-              </span>
-            )}
+            {book.sources.length > 0 && <span className="text-[0.8rem] text-text-faint">{sourceSummary(book.sources)}</span>}
           </span>
         </span>
       </button>

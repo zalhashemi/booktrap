@@ -1,9 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowSquareOut, CaretRight, Check, Plus, Question, Trash, X } from '@phosphor-icons/react';
-import { BOOK_STATUSES, type Book, type BookStatus, type UpdateBookRequest } from '@booktrap/shared';
+import { ArrowSquareOut, CaretRight, Plus, Trash, X } from '@phosphor-icons/react';
+import { BOOK_STATUSES, PLATFORM_LABELS, type Book, type BookStatus, type UpdateBookRequest } from '@booktrap/shared';
 import { ApiRequestError } from '../api/client';
 import { STATUS_LABELS } from '../library/filters';
 import { useCreateTag, useTags, useUpdateBook } from '../library/hooks';
+import { sourceHeading } from '../library/links';
+import { PlatformIcon } from './PlatformIcon';
 import { BookFlags, CoverPlate } from './BookRow';
 import { Button } from './Button';
 import { useToast } from './toast-context';
@@ -111,24 +113,17 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
     event.preventDefault();
     if (!dirty || update.isPending) return;
     setError(null);
-    const recheck = patch.title !== undefined || patch.author !== undefined;
     update.mutate(
       { id: book.id, patch },
       {
-        onSuccess: (saved) => {
-          toast(recheck && !saved.verified ? 'Saved. BookTrap couldn’t find it in the catalogues, so it’s marked Unsure.' : 'Saved');
+        onSuccess: () => {
+          toast('Saved');
           onClose();
         },
         onError: (failure) => setError(failure instanceof ApiRequestError ? failure.message : 'Couldn’t save. Check your connection and try again.'),
       },
     );
   };
-
-  const confirm = () =>
-    update.mutate(
-      { id: book.id, patch: { unsure: false } },
-      { onSuccess: () => toast('Marked as confirmed'), onError: () => setError('Couldn’t confirm. Try again.') },
-    );
 
   return (
     <form onSubmit={save} className="flex h-full flex-col">
@@ -157,19 +152,6 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
       </header>
 
       <div className="flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6">
-        {book.unsure && (
-          <div className="rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--unsure)]">
-            <p className="flex items-start gap-2 text-[0.95rem]">
-              <Question size={20} weight="bold" className="mt-0.5 shrink-0 text-unsure-ink" aria-hidden="true" />
-              BookTrap isn’t sure it read this one right. Check the title and author, then confirm or fix them.
-            </p>
-            <Button type="button" variant="quiet" onClick={confirm} disabled={update.isPending} className="mt-3 w-full md:w-auto">
-              <Check size={18} aria-hidden="true" />
-              Looks right
-            </Button>
-          </div>
-        )}
-
         <Field id={ids.title} label="Title">
           <input
             id={ids.title}
@@ -249,7 +231,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
         <section aria-labelledby="sources-heading">
           <h3 id="sources-heading" className="text-[0.95rem] font-medium">
-            {book.sources.length === 1 ? 'Found in 1 TikTok' : `Seen in ${book.sources.length} TikToks`}
+            {sourceHeading(book.sources)}
           </h3>
           <ul className="mt-2 divide-y divide-rule">
             {book.sources.map((source) => (
@@ -260,13 +242,14 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
                   rel="noreferrer"
                   className="flex min-h-12 items-center justify-between gap-3 py-2 text-sm hover:text-accent-ink"
                 >
-                  <span className="min-w-0">
-                    <span className="block font-medium">@{source.creatorHandle ?? 'TikTok'}</span>
+                  <PlatformIcon platform={source.platform} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">@{source.creatorHandle ?? PLATFORM_LABELS[source.platform]}</span>
                     <span className="block text-text-muted">
                       {source.evidence ? EVIDENCE_LABELS[source.evidence] : 'seen in the post'}, {dateFormat.format(new Date(source.createdAt))}
                     </span>
                     </span>
-                  <ArrowSquareOut size={18} className="shrink-0 text-text-faint" aria-label="Opens TikTok in a new tab" />
+                  <ArrowSquareOut size={18} className="shrink-0 text-text-faint" aria-label={`Opens ${PLATFORM_LABELS[source.platform]} in a new tab`} />
                 </a>
               </li>
             ))}
@@ -276,7 +259,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
 
       <footer className="border-t border-rule bg-ground-raised px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         {error && (
-          <p role="alert" className="mb-3 text-sm text-unsure-ink">
+          <p role="alert" className="mb-3 text-sm text-note-ink">
             {error}
           </p>
         )}
@@ -284,7 +267,7 @@ function SheetBody({ book, onClose, onDelete }: { book: Book; onClose: () => voi
           <button
             type="button"
             onClick={() => onDelete(book)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-2 text-sm text-unsure-ink hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill px-2 text-sm text-note-ink hover:underline"
           >
             <Trash size={18} aria-hidden="true" />
             Delete

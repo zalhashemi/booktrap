@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import { FREE_VIDEOS_PER_COLLECTION } from '@booktrap/shared';
 import { loadConfig } from './config';
 import { processItem } from './pipeline/process';
 import { JobQueue } from './pipeline/queue';
@@ -38,10 +39,14 @@ runItem = (itemId) =>
       model: config.EXTRACTION_MODEL,
       effort: config.EXTRACTION_EFFORT,
       includeBackgroundBooks: config.INCLUDE_BACKGROUND_BOOKS,
-      unsureBelowConfidence: config.UNSURE_BELOW_CONFIDENCE,
       monthlyBudgetUsd: config.MONTHLY_BUDGET_USD,
       killSwitch: config.GLOBAL_SPEND_KILL_SWITCH,
+      // The shared constant, which the web app shows too; MAX_VIDEOS_PER_COLLECTION is the ceiling for a future paid tier.
+      videosPerCollection: Math.min(FREE_VIDEOS_PER_COLLECTION, config.MAX_VIDEOS_PER_COLLECTION),
+      dailyCapPerDevice: config.DAILY_LINK_CAP_PER_DEVICE,
+      dailyCapPerIp: config.DAILY_LINK_CAP_PER_IP,
     },
+    enqueue: (childId, deviceId) => queue.enqueue(childId, deviceId),
   });
 
 if (config.storage === 'memory') {

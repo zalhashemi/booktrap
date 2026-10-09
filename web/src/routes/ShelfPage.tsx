@@ -15,7 +15,7 @@ import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBook
 const GHOST_BOOKS: { tab?: string; lean?: number }[] = [
   { tab: 'bg-lime' },
   { lean: -2 },
-  { tab: 'bg-unsure', lean: 1.5 },
+  { tab: 'bg-reading', lean: 1.5 },
   {},
   { tab: 'bg-success', lean: 3 },
 ];
@@ -139,7 +139,7 @@ export function ShelfPage() {
         <p className="mt-10 text-text-muted">Taking books off the shelf…</p>
       ) : books.isError ? (
         <div role="alert" className="mt-10 max-w-[34rem]">
-          <p className="text-unsure-ink">Your shelf couldn’t be loaded just now. Your books are safe.</p>
+          <p className="text-note-ink">Your shelf couldn’t be loaded just now. Your books are safe.</p>
           <button type="button" onClick={() => void books.refetch()} className="mt-3 min-h-11 text-sm underline underline-offset-4">
             Try again
           </button>
@@ -150,7 +150,7 @@ export function ShelfPage() {
           <div className="mt-8 max-w-[34rem]">
             <h2 className="font-display text-[1.5rem]">Nothing shelved yet</h2>
             <p className="mt-2 text-text-muted">
-              Every book BookTrap finds in your TikToks lands here, and the newest ones get a lime highlight so you can spot
+              Every book BookTrap finds in your TikToks and Instagram posts lands here, and the newest ones get a lime highlight so you can spot
               them.
             </p>
             <ButtonLink to="/" className="mt-6">

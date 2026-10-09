@@ -30,10 +30,10 @@
   --accent-ink: #95c7af; /* teal as text, 7.9:1 */
   --action: #85baa1; /* the one colour that means "act" */
   --action-hover: #98c9b2;
-  --success: #85baa1; /* verified */
+  --success: #85baa1; /* done, shelved */
   --success-ink: #95c7af;
-  --unsure: #b9aacf; /* Dusty Lavender lifted: "check this one" */
-  --unsure-ink: #c9bcdc; /* 8.0:1 */
+  --note: #b9aacf; /* Dusty Lavender lifted: margin notes and gentle alerts */
+  --note-ink: #c9bcdc; /* 8.0:1 */
   --tag: #9db3bd; /* Slate Grey lifted: shelves */
   --tag-ink: #afc3cc;
   --reading: #9db3bd;
@@ -47,6 +47,35 @@
   --elev-soft: 0 10px 24px -14px rgb(12 8 20 / 0.7);
   --elev-lift: 0 18px 36px -18px rgb(12 8 20 / 0.8);
   --grain-opacity: 0.05;
+
+  /* The reading room (LibraryBackdrop): night. Moonlit glass, lamplight in honeydew, spines in the palette deepened. */
+  --deco-line: rgb(206 237 219 / 0.24);
+  --deco-frame: #6b6380;
+  --deco-sky-top: #1d1a26;
+  --deco-sky-bottom: #3a3446;
+  --deco-moon: #ceeddb;
+  --deco-star: rgb(206 237 219 / 0.85);
+  --deco-curtain: #4a4258;
+  --deco-wood: #4a4358;
+  --deco-case: #332e3d;
+  --deco-spine-1: #67597a;
+  --deco-spine-2: #4f6670;
+  --deco-spine-3: #3f6b58;
+  --deco-spine-4: #5d5670;
+  --deco-band: rgb(206 237 219 / 0.22);
+  --deco-leaf: #5f9a80;
+  --deco-candle: #d9e6df;
+  --deco-candle-shade: #b9cbc2;
+  --deco-flame: #85baa1;
+  --deco-flame-core: #f2faf5;
+  --deco-glow-core: rgb(206 237 219 / 0.2);
+  --deco-cone-top: rgb(206 237 219 / 0.1);
+  --deco-shade: #6e8894;
+  --deco-bulb: #f2faf5;
+  --deco-worm: #85baa1;
+  --deco-ink: #1f1c24;
+  --deco-shadow: rgb(12 8 20 / 0.35);
+  --deco-mote: #ceeddb;
 }
 
 /* Light is the default theme (user, 2026-10-09). */
@@ -72,8 +101,8 @@
   --action-hover: #74ad92;
   --success: #85baa1;
   --success-ink: #3e7a60;
-  --unsure: #b9aacf;
-  --unsure-ink: #67597a; /* Dusty Lavender, 5.9:1 */
+  --note: #b9aacf;
+  --note-ink: #67597a; /* Dusty Lavender, 5.9:1 */
   --tag: #9db3bd;
   --tag-ink: #4f6670; /* 5.4:1 */
   --reading: #9db3bd;
@@ -87,6 +116,35 @@
   --elev-soft: 0 10px 22px -14px rgb(43 39 51 / 0.3);
   --elev-lift: 0 18px 34px -18px rgb(43 39 51 / 0.4);
   --grain-opacity: 0.035;
+
+  /* The reading room by day: pale sky through the glass, soft tints of the palette, a quieter lamp. */
+  --deco-line: rgb(84 78 97 / 0.32);
+  --deco-frame: #a79cb8;
+  --deco-sky-top: #d3e2e7;
+  --deco-sky-bottom: #eef7f1;
+  --deco-moon: #fbfdfc;
+  --deco-star: #fbfdfc;
+  --deco-curtain: #dcd4e6;
+  --deco-wood: #d8d0e2;
+  --deco-case: #e6eee9;
+  --deco-spine-1: #c4b8d7;
+  --deco-spine-2: #b3c6ce;
+  --deco-spine-3: #b2d6c4;
+  --deco-spine-4: #a59cb6;
+  --deco-band: rgb(255 255 255 / 0.55);
+  --deco-leaf: #85baa1;
+  --deco-candle: #fbfdfc;
+  --deco-candle-shade: #dfe9e3;
+  --deco-flame: #85baa1;
+  --deco-flame-core: #ffffff;
+  --deco-glow-core: rgb(133 186 161 / 0.22);
+  --deco-cone-top: rgb(133 186 161 / 0.12);
+  --deco-shade: #8a7f9c;
+  --deco-bulb: #ffffff;
+  --deco-worm: #85baa1;
+  --deco-ink: #544e61;
+  --deco-shadow: rgb(84 78 97 / 0.12);
+  --deco-mote: #85baa1;
 }
 
 @theme inline {
@@ -106,8 +164,8 @@
   --color-action-hover: var(--action-hover);
   --color-success: var(--success);
   --color-success-ink: var(--success-ink);
-  --color-unsure: var(--unsure);
-  --color-unsure-ink: var(--unsure-ink);
+  --color-note: var(--note);
+  --color-note-ink: var(--note-ink);
   --color-tag: var(--tag);
   --color-tag-ink: var(--tag-ink);
   --color-reading: var(--reading);
@@ -232,7 +290,7 @@
     font-family: var(--font-hand);
     font-size: 1.05rem;
     line-height: 1.3;
-    color: var(--unsure-ink);
+    color: var(--note-ink);
     transform: rotate(-1.5deg);
   }
 
@@ -322,6 +380,213 @@
   .page-tab[aria-pressed='true'] {
     transform: translateY(0);
     color: var(--on-tab);
+  }
+}
+
+/*
+ * The reading room (change request 001 §3). A fixed layer behind the page: two wings either side of
+ * the 1080px content column, each a size container so its pieces appear only when they fit.
+ * Phones and tablets have no wings (the column fills the screen); tablets get the shelf footer.
+ * Decoration only: aria-hidden, no pointer events, painted under the page content.
+ */
+.library {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: none;
+  /* The middle track is the column minus 24px of its 32px side padding, so wings use that margin too. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1032px) minmax(0, 1fr);
+  pointer-events: none;
+  user-select: none;
+}
+@media (min-width: 1240px) {
+  .library {
+    display: grid;
+  }
+}
+.library-wing {
+  position: relative;
+  overflow: hidden;
+  container-type: size;
+}
+/* Zero specificity, so the per-piece container rules below decide visibility. */
+:where(.library) svg {
+  position: absolute;
+  display: none;
+  height: auto;
+  overflow: visible;
+}
+
+/* Left wing: the arched window high up, the candle stack on the floor beside the column. */
+.library-stack {
+  bottom: 0;
+  right: 8cqw;
+  width: min(84cqw, 26cqh, 260px);
+}
+.library-window {
+  top: max(96px, 13cqh);
+  left: 50%;
+  translate: -50% 0;
+  width: min(72cqw, 34cqh, 380px);
+}
+/* Right wing: the lamp hangs beside the column, the bookcase stands by the outer wall. */
+.library-lamp {
+  top: 0;
+  left: max(4px, 10cqw);
+  width: min(74cqw, 25cqh, 260px);
+}
+.library-case {
+  bottom: 0;
+  right: max(16px, 7cqw);
+  width: min(78cqw, 50cqh, 420px);
+}
+@container (min-width: 76px) {
+  .library-stack,
+  .library-lamp {
+    display: block;
+  }
+}
+@container (min-width: 110px) and (min-height: 620px) {
+  .library-window {
+    display: block;
+  }
+}
+@container (min-width: 230px) and (min-height: 640px) {
+  .library-case {
+    display: block;
+  }
+  /* With the bookcase in, the lamp moves in to hang clear of it. */
+  .library-lamp {
+    left: 2cqw;
+    width: min(46cqw, 25cqh, 260px);
+  }
+}
+/* Very short screens: the floor pieces would crowd the window and the lamp. */
+@container (max-height: 560px) {
+  .library-window,
+  .library-case {
+    display: none;
+  }
+}
+
+.library-footer {
+  display: none;
+  position: relative;
+  z-index: 0;
+  opacity: 0.9;
+  pointer-events: none;
+}
+/* Tablets only: from 1240px the wings carry the room, and the floor pieces stand where this would run. */
+@media (min-width: 768px) and (max-width: 1239.98px) {
+  .library-footer {
+    display: block;
+  }
+}
+
+/* Paint, all from the --deco-* tokens. */
+.library .deco-line,
+.library-footer .deco-line {
+  stroke: var(--deco-line);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+.deco-frame {
+  stroke: var(--deco-frame);
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: none;
+}
+.deco-frame-fill { fill: var(--deco-frame); }
+.deco-sky-top { stop-color: var(--deco-sky-top); }
+.deco-sky-bottom { stop-color: var(--deco-sky-bottom); }
+.deco-moon { fill: var(--deco-moon); }
+.deco-star { fill: var(--deco-star); }
+.deco-sun { fill: var(--deco-moon); stroke: var(--deco-line); stroke-width: 1.5; }
+.deco-cloud { fill: var(--deco-moon); stroke: var(--deco-line); stroke-width: 1.2; }
+.deco-curtain { fill: var(--deco-curtain); }
+.deco-tie { fill: var(--deco-frame); }
+.deco-wood { fill: var(--deco-wood); }
+.deco-case { fill: var(--deco-case); stroke: var(--deco-line); stroke-width: 1.5; }
+.deco-spine-1 { fill: var(--deco-spine-1); }
+.deco-spine-2 { fill: var(--deco-spine-2); }
+.deco-spine-3 { fill: var(--deco-spine-3); }
+.deco-spine-4 { fill: var(--deco-spine-4); }
+.deco-band { stroke: var(--deco-band); stroke-width: 2; fill: none; }
+.deco-label { fill: var(--deco-band); }
+.deco-ribbon { fill: var(--deco-frame); }
+.deco-leaf { fill: var(--deco-leaf); }
+.deco-pot { fill: var(--deco-spine-4); }
+.deco-candle { fill: var(--deco-candle); }
+.deco-candle-shade { fill: var(--deco-candle-shade); }
+.deco-flame { fill: var(--deco-flame); }
+.deco-flame-core { fill: var(--deco-flame-core); }
+.deco-glow-core { stop-color: var(--deco-glow-core); }
+.deco-glow-edge { stop-color: var(--deco-glow-core); stop-opacity: 0; }
+.deco-cone-top { stop-color: var(--deco-cone-top); }
+.deco-cord { stroke: var(--deco-line); stroke-width: 1.5; }
+.deco-shade { fill: var(--deco-shade); }
+.deco-shade-rim { fill: var(--deco-frame); }
+.deco-bulb { fill: var(--deco-bulb); }
+.deco-globe { fill: var(--deco-spine-3); }
+.deco-shadow { fill: var(--deco-shadow); }
+.deco-worm { stroke: var(--deco-worm); stroke-width: 9; stroke-linecap: round; fill: none; }
+.deco-worm-head { fill: var(--deco-worm); }
+.deco-glasses { stroke: var(--deco-ink); stroke-width: 1.1; stroke-linecap: round; fill: none; }
+.deco-eye { fill: var(--deco-ink); }
+.deco-ladder { stroke: var(--deco-frame); stroke-width: 4; stroke-linecap: round; fill: none; }
+.library-mote { fill: var(--deco-mote); opacity: var(--o); }
+
+/* Night shows the moon and stars; day shows the sun and clouds. */
+:root:not([data-theme='dark']) .library .deco-night,
+:root[data-theme='dark'] .library .deco-day {
+  display: none;
+}
+
+/*
+ * Motion: three slow loops and nothing else. The candle flickers, the lamp and candle glows
+ * breathe, and dust drifts up through the lamplight. All transform and opacity, all off under
+ * reduced motion (the static scene stays).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .library-flame {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: deco-flicker 2.8s ease-in-out infinite alternate;
+  }
+  .library-glow {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: deco-breathe 4.6s ease-in-out infinite alternate;
+  }
+  .library-glow-slow {
+    animation-duration: 7s;
+  }
+  .library-mote {
+    animation: deco-drift var(--dur) linear var(--delay) infinite;
+  }
+}
+@keyframes deco-flicker {
+  0% { transform: scale(1, 1) skewX(0deg); }
+  30% { transform: scale(0.94, 1.07) skewX(-3deg); }
+  60% { transform: scale(1.03, 0.96) skewX(2deg); }
+  100% { transform: scale(0.97, 1.04) skewX(-1deg); }
+}
+@keyframes deco-breathe {
+  from { opacity: 0.75; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1.05); }
+}
+@keyframes deco-drift {
+  0% { opacity: 0; transform: translate(0, 0); }
+  15% { opacity: var(--o); }
+  85% { opacity: var(--o); }
+  100% { opacity: 0; transform: translate(var(--dx), -150px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .library *,
+  .library *::before {
+    animation: none !important;
   }
 }
 

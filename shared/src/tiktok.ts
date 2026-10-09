@@ -2,23 +2,16 @@
  * TikTok link parsing, shared by the web app (paste preview) and the API (validation).
  * Only hosts on this allowlist are ever fetched by the server.
  */
+import type { SourceLink } from './source';
 
 export const TIKTOK_HOSTS = ['tiktok.com', 'www.tiktok.com', 'm.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com'] as const;
 const SHORT_LINK_HOSTS = new Set(['vm.tiktok.com', 'vt.tiktok.com']);
 
-export type TikTokLinkKind = 'video' | 'photo' | 'short' | 'collection';
-
-export interface TikTokLink {
-  /** Canonical https URL (query string and fragment dropped). */
-  url: string;
-  kind: TikTokLinkKind;
-  /** Numeric post id for video/photo links; null until a short link is resolved. */
-  postId: string | null;
-  handle: string | null;
-}
+export type TikTokLink = SourceLink & { platform: 'tiktok' };
 
 const POST_PATH = /^\/@([\w.-]+)\/(video|photo)\/(\d{8,25})\/?$/;
-const COLLECTION_PATH = /^\/@([\w.-]+)\/collection\/([^/]+?)-(\d{8,25})\/?$/;
+/** Collections (a reader's saved favourites, when public) and creator playlists: both list videos by id. */
+const COLLECTION_PATH = /^\/@([\w.-]+)\/(collection|playlist)\/([^/]+?)-(\d{8,25})\/?$/;
 const SHORT_PATH = /^\/(?:t\/)?[A-Za-z0-9]{5,20}\/?$/;
 
 export function isTikTokHost(hostname: string): boolean {
@@ -40,20 +33,21 @@ export function parseTikTokUrl(raw: string): TikTokLink | null {
 
   if (SHORT_LINK_HOSTS.has(host) || (host.endsWith('tiktok.com') && url.pathname.startsWith('/t/'))) {
     if (!SHORT_PATH.test(url.pathname)) return null;
-    return { url: `https://${host}${url.pathname.replace(/\/?$/, '/')}`, kind: 'short', postId: null, handle: null };
+    return { platform: 'tiktok', url: `https://${host}${url.pathname.replace(/\/?$/, '/')}`, kind: 'short', postId: null, handle: null };
   }
 
   const post = POST_PATH.exec(url.pathname);
   if (post) {
     const [, handle, type, id] = post as unknown as [string, string, 'video' | 'photo', string];
-    return { url: `https://www.tiktok.com/@${handle}/${type}/${id}`, kind: type, postId: id, handle };
+    return { platform: 'tiktok', url: `https://www.tiktok.com/@${handle}/${type}/${id}`, kind: type, postId: id, handle };
   }
 
   const collection = COLLECTION_PATH.exec(url.pathname);
   if (collection) {
-    const [, handle, slug, id] = collection as unknown as [string, string, string, string];
+    const [, handle, type, slug, id] = collection as unknown as [string, string, string, string, string];
     return {
-      url: `https://www.tiktok.com/@${handle}/collection/${slug}-${id}`,
+      platform: 'tiktok',
+      url: `https://www.tiktok.com/@${handle}/${type}/${slug}-${id}`,
       kind: 'collection',
       postId: null,
       handle,
@@ -62,22 +56,7 @@ export function parseTikTokUrl(raw: string): TikTokLink | null {
   return null;
 }
 
-const URL_IN_TEXT = /https?:\/\/[^\s<>"'()\]]+/gi;
-
-/**
- * Pulls every TikTok link out of pasted text (a list, a share message, a whole chat).
- * Duplicates are dropped, keeping first occurrence order.
- */
-export function extractTikTokLinks(text: string): TikTokLink[] {
-  const seen = new Set<string>();
-  const links: TikTokLink[] = [];
-  for (const match of text.matchAll(URL_IN_TEXT)) {
-    const link = parseTikTokUrl(match[0].replace(/[.,;:!?]+$/, ''));
-    if (!link) continue;
-    const key = link.postId ?? link.url;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    links.push(link);
-  }
-  return links;
+/** The numeric id at the end of a collection or playlist URL. */
+export function tiktokCollectionId(url: string): string | null {
+  return /-(\d{8,25})\/?$/.exec(url)?.[1] ?? null;
 }

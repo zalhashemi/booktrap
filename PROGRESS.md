@@ -7,18 +7,24 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 1 | Foundation | Done |
 | 2 | Single-link pipeline | Done |
 | 3 | List experience | Done |
-| 4 | Bulk and collections | Not started |
+| 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Not started |
 | 6 | Design pass | Not started |
 | 7 | Hardening and deploy | Not started |
 
 ## Decisions log
 
+- 2026-10-09: **Change request 001** (`CHANGES_001.md`) applied. It overrides the brief where they conflict. The user confirmed the lavender/teal palette and the light default stay, even though the change request named the old dark-academia colours.
+- 2026-10-09: **No "unsure" state.** Every book is added as read; enrichment (cover, ISBN, year) is quiet. The Unsure and Verified chips, badges and banner are gone.
+- 2026-10-09: **Instagram** via Apify **apify/instagram-scraper** ($0.0027/post, no start fee; chosen over apify/instagram-post-scraper, which cost the same on the test posts, for its much larger run record). No paid transcript ($0.048/reel): reels are read from frames and caption. TikTok and Instagram share the $20/month budget and the caps.
+- 2026-10-09: **Instagram saved collections are not readable**: they are private to the owner with no public link, and collaborative collections need a login. The app recognises the link and says so, suggesting a multi-link paste instead (user's choice).
+- 2026-10-09: **TikTok collections and playlists** are read with Apify **powerai/tiktok-collection-posts-scraper** (the only actor found that can; clockworks' can't). It's small (56 users) but 55/55 recent runs succeeded. Cost: $0.09 per run (pinned to 1 GB; the default 2 GB billed the start twice) + $0.005 per video listed, then each video is read like a normal link (about $0.06, free if cached).
+- 2026-10-09: **25 videos per collection, free** (user). Larger collections are planned as a **paid option** later. That needs Stripe and a way to tie a purchase to an account-less device, so it's deferred until after deploy. The limit is `FREE_VIDEOS_PER_COLLECTION` in `shared/src/source.ts`, so the web app and the API always agree; `MAX_VIDEOS_PER_COLLECTION` (100) is the ceiling a paid tier could raise it to.
 - 2026-10-08: App name is **BookTrap**.
 - 2026-10-08: Audience is a **public product**, so first-run copy must explain itself and per-IP limits matter, not just per-device ones.
 - 2026-10-08: Render **free plan**: job state lives in Postgres and unfinished jobs resume on wake. Expect cold starts of 30-60s.
 - 2026-10-08: First visual direction was **Gilt Spines** (seed 6ce76978), with Libre Caslon + Schibsted Grotesk. Replaced on 2026-10-09 at the user's request (below).
-- 2026-10-09: Visual direction **Annotated Paperback** (seed ed3595ab, user's choice): page-tabs, a highlighter for New, margin notes. Contract in `web/.impeccable/surfaces/src-app-tsx.md`.
+- 2026-10-09: Visual direction **Annotated Paperback** (seed ed3595ab, user's choice): page-tabs, a highlighter for New, margin notes. Contract in `web/.impeccable/surfaces/src-components-appshell-tsx.md` (repointed from the deleted `src/App.tsx` on 2026-10-09).
 - 2026-10-09: Type is **Young Serif** (user's choice from a 4-font specimen) for headlines and titles, **Nunito** for UI and **Kalam** for annotations, all self-hosted. Icons are Phosphor.
 - 2026-10-09: **Palette replaced** at the user's request: Dusty Lavender #67597A, Vintage Grape #544E61, Slate Grey #6E8894, Muted Teal #85BAA1, Honeydew #CEEDDB (lime kept for New). Tokens renamed by role (accent, action, success, unsure, tag, reading, read) instead of colour names. Dark ground #2B2733 (deep grape), text honeydew 11.8:1, teal accent and action with dark ink, lavender for Unsure. Contrast-checked in both themes, and the icons regenerated.
 - 2026-10-09: **Light is the default theme** (user request; the brief said dark). Dark (deep grape #2B2733) remains in Settings and is remembered per browser. Controls are rounded (pills).
@@ -27,14 +33,69 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 - 2026-10-08: Extraction model is **Claude Sonnet 5.5** at effort medium (user's choice). It matched Opus 5.5 on every featured book in the fixtures at about half the cost: $0.05-0.08/post vs $0.12-0.18.
 - 2026-10-08: **Featured books only** (user's choice). Claude tags each book featured or background; background-only shelf books are cached but not added (`INCLUDE_BACKGROUND_BOOKS=false`).
 
-## Test fixtures (from the user)
+## Test fixtures
+
+From the user (TikTok):
 
 - Photo carousel: https://www.tiktok.com/@readbetweeenlines/photo/7674670540518395169
 - Video: https://www.tiktok.com/@wmccusker/video/7672440936101727519
 
+Public Instagram posts (Penguin UK, chosen for testing):
+- Carousel: https://www.instagram.com/p/DeJvdqUjLd1/
+- Reel: https://www.instagram.com/reel/DeMTMjJjmqF/
+
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Phase 4: Bulk, collections and Instagram (2026-10-09)
+
+Bulk paste (mixed TikTok and Instagram, a preview with set-aside, caps, caching, retries) and Instagram came with change request 001 below. This part adds TikTok collections:
+- Links: `tiktok.com/@user/collection/Name-ID` and creator playlists `.../playlist/Name-ID` (short links that resolve to either work too).
+- Expansion (`api/src/pipeline/process.ts` → `expandCollection`): the collection item lists the videos once, then queues each as a child item (`parent_item_id`) in the same job, read exactly like a pasted link and cached. It reads up to 25, and asks the actor for 26 so a bigger collection is noticed and the reader told. It also never reads more than today's device and IP caps allow; the collection link itself doesn't count against the caps, its videos do. At submit time a collection link needs room for at least one post. A restart mid-collection resumes its videos without paying to list again, and saving the listed videos is retried rather than paying to list again. An empty, private or deleted collection says so, and the listing cost is still recorded.
+- Schema: `supabase/migrations/0006_collections.sql` (user ran it): `job_items.note` and a parent index.
+- UI: the preview notes "reads up to 25 videos per collection". A collection gets one card with "Read 12 of 25 videos", a progress bar, books shelved so far and the note. Failed videos fold under "N videos couldn't be read", each with Retry.
+- Tests: 42 shared, 127 API, 28 web. Impeccable detector: 0 findings.
+
+Code review (high) found 10 issues; 9 are fixed:
+- A collection one row over the limit was reported as complete if a row was dropped (private or duplicate). Fix: judged on the raw rows.
+- A non-list Apify answer became an unretried TypeError and its cost was lost. Fix: `runActor` checks the body and retries.
+- A listing could be paid for when the book reader (Anthropic) wasn't configured, and every video then failed. Fix: both keys are checked first.
+- A database error just after a paid listing meant paying again on retry. Fix: saving the videos is retried in place.
+- The web app's "up to 25" could disagree with a server env override. Fix: one shared constant, and the env var is gone.
+- The submit-time cap counted a collection link as a post. Fix: it needs room for one post, and its videos count as they're read.
+- A share link that resolved to a collection kept the "Share link" label. "Books shelved so far" counted books found, not added; it now says "found". The failed-spend rule was written out twice, and `PostFetcher.platform` was unused. All fixed.
+- Not fixed (known, small): two devices on one network expanding collections at the same moment can each read up to 25 against the same per-IP count, overshooting the IP cap by at most 25. It needs a database-side counter; revisit in Phase 7 hardening.
+
+Real run (Apify sample collection 7442134949027351314, not book content, with the limit set to 3 for the test): listed, the 3 videos were read (0 books, as expected), and the "more than 3 videos … paid option" note showed. It took about 96s. This run caught the double start charge, fixed by pinning memory to 1 GB and re-checked at $0.09 per start. No public BookTok collection could be found to test with, because search engines don't index collection pages. **Next time:** run one real book collection through it.
+
+## Change request 001 (2026-10-09)
+
+Done:
+- **Unsure removed**: `supabase/migrations/0004_remove_unsure.sql` (user ran it) drops the column. It's gone from the shared types, API, pipeline (`UNSURE_BELOW_CONFIDENCE` removed), filters, covers, sheet and tests. `verified` stays as an internal column only. The lavender token is renamed `note` (margin notes and gentle alerts).
+- **Platform-neutral data model**: `0005_platforms.sql` (user ran it) adds `source_platform` (`tiktok` | `instagram`) and renames the `tiktok_*` columns to `source_post_id`/`source_url` on `book_sources`, `post_cache` (primary key now platform + post id) and `job_items`. Tested first on a copy of the schema with existing rows in PGlite.
+- **Instagram ingestion**: a shared parser (`shared/src/instagram.ts`, `links.ts`) for /p, /reel, /reels, /tv, `/username/` prefixes, /share links, instagr.am and saved collections. Fetchers sit behind one `PostFetcher` interface (`api/src/pipeline/fetchers/`), with a shared Apify runner (retry, billing on failure). Share links resolve over instagram.com only, with a canonical-tag fallback when Instagram answers 200 instead of redirecting. Instagram CDNs (`*.cdninstagram.com`, `*.fbcdn.net`) were added to the media allowlist. Readable errors cover private, deleted, login-required and rate-limited posts.
+- **UI**: copy says "TikTok or Instagram links". The paste preview shows a chip per link with its platform icon and kind, can set links aside before sending, and shows the private-collection note. Job cards show the platform. Sources show a platform icon and say "Seen in N posts".
+- **Reading room** (desktop decoration, `web/src/components/LibraryBackdrop.tsx`): an arched window (moon and stars at night, sun and clouds by day), a teal-flamed candle on a book stack with a bookworm in glasses, a hanging lamp with drifting dust, and a bookcase with a ladder. Inline SVG and CSS, `--deco-*` tokens tuned per theme. The wings are size containers, so each piece appears only when it fits: candle and lamp from 1240px, the window from about 1260px (on screens at least 620px tall), the bookcase from about 1500px. Tablets get a low run of spines at the page foot; phones get nothing. Three slow loops (flicker, glow, dust), all off under reduced motion.
+- Docs: the brief, PRODUCT.md, the surface brief, README and `.env.example` are updated.
+- Tests: 41 shared, 113 API, 28 web.
+
+Real runs (Supabase, Apify, Claude):
+- Penguin UK carousel `instagram.com/p/DeJvdqUjLd1`: 35 books shelved.
+- Reel `instagram.com/reel/DeMTMjJjmqF` (pasted with a `/username/` prefix and `?igsh`): 1 book.
+- Mixed paste (TikTok video + Instagram reel + saved collection + YouTube link): the preview read "2 links found: 1 TikTok, 1 Instagram", the saved collection showed the note, and YouTube was ignored. The TikTok post came from the pre-migration cache: 7 books, $0.
+
+Bug found by the Playwright run and fixed: posts cached before the migration have no `platform` in their JSON, so their sources failed the new not-null column, after the book row had already been inserted. Fix: the cache key's platform always wins (pipeline and Supabase store), and a book whose source fails to save is rolled back. A regression test covers it.
+
+Code review (high) found 10 issues, all fixed:
+- Instagram error matching used substrings ("page" contains "age"), and a "blocked" post was retried as a rate limit, paying for runs that couldn't succeed. Fix: whole-word patterns, and blocked is not retried.
+- Canonical-tag parsing depended on attribute order. Fix: tags are parsed attribute by attribute.
+- A successful send cleared set-aside links even when the reader had typed more. Fix: they're cleared only with the text.
+- A carousel with failed slide downloads was described to the model as one photo. Fix: the slide count is passed separately.
+- The source-failure rollback only soft-deleted the book (restorable, and the cleanup error was swallowed). Fix: a permanent `removeBook`, with the error logged.
+- Duplicate sources of truth (platform labels, link key, page hosts, private-collection sentence, cache fix in two layers, a second kind-label table in the job panel). Fix: each now lives in one place, mostly `shared/src/source.ts`.
+
+Playwright MCP: 390, 768, 1280, 1440, 1920 and 2560px, light and dark, Add and Shelf pages. Pieces were measured against the content column at every size: no overlap and no horizontal scroll. Reduced motion stops all three loops. Impeccable detector: 0 findings.
 
 ## Redesign (brought forward from Phase 6, 2026-10-09)
 

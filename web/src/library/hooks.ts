@@ -99,7 +99,6 @@ export function useUpdateBook() {
       // Only fields with no server-side consequences are applied early; the response is the truth.
       const early: Partial<Book> = {};
       if (patch.status) early.status = patch.status;
-      if (patch.unsure === false) early.unsure = false;
       if (patch.isNew === false) early.isNew = false;
       const before = queryClient.getQueryData<Book[]>(keys.books(deviceId))?.find((book) => book.id === id);
       editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === id ? { ...book, ...early } : book)));

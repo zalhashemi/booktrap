@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import Anthropic from '@anthropic-ai/sdk';
-import { toPostData } from '../src/pipeline/apify';
+import { toTikTokPost } from '../src/pipeline/fetchers/tiktok';
 import { extractBooks } from '../src/pipeline/extract';
 import { downloadSlides, extractFrames, fetchSubtitles } from '../src/pipeline/media';
 import { verifyBook } from '../src/pipeline/verify';
@@ -17,9 +17,9 @@ const models = requestedModels.length ? requestedModels : ['claude-opus-5-5', 'c
 const apifyToken = process.env.APIFY_TOKEN!;
 const client = new Anthropic();
 
-const items = JSON.parse(readFileSync(itemsPath, 'utf8')) as Parameters<typeof toPostData>[0][];
+const items = JSON.parse(readFileSync(itemsPath, 'utf8')) as Parameters<typeof toTikTokPost>[0][];
 for (const item of items) {
-  const post = toPostData(item, item.id ?? '');
+  const post = toTikTokPost(item, item.id ?? '');
   const images =
     post.kind === 'carousel'
       ? await downloadSlides(post.imageUrls, { apifyToken })
@@ -30,7 +30,7 @@ for (const item of items) {
   for (const model of models) {
     const started = Date.now();
     const result = await extractBooks(
-      { kind: post.kind, caption: post.caption, hashtags: post.hashtags, transcript, images },
+      { platform: post.platform, kind: post.kind, caption: post.caption, hashtags: post.hashtags, transcript, images },
       { client, model, effort: 'medium' },
     );
     const seconds = ((Date.now() - started) / 1000).toFixed(1);

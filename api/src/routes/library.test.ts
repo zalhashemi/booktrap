@@ -37,10 +37,9 @@ describe('library API', () => {
       coverUrl: null,
       publishedYear: null,
       verified: false,
-      unsure: true,
       normalizedKey: title.toLowerCase(),
     });
-    await store.addSource(id, { postId, url: `https://www.tiktok.com/@r/video/${postId}`, creatorHandle: 'r', thumbnailUrl: null, evidence: 'cover', confidence: 0.5 });
+    await store.addSource(id, { platform: 'tiktok', postId, url: `https://www.tiktok.com/@r/video/${postId}`, creatorHandle: 'r', thumbnailUrl: null, evidence: 'cover', confidence: 0.5 });
     return id;
   }
 
@@ -61,16 +60,17 @@ describe('library API', () => {
   });
   afterEach(() => app.close());
 
-  it('edits status and notes, and confirming clears the unsure flag', async () => {
+  it('edits status and notes, and clears the new highlight', async () => {
     const id = await shelve('Babel', 'R. F. Kuang');
     const res = await app.inject({
       method: 'PATCH',
       url: `/v1/books/${id}`,
       headers,
-      payload: { status: 'reading', notes: '  borrowed from Sam  ', unsure: false, isNew: false },
+      payload: { status: 'reading', notes: '  borrowed from Sam  ', isNew: false },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ status: 'reading', notes: 'borrowed from Sam', unsure: false, isNew: false });
+    expect(res.json()).toMatchObject({ status: 'reading', notes: 'borrowed from Sam', isNew: false });
+    expect(res.json()).not.toHaveProperty('unsure');
     expect(verify).not.toHaveBeenCalled();
   });
 
@@ -88,27 +88,33 @@ describe('library API', () => {
     });
     const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { title: 'The Secret History', author: 'Donna Tartt' } });
     expect(verify).toHaveBeenCalledWith('The Secret History', 'Donna Tartt', expect.anything());
-    expect(res.json()).toMatchObject({ title: 'The Secret History', verified: true, unsure: false, isbn13: '9781400031702', publishedYear: 1992 });
+    expect(res.json()).toMatchObject({ title: 'The Secret History', isbn13: '9781400031702', publishedYear: 1992 });
   });
 
-  it('marks an edited book unsure again when verification finds nothing', async () => {
+  it('keeps an edited book as typed when no catalogue match is found, with no flag', async () => {
     const id = await shelve('Babel', 'R. F. Kuang');
-    await store.updateBook(deviceId, id, { verified: true, unsure: false });
     const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { title: 'Babbel zine' } });
-    expect(res.json()).toMatchObject({ verified: false, unsure: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ title: 'Babbel zine', author: 'R. F. Kuang' });
+    expect(Object.keys(res.json())).not.toEqual(expect.arrayContaining(['unsure', 'verified']));
+  });
+
+  it('ignores an "unsure" field from an older app version', async () => {
+    const id = await shelve('Babel', 'R. F. Kuang');
+    const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { unsure: false } });
+    expect(res.statusCode).toBe(200);
   });
 
   it('drops the old book’s ISBN and cover when a rename can’t be verified', async () => {
     const id = await shelve('Babel', 'R. F. Kuang');
     await store.updateBook(deviceId, id, {
       verified: true,
-      unsure: false,
       isbn13: '9780063021426',
       coverUrl: 'https://covers.openlibrary.org/b/id/9-L.jpg',
       publishedYear: 2022,
     });
     const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { title: 'Babbel zine' } });
-    expect(res.json()).toMatchObject({ title: 'Babbel zine', isbn13: null, coverUrl: null, publishedYear: null, unsure: true });
+    expect(res.json()).toMatchObject({ title: 'Babbel zine', isbn13: null, coverUrl: null, publishedYear: null });
   });
 
   it('answers 404, never a server error, for ids that aren’t ids', async () => {
@@ -147,7 +153,6 @@ describe('library API', () => {
       coverUrl: null,
       publishedYear: null,
       verified: false,
-      unsure: false,
       normalizedKey: 'not yours',
     });
     const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { status: 'read' } });

@@ -3,14 +3,16 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CreateJobRequestSchema,
   ERROR_CODES,
-  parseTikTokUrl,
+  PRIVATE_COLLECTION_MESSAGE,
+  linkKey,
+  parseSourceUrl,
   type Job,
   type JobListResponseSchema,
 } from '@booktrap/shared';
 import type { z } from 'zod';
 import { requireDevice } from '../auth/device-auth';
 import { HttpError } from '../errors';
-import { MAX_ATTEMPTS, monthStart } from '../pipeline/process';
+import { MAX_ATTEMPTS, monthStart, utcDayStart } from '../pipeline/process';
 import type { JobQueue } from '../pipeline/queue';
 import type { DeviceRepo } from '../repo/types';
 import type { ItemKind, JobWithItems, LibraryStore } from '../store/types';
@@ -34,18 +36,18 @@ export function toJobResponse(job: JobWithItems): Job {
     items: job.items.map((item) => ({
       id: item.id,
       inputUrl: item.inputUrl,
+      platform: item.platform,
       postId: item.postId,
       kind: item.kind,
       status: item.status,
       error: item.error,
       booksFound: item.booksFound,
+      parentItemId: item.parentItemId,
+      note: item.note,
     })),
   };
 }
 
-function utcDayStart(date = new Date()): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
 
 const PAUSED_MESSAGE = 'BookTrap has paused reading new links for now. Please try again later.';
 
@@ -63,16 +65,24 @@ export function jobRoutes(
     async (request, reply): Promise<Job> => {
       const device = request.device!;
       const body = CreateJobRequestSchema.safeParse(request.body);
-      if (!body.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Send a list of TikTok links.');
+      if (!body.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Send a list of TikTok or Instagram links.');
 
       const seen = new Set<string>();
-      const links = body.data.urls.map((raw) => ({ raw, link: parseTikTokUrl(raw) }));
+      const links = body.data.urls.map((raw) => ({ raw, link: parseSourceUrl(raw) }));
       const invalid = links.filter((entry) => !entry.link);
       if (invalid.length) {
-        throw new HttpError(400, ERROR_CODES.badRequest, `These aren’t TikTok links: ${invalid.map((entry) => entry.raw).slice(0, 3).join(', ')}`);
+        throw new HttpError(
+          400,
+          ERROR_CODES.badRequest,
+          `These aren’t TikTok or Instagram links: ${invalid.map((entry) => entry.raw).slice(0, 3).join(', ')}`,
+        );
+      }
+      // Saved Instagram collections can't be opened by anyone but their owner (the web app says so before sending).
+      if (links.some((entry) => entry.link!.kind === 'private_collection')) {
+        throw new HttpError(400, ERROR_CODES.badRequest, PRIVATE_COLLECTION_MESSAGE);
       }
       const unique = links.flatMap(({ link }) => {
-        const key = link!.postId ?? link!.url;
+        const key = linkKey(link!);
         if (seen.has(key)) return [];
         seen.add(key);
         return [link!];
@@ -92,7 +102,11 @@ export function jobRoutes(
         store.countItemsSince({ deviceId: device.id }, since),
         store.countItemsSince({ ipHash: hash }, since),
       ]);
-      if (deviceCount + unique.length > options.dailyCapPerDevice) {
+      // A collection link isn't a post: its videos count when it expands, against what's left of today.
+      // It still needs at least one post of room, or there is nothing it could read.
+      const hasCollection = unique.some((link) => link.kind === 'collection');
+      const posts = unique.filter((link) => link.kind !== 'collection').length + (hasCollection ? 1 : 0);
+      if (deviceCount + posts > options.dailyCapPerDevice) {
         const left = Math.max(0, options.dailyCapPerDevice - deviceCount);
         throw new HttpError(
           429,
@@ -102,15 +116,16 @@ export function jobRoutes(
             : `You can add ${left} more ${left === 1 ? 'post' : 'posts'} today (limit ${options.dailyCapPerDevice}). It resets at midnight UTC.`,
         );
       }
-      if (ipCount + unique.length > options.dailyCapPerIp) {
+      if (ipCount + posts > options.dailyCapPerIp) {
         throw new HttpError(429, ERROR_CODES.limitReached, 'This network has reached today’s limit. It resets at midnight UTC.');
       }
 
+      // An Instagram /p/ post may be a photo, a carousel or a video: its kind is known after fetching.
       const kindOf = (kind: string): ItemKind | null => (kind === 'video' ? 'video' : kind === 'photo' ? 'carousel' : kind === 'collection' ? 'collection' : null);
       const job = await store.createJob(
         device.id,
         hash,
-        unique.map((link) => ({ inputUrl: link.url, postId: link.postId, kind: kindOf(link.kind) })),
+        unique.map((link) => ({ inputUrl: link.url, platform: link.platform, postId: link.postId, kind: kindOf(link.kind) })),
       );
       for (const item of job.items) queue.enqueue(item.id, device.id);
       reply.code(201);
