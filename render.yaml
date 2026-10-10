@@ -4,9 +4,9 @@ services:
     name: booktrap-api
     runtime: node
     plan: free
-    # Pick the region nearest the Supabase project (it can't be changed later): every request
+    # Same region as the Supabase project (ap-southeast-1, Singapore); it can't be changed later. Every request
     # makes several database round trips.
-    region: frankfurt
+    region: singapore
     # Dev dependencies are needed to build (tsup), even with NODE_ENV=production.
     buildCommand: npm ci --include=dev && npm run build -w @booktrap/api
     startCommand: npm start -w @booktrap/api

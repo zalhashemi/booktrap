@@ -72,7 +72,7 @@ Readers delete their own shelf in Settings, Your data (`DELETE /v1/devices/me`).
 Three services: **Supabase** (database, already set up), **Render** (the API, `render.yaml`) and **Cloudflare Pages** (the web app). Pushing to `main` on GitHub runs CI and redeploys both.
 
 1. **Supabase**: every file in `supabase/migrations/` must have been run in order (0001 to 0008).
-2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` is generated. Change `region` in `render.yaml` first if the Supabase project isn't in Europe; it can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
+2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` is generated. `region` in `render.yaml` matches the Supabase project (Singapore); a Render service can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
 3. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this GitHub repo.
    - Build command: `npm ci && npm run build -w @booktrap/web`
    - Build output directory: `web/dist`
