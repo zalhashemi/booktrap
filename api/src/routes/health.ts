@@ -14,6 +14,16 @@ export function healthRoutes(app: FastifyInstance, repo: DeviceRepo) {
     storage: repo.kind,
   }));
 
+  // TEMPORARY (Phase 7d): shows the caller their own proxy chain, to set TRUST_PROXY_HOPS correctly. Stores nothing.
+  app.get('/health/whoami', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request) => ({
+    ip: request.ip,
+    socket: request.socket.remoteAddress,
+    xForwardedFor: request.headers['x-forwarded-for'] ?? null,
+    cfConnectingIp: request.headers['cf-connecting-ip'] ?? null,
+    trueClientIp: request.headers['true-client-ip'] ?? null,
+    xRealIp: request.headers['x-real-ip'] ?? null,
+  }));
+
   // Readiness: the database answers. Rate limited, since every call reaches the database.
   app.get('/health/ready', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
