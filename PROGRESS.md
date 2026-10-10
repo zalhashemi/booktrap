@@ -21,7 +21,7 @@ The old "Phase 7: Hardening and deploy" became Phase 10 on 2026-10-10. Its finis
 
 Decisions:
 - **Guests** can try BookTrap without an account and sign up to keep their shelf. Guests get 5 posts a day. An unclaimed guest shelf is deleted after 30 days without a visit.
-- **Sign-in**: email and password, passkeys, and an email code or magic link. No Google or Apple for now. This uses **Supabase Auth**, whose passkeys are in beta (since May 2026).
+- **Sign-in**: email and password, and an email code or magic link, through **Supabase Auth**. No Google or Apple for now. **No passkeys for now** (user, 2026-10-10): Supabase's passkeys are beta, and an anonymous (guest) user can't register one, so they couldn't be how a guest saves a shelf. They can come back once the API leaves beta.
 - **A guest's shelf is kept on sign-up**: the user id never changes. The old device identity is removed with no migration, so existing device data is dropped (export it as JSON first if it's worth keeping).
 - **Moderation**: every post the AI reads is checked, and only explicit non-book content is blocked (adult book covers and talk about adult books are fine). There is a report-and-takedown flow.
 - **Upload and payload limits** are audited and enforced. **Caching**: videos are never stored; the result cache stays, with an expiry.
@@ -32,7 +32,7 @@ Decisions:
 Migrations 0007 and 0008 are already used by 7a and 7b, so the accounts migration is **0009** and the reports table is **0010**.
 
 ### Phase 7: Accounts
-- Every visitor gets a Supabase session; a guest is an anonymous user. Signing up adds an email and password, a passkey or an email code to that same user.
+- Every visitor gets a Supabase session; a guest is an anonymous user. Signing up adds an email and password, or an email code, to that same user.
 - The device identity is deleted: `web/src/device/*`, `POST /v1/devices`, `DELETE /v1/devices/me`, the device headers, `api/src/auth/device-auth.ts` and the related Settings sections.
 - API:
   - `api/src/auth/session-auth.ts` verifies the Supabase access token (asymmetric JWT, checked with jose against Supabase's published signing keys) and sets `request.user = { id, isAnonymous }`. `request.device` becomes `request.user` throughout.
@@ -49,20 +49,20 @@ Migrations 0007 and 0008 are already used by 7a and 7b, so the accounts migratio
   - `web/src/api/client.ts` sends `Authorization: Bearer` and refreshes the token.
   - `AccountProvider` replaces `DeviceProvider`: it holds the session, an `onAuthStateChange` listener and the guest-to-account upgrade.
 - Screens (mockups shown before building):
-  - A Sign up / Log in sheet: email and password, "Use a passkey", "Email me a code", "Forgot password", and the Terms and Privacy line.
+  - A Sign up / Log in sheet: email and password, "Email me a code", "Forgot password", and the Terms and Privacy line.
   - A "Save your shelf" prompt after a guest's first books, and an "unsaved" margin note on the guest's shelf header.
-  - Settings, Account: email, passkeys, change password, sign out and delete account.
+  - Settings, Account: email, change password, sign out and delete account.
   - Landing routes for email confirmation and password reset.
   - `/terms` and `/privacy` rewritten for accounts (no device ids or backup codes).
-- Passkeys are offered only where WebAuthn exists. Email and password, and the email code, still work if the beta fails.
 - Email uses Supabase's built-in sender in development.
 - Tests:
   - API: token verification (valid, expired, wrong issuer), guest versus user caps, delete account.
   - Web: the account provider's states.
-  - Playwright: sign up; password login; email code; passkey with Chromium's virtual authenticator; a guest's shelf surviving sign-up; delete account. All at 390 and 1280 in both themes.
+  - Playwright: sign up; password login; email code; a guest's shelf surviving sign-up; delete account. All at 390 and 1280 in both themes.
   - No device-identity code remains (grep).
 - Needs from the user:
-  - Enable "Anonymous sign-ins", "Email" and "Passkeys (beta)".
+  - Enable "Anonymous sign-ins" and "Email".
+  - Turn on **JWT Signing Keys** (Project Settings, JWT Keys: migrate to the asymmetric ES256 key), so the API verifies tokens locally against the project's JWKS (`/auth/v1/.well-known/jwks.json`). User's choice, 2026-10-10, over asking Supabase on every request.
   - Allow `http://localhost:5180` as a redirect URL.
   - Run 0009.
 
@@ -113,6 +113,8 @@ Migrations 0007 and 0008 are already used by 7a and 7b, so the accounts migratio
 Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown first. Code Review (high), with all findings fixed. Playwright at 390 and 1280 in both themes. Update this file and the brief, then stop with a short status. Ask for keys, accounts and decisions.
 
 ## Decisions log
+
+- 2026-10-10: **Phase 7 adjustments (user):** no passkeys for now (guests can't register one in Supabase, and the API is beta); tokens are verified locally with Supabase's asymmetric JWT signing keys (the project migrates to them).
 
 - 2026-10-10: **Phase order replaced** with the plan above (Accounts, Limits and moderation, Scale and cost, then Legal and deploy). **The live deploy (Render API, Cloudflare Pages) is to be taken offline** until the plan is done, since real users would otherwise create device-owned shelves that Phase 7 drops.
 

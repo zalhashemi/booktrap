@@ -237,7 +237,7 @@ Indexes on `(device_id, normalized_key)` and `(device_id, isbn13)` for dedup.
 4. **Bulk, collections and Instagram**: multi-link paste (TikTok and Instagram mixed), TikTok collection expansion, Instagram ingestion through the common fetcher, job queue, live progress, retries, caps and caching.
 5. **Exports**: Goodreads CSV, PDF, plain-text copy, CSV/JSON.
 6. **Design pass**: apply the user's color scheme; run Impeccable and Taste on every screen; fix.
-7. **Accounts** (Supabase Auth, replacing device identity): guests as anonymous users (5 posts a day, deleted after 30 idle days), sign-up with email and password, passkeys or an email code that keeps the guest's shelf, delete account. Device registration and backup codes are removed.
+7. **Accounts** (Supabase Auth, replacing device identity): guests as anonymous users (5 posts a day, deleted after 30 idle days), sign-up with email and password or an email code that keeps the guest's shelf (no passkeys for now), delete account. Device registration and backup codes are removed.
 8. **Limits, moderation, report and takedown**: upload and payload limits in `shared/`, content classification in extraction (block only explicit non-book content), "Report this post", an admin takedown route and page.
 9. **Scale, storage and cost**: measured storage per user, a load test of 100 users at once, queue tuning, and a cost report against the budgets.
 10. **Legal and deploy** (was Phase 7; 7a hardening and 7b privacy done): policies rewritten for accounts, a domain with Resend email, Render Starter, Cloudflare Pages, Supabase production settings, a proxy check, a security review, a Playwright full-flow test against production, and a final Code Review.
