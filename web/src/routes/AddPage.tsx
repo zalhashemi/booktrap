@@ -1,10 +1,11 @@
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowBendLeftUp, LockSimple, ShieldCheck, Sparkle, X } from '@phosphor-icons/react';
+import { ArrowBendLeftUp, ClipboardText, LockSimple, ShieldCheck, Sparkle, X } from '@phosphor-icons/react';
 import { Link } from 'react-router';
 import {
   FREE_VIDEOS_PER_COLLECTION,
   PLATFORM_LABELS,
   PRIVATE_COLLECTION_MESSAGE,
+  countUnreadableLinks,
   extractSourceLinks,
   linkKey,
   type SourceLink,
@@ -12,6 +13,7 @@ import {
 import { ApiRequestError, NetworkError } from '../api/client';
 import { Button } from '../components/Button';
 import { JobPanel } from '../components/JobPanel';
+import { ReadingRoomStrip } from '../components/LibraryBackdrop';
 import { backupSaved } from '../device/backupPrompt';
 import { useCreateJob, useJobs } from '../library/hooks';
 import { PlatformIcon } from '../components/PlatformIcon';
@@ -23,8 +25,13 @@ function errorMessage(error: unknown): string {
   return 'Something went wrong. Try again.';
 }
 
+/** Reading the clipboard needs the async Clipboard API (and a secure page); older browsers just paste by hand. */
+const canReadClipboard = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
+
 export function AddPage() {
   const fieldId = useId();
+  const field = useRef<HTMLTextAreaElement>(null);
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
   const helpId = useId();
   const errorId = useId();
   const [text, setText] = useState('');
@@ -35,7 +42,31 @@ export function AddPage() {
   const found = useMemo(() => extractSourceLinks(text), [text]);
   const links = found.filter((link) => link.kind !== 'private_collection' && !removed.has(linkKey(link)));
   const privateCollections = found.filter((link) => link.kind === 'private_collection');
+  const unreadable = useMemo(() => countUnreadableLinks(text), [text]);
   const createJob = useCreateJob();
+
+  const changeText = (value: string) => {
+    latestText.current = value;
+    setText(value);
+    setPasteNote(null);
+    if (!value.trim()) setRemoved(new Set());
+    if (createJob.isError) createJob.reset();
+  };
+
+  /** The phone shortcut: one tap pastes what the reader just copied from TikTok or Instagram. */
+  const pasteFromClipboard = async () => {
+    try {
+      const copied = (await navigator.clipboard.readText()).trim();
+      if (!copied) {
+        setPasteNote('Nothing copied yet. Copy a link in TikTok or Instagram first.');
+        return;
+      }
+      changeText(copied);
+    } catch {
+      setPasteNote('Your browser kept the clipboard private. Tap the box and paste.');
+      field.current?.focus();
+    }
+  };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -69,18 +100,20 @@ export function AddPage() {
     // Desktop: paste on the left, progress alongside it, so you can watch links you just pasted.
     <div className="grid gap-10 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)] lg:gap-12">
       <div>
+        {/* Below 1240px there are no side wings, so a slice of the reading room sits above the headline. */}
+        <ReadingRoomStrip className="mb-4 min-[1240px]:hidden" />
         <h1 className="font-display text-[2.3rem] leading-[1.06] md:text-[3.1rem]">
           Paste a post.
           <br />
           Catch every book in it.
         </h1>
-        <p className="mt-4 max-w-[48ch] text-[1.05rem] text-text-muted">
-          TikTok videos, photo carousels and public collections, and Instagram posts, carousels and reels. BookTrap
-          reads the covers, spines, captions and speech, then shelves each book for you.
+        <p className="mt-3 max-w-[48ch] text-[1.05rem] text-text-muted md:mt-4">
+          TikTok or Instagram: videos, carousels, reels and collections.
+          <span className="hidden md:inline"> BookTrap reads the covers, spines, captions and speech, then shelves each book for you.</span>
         </p>
 
         <form
-          className="mt-8 rounded-card bg-surface p-4 shadow-[var(--elev-soft),inset_0_0_0_1.5px_var(--rule)] md:p-6"
+          className="mt-6 rounded-card md:mt-8 bg-surface p-4 shadow-[var(--elev-soft),inset_0_0_0_1.5px_var(--rule)] md:p-6"
           onSubmit={onSubmit}
           noValidate
         >
@@ -92,32 +125,46 @@ export function AddPage() {
               share links work too!
             </span>
           </div>
-          <textarea
-            id={fieldId}
-            name="links"
-            rows={4}
-            value={text}
-            onChange={(event) => {
-              latestText.current = event.target.value;
-              setText(event.target.value);
-              if (!event.target.value.trim()) setRemoved(new Set());
-              if (createJob.isError) createJob.reset();
-            }}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            aria-describedby={`${helpId}${createJob.isError ? ` ${errorId}` : ''}`}
-            aria-invalid={createJob.isError || undefined}
-            placeholder="Paste one link per line, or a whole message"
-            className="field mt-3 resize-y leading-relaxed"
-          />
+          <div className="relative mt-3">
+            <textarea
+              ref={field}
+              id={fieldId}
+              name="links"
+              rows={4}
+              value={text}
+              onChange={(event) => changeText(event.target.value)}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              aria-describedby={`${helpId}${createJob.isError ? ` ${errorId}` : ''}`}
+              aria-invalid={createJob.isError || undefined}
+              placeholder={canReadClipboard ? '' : 'Paste one link per line, or a whole message'}
+              className="field min-h-32 resize-y leading-relaxed"
+            />
+            {canReadClipboard && !text && (
+              // Sits over the empty field; the field itself still takes typing and a long-press paste.
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void pasteFromClipboard()}
+                  className="pointer-events-auto inline-flex min-h-12 items-center gap-2 rounded-pill bg-action px-5 font-bold text-on-action shadow-[var(--elev-soft)] transition-[background-color,transform] duration-200 ease-snappy hover:bg-action-hover active:scale-[0.97]"
+                >
+                  <ClipboardText size={20} weight="bold" aria-hidden="true" />
+                  Paste what you copied
+                </button>
+                <span className="marginalia text-[0.98rem] sm:hidden" aria-hidden="true">
+                  share links work too!
+                </span>
+              </div>
+            )}
+          </div>
           <p
             id={helpId}
             className={`mt-2.5 flex min-h-6 items-center gap-1.5 text-sm ${links.length ? 'font-bold text-success-ink' : 'text-text-muted'}`}
             aria-live="polite"
           >
             {links.length > 0 && <Sparkle size={16} weight="fill" aria-hidden="true" />}
-            {status ?? 'BookTrap picks the links out of anything you paste.'}
+            {pasteNote ?? status ?? 'BookTrap picks the links out of anything you paste.'}
           </p>
 
           {found.length > 0 && (
@@ -135,6 +182,12 @@ export function AddPage() {
           )}
           {links.some((link) => link.kind === 'collection') && (
             <p className="marginalia mt-3 text-[0.95rem]">reads up to {FREE_VIDEOS_PER_COLLECTION} videos per collection</p>
+          )}
+          {unreadable > 0 && (
+            <p className="mt-3 text-sm text-text-muted">
+              {unreadable === 1 ? '1 TikTok or Instagram link isn’t a post' : `${unreadable} TikTok or Instagram links aren’t posts`} BookTrap can read
+              (a profile or a search page, say), so {unreadable === 1 ? 'it’s' : 'they’re'} left out.
+            </p>
           )}
           {privateCollections.length > 0 && (
             <p className="mt-3 flex items-start gap-2 rounded-field bg-surface-sunk px-3.5 py-3 text-sm">

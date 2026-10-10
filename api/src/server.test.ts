@@ -150,6 +150,16 @@ describe('jobs API', () => {
     await app.close();
   });
 
+  it('reports today’s usage against the daily limit', async () => {
+    const app = await testApp(KEYS);
+    const headers = await registered(app);
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers })).json()).toEqual({ postsToday: 0, dailyLimit: 2 });
+    await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls: [VIDEO] } });
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers })).json()).toEqual({ postsToday: 1, dailyLimit: 2 });
+    expect((await app.inject({ method: 'GET', url: '/v1/usage' })).statusCode).toBe(401);
+    await app.close();
+  });
+
   it('rejects links that are not TikTok or Instagram', async () => {
     const app = await testApp(KEYS);
     const headers = await registered(app);

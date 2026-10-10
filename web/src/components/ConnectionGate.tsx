@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ERROR_CODES } from '@booktrap/shared';
 import { ApiRequestError, NetworkError } from '../api/client';
-import { useDevice } from '../device/DeviceProvider';
+import { useDevice } from '../device/device-context';
 import { Button } from './Button';
 
 /** After this long, explain that the free server may be waking up. */

@@ -39,7 +39,13 @@ npm run check      # lint + typecheck + tests + build (what CI runs)
 
 ## How device identity works
 
-There are no accounts. On first launch the browser generates a random device id (UUID v4) and a 256-bit secret, stores them in `localStorage`, and registers them with the API. The API stores only a SHA-256 hash of the secret. Every request sends both as `x-device-id` / `x-device-secret` headers, and every query is scoped to that device. A backup code (Settings, coming in a later phase) will carry these credentials to another browser.
+There are no accounts. On first launch the browser generates a random device id (UUID v4) and a 256-bit secret, stores them in `localStorage`, and registers them with the API. The API stores only a SHA-256 hash of the secret. Every request sends both as `x-device-id` / `x-device-secret` headers, and every query is scoped to that device. A backup code (Settings) carries these credentials to another browser.
+
+## Exports
+
+All five exports are built in the browser from the shelf the app already has (`shared/src/export.ts` holds every column). The PDF is drawn with `@react-pdf/renderer`, which loads only when someone asks for a PDF. Google Books cover images can't be read by a browser (no CORS headers), so the API passes a book's own stored cover through `GET /v1/books/:id/cover`. That route is device-authenticated, fetches only from the Google Books and Open Library hosts, accepts only images, and caps them at 2 MB.
+
+To bring the list into Goodreads, download the Goodreads CSV and upload it at goodreads.com/review/import. Fable's beta import (fable.co/goodreads-import) takes the same file.
 
 ## Environment
 

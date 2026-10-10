@@ -1,27 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DeviceCredentials } from '@booktrap/shared';
 import { api, NetworkError } from '../api/client';
-import { bootstrapDevice, requestPersistentStorage, type DeviceSession } from './bootstrap';
+import { bootstrapDevice, requestPersistentStorage } from './bootstrap';
 import { CREDENTIALS_KEY, createCredentialStore } from './credentials';
+import { DeviceContext, type DeviceContextValue } from './device-context';
 
 const store = createCredentialStore();
 const SESSION_KEY = ['device-session'] as const;
 
-interface DeviceContextValue {
-  status: 'loading' | 'error' | 'ready';
-  session: DeviceSession | undefined;
-  error: Error | null;
-  /** Whether the browser agreed to keep our storage (null = not supported or unknown). */
-  persisted: boolean | null;
-  retry: () => void;
-  /** Discards this device's credentials and starts a new, empty shelf. */
-  startFresh: () => void;
-  /** Switches this browser to the shelf a backup code belongs to. Throws if the code is rejected. */
-  restore: (credentials: DeviceCredentials) => Promise<void>;
-}
-
-const DeviceContext = createContext<DeviceContextValue | null>(null);
 
 export function DeviceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -90,10 +77,4 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   };
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
-}
-
-export function useDevice(): DeviceContextValue {
-  const value = useContext(DeviceContext);
-  if (!value) throw new Error('useDevice must be used inside <DeviceProvider>');
-  return value;
 }

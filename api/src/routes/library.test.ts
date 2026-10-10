@@ -27,6 +27,7 @@ describe('library API', () => {
   let verify: ReturnType<typeof vi.fn>;
   let headers: Record<string, string>;
   let deviceId: string;
+  let coverFetch: ReturnType<typeof vi.fn<typeof fetch>>;
 
   async function shelve(title: string, author: string | null, postId: string = randomUUID()) {
     const id = await store.insertBook(deviceId, {
@@ -46,12 +47,14 @@ describe('library API', () => {
   beforeEach(async () => {
     store = createMemoryLibraryStore();
     verify = vi.fn(async (title: string, author: string | null) => unverified(title, author));
+    coverFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 404 }));
     app = await buildApp({
       config: loadConfig({ NODE_ENV: 'test' }),
       devices: createMemoryDeviceRepo(),
       store,
       queue: new JobQueue(async () => {}),
       verifyBook: verify as never,
+      fetchImpl: (...args) => coverFetch(...args),
     });
     const creds = { deviceId: randomUUID(), deviceSecret: randomBytes(32).toString('base64url') };
     await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
@@ -223,6 +226,82 @@ describe('library API', () => {
       const foreign = await store.createTag(randomUUID(), 'Theirs');
       const res = await app.inject({ method: 'PATCH', url: `/v1/books/${id}`, headers, payload: { tagIds: [foreign.id] } });
       expect(res.json().tags).toEqual([]);
+    });
+  });
+
+  describe('book covers', () => {
+    const jpeg = (bytes: number, headers: Record<string, string> = {}) =>
+      new Response(new Uint8Array(bytes), { status: 200, headers: { 'content-type': 'image/jpeg', ...headers } });
+
+    async function shelveWithCover(coverUrl: string | null, owner = deviceId) {
+      return store.insertBook(owner, {
+        title: 'Babel',
+        author: null,
+        isbn10: null,
+        isbn13: null,
+        coverUrl,
+        publishedYear: null,
+        verified: true,
+        normalizedKey: `babel-${randomUUID()}`,
+      });
+    }
+
+    it('passes the stored cover through for its owner', async () => {
+      const id = await shelveWithCover('https://books.google.com/books/content?id=x&img=1');
+      coverFetch.mockResolvedValueOnce(jpeg(1234));
+      const res = await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('image/jpeg');
+      expect(res.headers['cache-control']).toBe('private, max-age=86400');
+      expect(res.rawPayload).toHaveLength(1234);
+      expect(coverFetch.mock.calls[0]![0]).toBe('https://books.google.com/books/content?id=x&img=1');
+    });
+
+    it('follows Open Library’s redirect to the Internet Archive', async () => {
+      const id = await shelveWithCover('https://covers.openlibrary.org/b/id/1-L.jpg');
+      coverFetch
+        .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://ia800100.us.archive.org/view_archive.php?file=1-L.jpg' } }))
+        .mockResolvedValueOnce(jpeg(10));
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(200);
+    });
+
+    it('follows Google Books’ hand-off to its image host', async () => {
+      const id = await shelveWithCover('https://books.google.com/books/content?id=x&img=1');
+      coverFetch
+        .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://books.googleusercontent.com/books/content?id=x' } }))
+        .mockResolvedValueOnce(jpeg(10));
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover?v=abc`, headers })).statusCode).toBe(200);
+    });
+
+    it('never serves another device’s book', async () => {
+      const id = await shelveWithCover('https://books.google.com/books/content?id=x', randomUUID());
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(404);
+      expect(coverFetch).not.toHaveBeenCalled();
+    });
+
+    it('refuses hosts outside the cover allowlist, including on a redirect', async () => {
+      const off = await shelveWithCover('https://evil.example/cover.jpg');
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${off}/cover`, headers })).statusCode).toBe(404);
+      expect(coverFetch).not.toHaveBeenCalled();
+
+      const hop = await shelveWithCover('https://covers.openlibrary.org/b/id/1-L.jpg');
+      coverFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest' } }));
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${hop}/cover`, headers })).statusCode).toBe(404);
+      expect(coverFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects non-images and covers over 2 MB', async () => {
+      const id = await shelveWithCover('https://books.google.com/books/content?id=x');
+      coverFetch.mockResolvedValueOnce(new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }));
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(404);
+      coverFetch.mockResolvedValueOnce(jpeg(2 * 1024 * 1024 + 1));
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(404);
+    });
+
+    it('says 404 when there is no cover', async () => {
+      const id = await shelveWithCover(null);
+      expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(404);
+      expect((await app.inject({ method: 'GET', url: '/v1/books/not-a-uuid/cover', headers })).statusCode).toBe(404);
     });
   });
 });

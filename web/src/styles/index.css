@@ -39,6 +39,12 @@
   --reading: #9db3bd;
   --read: #ceeddb; /* Honeydew */
   --lime: #c6e04a; /* "New" only */
+  --focus: #85baa1; /* focus ring, 6.6:1 on the ground */
+  --placeholder: #a9bcc4; /* 5.3:1 on the sunk input fill */
+  /* The New filter tab at rest: a lime outline on the card colour (a lime tint goes olive on grape). */
+  --tab-new-rest: var(--surface);
+  --tab-new-ring: rgb(198 224 74 / 0.75);
+  --cover-tab-edge: rgb(255 255 255 / 0.15);
 
   --on-action: #1f1c24; /* dark ink on teal, 7.6:1 */
   --on-cloth: #f2faf5; /* light text on placeholder bookcloth */
@@ -108,6 +114,12 @@
   --reading: #9db3bd;
   --read: #ceeddb;
   --lime: #c6e04a;
+  --focus: #3e7a60; /* teal ink: 4.7:1 on the ground (the light teal was 2.1:1) */
+  --placeholder: #6a6680; /* 4.8:1 on the sunk input fill */
+  --tab-new-rest: color-mix(in srgb, var(--lime) 20%, var(--surface));
+  --tab-new-ring: transparent;
+  /* Pale tab fills vanish on the pale ground: an ink edge gives every cover tab 3:1 or better. */
+  --cover-tab-edge: color-mix(in srgb, var(--text) 45%, transparent);
 
   --on-action: #1f1c24;
   --on-cloth: #f2faf5;
@@ -248,7 +260,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus);
     outline-offset: 3px;
   }
 
@@ -263,7 +275,7 @@
   }
 
   ::placeholder {
-    color: var(--text-faint);
+    color: var(--placeholder);
     opacity: 1;
   }
 
@@ -297,7 +309,9 @@
   /* The "New" highlighter stroke behind a title: lime is reserved for this and the New tab. */
   .highlight-new {
     color: var(--on-lime);
-    background-image: linear-gradient(transparent 8%, var(--lime) 8%, var(--lime) 94%, transparent 94%);
+    /* A marker stroke, not a selection box: tilted top edge and ragged, hand-cut ends. Lime #c6e04a
+       is the same in both themes, so the stroke can be one drawn shape. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath fill='%23c6e04a' d='M3 13C30 8 70 11 97 6L99 30L96.5 52L99.5 74L97 95C70 97 30 99 2 97L0 72L3 50L0.5 28Z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-size: 100% 100%;
     box-decoration-break: clone;
@@ -373,6 +387,13 @@
       background-color 160ms,
       color 160ms;
   }
+  /* Phones fit more tabs before the row scrolls. */
+  @media (max-width: 639px) {
+    .page-tab {
+      padding-inline: 0.75rem;
+      gap: 0.35rem;
+    }
+  }
   .page-tab:hover {
     transform: translateY(1px);
     color: var(--text);
@@ -380,6 +401,23 @@
   .page-tab[aria-pressed='true'] {
     transform: translateY(0);
     color: var(--on-tab);
+  }
+
+  /* A cover's state tab: the shelf's signature mark. */
+  .cover-tab {
+    box-shadow: inset 0 0 0 1.5px var(--cover-tab-edge);
+  }
+  /* The one status moment: a newly set tab drops onto the cover's top edge. */
+  @media (prefers-reduced-motion: no-preference) {
+    .cover-tab-drop {
+      animation: cover-tab-drop 0.5s var(--ease-out-expo);
+    }
+  }
+
+  /* One clear button in search fields: ours. The browser's own would be a second X and tab stop. */
+  input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
 
@@ -440,13 +478,14 @@
   right: max(16px, 7cqw);
   width: min(78cqw, 50cqh, 420px);
 }
-@container (min-width: 76px) {
+@container (min-width: 96px) {
   .library-stack,
   .library-lamp {
     display: block;
   }
 }
-@container (min-width: 110px) and (min-height: 620px) {
+/* The window needs a real wing (about 1340px screens): squeezed in, it reads as a sticker. */
+@container (min-width: 150px) and (min-height: 620px) {
   .library-window {
     display: block;
   }
@@ -540,7 +579,9 @@
 
 /* Night shows the moon and stars; day shows the sun and clouds. */
 :root:not([data-theme='dark']) .library .deco-night,
-:root[data-theme='dark'] .library .deco-day {
+:root[data-theme='dark'] .library .deco-day,
+:root:not([data-theme='dark']) .library-strip .deco-night,
+:root[data-theme='dark'] .library-strip .deco-day {
   display: none;
 }
 
@@ -585,11 +626,17 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .library *,
-  .library *::before {
+  .library *::before,
+  .library-strip * {
     animation: none !important;
   }
 }
 
+@keyframes cover-tab-drop {
+  from {
+    transform: translateY(-14px);
+  }
+}
 @keyframes highlight-sweep {
   from {
     background-size: 15% 100%;

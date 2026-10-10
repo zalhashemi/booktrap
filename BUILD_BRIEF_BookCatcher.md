@@ -153,7 +153,7 @@ Enrichment is a background improvement, never a gate. For each extracted book:
 
 ### Covers, search, filter, sort
 - Show covers (from Google Books/Open Library), with a tasteful placeholder when missing.
-- Search across title, author, tags. Filters: status, tag, new. Sort: date added, title, author.
+- Search across title, author, tags. Filters: status and new as page-tabs, tag in a picker. Sort: date added, title, author.
 - Grid and list view toggle.
 
 ### Editing
@@ -163,14 +163,14 @@ Enrichment is a background improvement, never a gate. For each extracted book:
 
 ## 8. Exports
 
-All exports run on the current filtered selection or the whole list (let the user choose).
+All exports run on the whole shelf, the current filtered view (offered when filters are on) or the books ticked in select mode (offered while selecting), in the shelf's current sort. They live in an Export sheet opened from the shelf header or the selection bar. Every format is defined once in `shared/src/export.ts`.
 
-1. **Goodreads CSV**: header row matching Goodreads' import format. Include at minimum: `Title, Author, ISBN, ISBN13, Exclusive Shelf, Bookshelves`. Set `Exclusive Shelf` to `to-read`, `currently-reading` or `read` from status. Put tags in `Bookshelves` (comma-separated, hyphenated). Verify the format against Goodreads' current import page before finalizing and ask the user to test one import.
-2. **PDF**: clean, designed list (title, author, optional cover, status, tags). Generated client-side with `@react-pdf/renderer` (or a comparable library). Must look good, not like a default dump. Run through Impeccable/Taste.
-3. **Copy as plain text**: one tap copies `Title by Author` per line to the clipboard with a confirmation toast. Option toggles: include status, include numbering.
-4. **Generic CSV and JSON**: full data including ISBNs, status, tags, sources (platform-neutral columns: `source_platform`, `source_post_id`, `source_url`), timestamps. No unsure/verified flags. Doubles as a backup.
+1. **Goodreads CSV**: the 24-column header of Goodreads' own library export (Book Id, Title, Author, Author l-f, …, Bookshelves, Bookshelves with positions, Exclusive Shelf, …, Owned Copies), which its importer reads back. `Exclusive Shelf` is `to-read`, `currently-reading` or `read` from status. `Bookshelves` holds the exclusive shelf plus the tags (lowercased, accents folded, hyphenated, comma-separated): an import with Exclusive Shelf alone has been reported to shelve everything as "read". ISBNs are plain digits; Date Added is `yyyy/MM/dd`; notes go to Private Notes. UTF-8 with a BOM, CRLF lines. Goodreads' import page needs a login, so the format was checked against its export header and a real import by the user is still to come.
+2. **PDF**: a printable shelf in the app's own look (chosen by the user from three layouts, 2026-10-09): five covers across with titles and authors below, grouped by status (Reading now, Want to read, Read) under page-tab headings, a teal page edge, a Kalam margin note, lime highlighter and page-tab on New books, bookcloth plates for missing covers, and page numbers. Built client-side with `@react-pdf/renderer`, loaded only on demand and kept out of the PWA precache. A4, or Letter for US/Canadian locales. Covers come through the API (`GET /v1/books/:id/cover`, since Google Books images have no CORS headers), re-encoded to small JPEGs.
+3. **Copy as plain text**: `Title by Author` per line to the clipboard with a toast ("Copied 12 books"). Toggles for numbering and status, remembered per browser.
+4. **Generic CSV and JSON**: full data (ids, ISBNs, year, status, is_new, tags, notes, cover URL, timestamps) with platform-neutral sources (`source_platform`, `source_post_id`, `source_url`, creator, date). The CSV has one row per book and source; the JSON nests sources. No unsure, verified, confidence or evidence fields. Doubles as a backup. The CSV defuses spreadsheet formulas (a leading = + - @ gets an apostrophe); the Goodreads file doesn't, since an importer reads it.
 
-Add an "Import from Goodreads/Fable" note in the UI explaining the user should download the Goodreads CSV and upload it in Goodreads (goodreads.com/review/import). Check whether Fable accepts the same CSV and tell the user what you find. Do not attempt to automate logins to Goodreads or Fable.
+The sheet carries a "Moving to Goodreads or Fable" note: download the Goodreads CSV, upload it at goodreads.com/review/import (My Books, Import and export), and for Fable upload the same file at fable.co/goodreads-import (beta, website only, signed in with the app account; Fable emails when done). Don't re-save the file in Excel. BookTrap never logs into Goodreads or Fable.
 
 ---
 
@@ -209,6 +209,7 @@ Indexes on `(device_id, normalized_key)` and `(device_id, isbn13)` for dedup.
 - **Lime** is required for the "New" highlight and is not in the palette. Add a single lime accent that sits well against the dark emerald/burgundy/gold world (start near `#C6E04A`, a slightly warm, bright lime), use it ONLY for "New" so it stays meaningful, and verify contrast. Confirm the final value with the user.
 - **Light mode is the default** (user, 2026-10-09). Dark (deep grape, never near-black) is in Settings and remembered per browser.
 - **Background decoration (change request 001):** on desktop the side gutters become a cozy, slightly magical library, playful and modern rather than a museum: an arched window (moon and stars at night, sun and clouds by day), a teal-flamed candle on a book stack with a bookworm in reading glasses, a hanging lamp with dust drifting in its light, and a bookcase with a library ladder. Inline SVG + CSS only, palette tokens only (separate day and night tunings), `aria-hidden`, no pointer events, behind content, never over the content column. Rich from 1240px up (more pieces as the gutters widen), a low run of spines along the page foot on tablets, nothing on phones. Motion is slow and calm (candle flicker, breathing glows, drifting dust) and stops under reduced motion.
+- **Phase 6 design pass (2026-10-09):** below 1240px a slim slice of the reading room (window, shelf run, candle) sits above the Add headline (user's pick of three phone mockups), and the empty paste field offers "Paste what you copied". Shelf filters are page-tabs for All, New, To read, Reading and Read in the cover-tab colours; cover tabs carry glyphs so state never rests on colour. Placeholder covers are lettered bindings. The book sheet is view-first: status and shelves save on tap, details sit behind "Edit details". Settings leads with the backup code and shows today's usage. The design system is written up in `web/DESIGN.md`.
 - **Typography (chosen by the user):** Young Serif for headlines and book titles, Nunito for UI, Kalam for sparing handwritten notes, all self-hosted.
 - Typography, spacing, motion and empty states should be deliberate and distinctive, not default component-library styling. Use the Taste and Impeccable skills to drive this and to critique each screen.
 - Key screens: Home/Add (paste box + job progress), My List (grid/list, filters, search), Book detail/edit sheet, Export sheet, Settings (backup code, daily usage, clear data).
@@ -266,5 +267,5 @@ Provide a `.env.example`, a README with setup and deploy steps, and ask the user
 - ~~Final app name.~~ BookTrap.
 - Final lime value for the "New" highlight, and the final near-black background.
 - ~~Which Apify actor to use and the monthly budget.~~ TikTok: clockworks/tiktok-scraper. Instagram: apify/instagram-scraper ($0.0027/post, no paid transcript). One shared $20/month budget.
-- Whether Fable accepts the Goodreads CSV (research and report back).
+- ~~Whether Fable accepts the Goodreads CSV.~~ Fable has a beta CSV import at fable.co/goodreads-import (website only) for Goodreads data, so the Goodreads CSV is the file to use; untested until the user tries it.
 - Custom domain, if any.

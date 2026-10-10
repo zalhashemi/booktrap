@@ -29,4 +29,4 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Unresolved
 
-Final lime value (#C6E04A in use). Light mode stays available on ivory and needs a final pass in Phase 6.
+Final lime value (#C6E04A in use). Light is the default theme on washed Honeydew (#f1f7f3); its final pass was done in Phase 6 (2026-10-09). Phone Add carries a reading-room strip above the headline (user's pick). Shelf filters are page-tabs for New and every status.

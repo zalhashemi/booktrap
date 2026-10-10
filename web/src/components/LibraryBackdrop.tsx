@@ -308,3 +308,67 @@ export function ShelfFooter() {
     </div>
   );
 }
+
+const STRIP_SPINES: [x: number, height: number, width: number, colour: number][] = [
+  [96, 50, 14, 1],
+  [111, 40, 17, 3],
+  [129, 58, 12, 2],
+  [142, 46, 16, 4],
+  [159, 62, 13, 1],
+  [178, 44, 15, 2],
+  [194, 54, 17, 3],
+  [212, 36, 12, 4],
+];
+
+/**
+ * A slim slice of the reading room for screens too narrow for the side wings (the user's pick for
+ * phones, 2026-10-09): the arched window, a shelf run with one book leaning, and the candle on its
+ * stack. Same tokens and motion as the wings, so it follows day and night and reduced motion.
+ */
+export function ReadingRoomStrip({ className = '' }: { className?: string }) {
+  return (
+    <div className={`library-strip ${className}`} aria-hidden="true">
+      <svg viewBox="0 0 358 96" className="block h-auto w-full max-w-[480px]" fill="none">
+        <defs>
+          <linearGradient id="deco-strip-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" className="deco-sky-top" />
+            <stop offset="1" className="deco-sky-bottom" />
+          </linearGradient>
+          <radialGradient id="deco-strip-glow">
+            <stop offset="0" className="deco-glow-core" />
+            <stop offset="1" className="deco-glow-edge" />
+          </radialGradient>
+        </defs>
+
+        {/* Arched window: crescent moon and stars at night, sun and a cloud by day */}
+        <path d="M14 92V36a28 28 0 0 1 56 0V92Z" fill="url(#deco-strip-sky)" />
+        <g className="deco-night">
+          <path className="deco-moon" d="M52 20a9 9 0 1 0 8 14a7 7 0 1 1 -8 -14z" />
+          <path className="deco-star" d={sparkle(28, 30, 3.5)} />
+          <circle className="deco-star" cx="36" cy="50" r="1" />
+          <circle className="deco-star" cx="58" cy="58" r="1" />
+        </g>
+        <g className="deco-day">
+          <circle className="deco-sun" cx="54" cy="30" r="7" />
+          <path className="deco-cloud" d="M22 58h20a5 5 0 0 0 0-10a7 7 0 0 0-13-3a5 5 0 0 0-7 3a5 5 0 0 0 0 10z" />
+        </g>
+        <path className="deco-frame" d="M14 92V36a28 28 0 0 1 56 0V92ZM42 8V92M14 62H70" style={{ strokeWidth: 2.5 }} />
+
+        {/* A shelf run, one book leaning on the last */}
+        {STRIP_SPINES.map(([x, h, w, colour]) => (
+          <rect key={x} className={`deco-spine-${colour}`} x={x} y={90 - h} width={w} height={h} rx="2" />
+        ))}
+        <rect className="deco-spine-2" x="226" y="46" width="15" height="44" rx="2" transform="rotate(14 233 90)" />
+        <rect className="deco-wood" x="88" y="90" width="176" height="6" rx="2" />
+
+        {/* The candle on its stack */}
+        <circle cx="314" cy="40" r="26" fill="url(#deco-strip-glow)" className="library-glow" />
+        <rect className="deco-spine-4" x="284" y="80" width="58" height="12" rx="2" />
+        <rect className="deco-spine-3" x="290" y="68" width="48" height="12" rx="2" />
+        <rect className="deco-candle" x="308" y="44" width="12" height="24" rx="2" />
+        <path className="deco-flame library-flame" d="M314 30c5 6 5 11 0 13c-5 -2 -5 -7 0 -13Z" />
+        <path className="deco-flame-core" d="M314 36c2 3 2 5 0 6c-2 -1 -2 -3 0 -6Z" />
+      </svg>
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseInstagramUrl } from './instagram';
-import { extractSourceLinks } from './links';
+import { countUnreadableLinks, extractSourceLinks } from './links';
 
 describe('parseInstagramUrl', () => {
   it.each([
@@ -63,5 +63,17 @@ https://www.instagram.com/reel/DeMTMjJjmqF/ and https://youtube.com/watch?v=1`;
 
   it('treats a reel and the same shortcode via /reels/ as one post', () => {
     expect(extractSourceLinks('https://www.instagram.com/reel/DeMTMjJjmqF/ https://www.instagram.com/reels/DeMTMjJjmqF/')).toHaveLength(1);
+  });
+});
+
+describe('countUnreadableLinks', () => {
+  it('counts platform links that are not readable posts, once each', () => {
+    const text = 'see https://www.instagram.com/penguinukbooks/ and https://www.tiktok.com/@reader and https://www.instagram.com/penguinukbooks/ plus https://example.com/x and https://www.instagram.com/p/DeJvdqUjLd1/';
+    expect(countUnreadableLinks(text)).toBe(2);
+  });
+
+  it('treats variants of one page as one link and ignores bare home pages', () => {
+    const text = 'https://www.instagram.com/penguinukbooks and https://instagram.com/PenguinUKBooks/?hl=en, via https://www.tiktok.com/';
+    expect(countUnreadableLinks(text)).toBe(1);
   });
 });

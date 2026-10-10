@@ -1,5 +1,6 @@
 import type { Book } from '@booktrap/shared';
 import { coverTabs } from '../library/covers';
+import { STATUS_LABELS } from '../library/filters';
 import { BookTitle, CoverPlate, SelectMark } from './BookRow';
 
 interface Props {
@@ -42,6 +43,9 @@ export function ShelfGrid({ books, onOpen, selecting, selected, onToggle }: Prop
               </span>
               <BookTitle book={book} className="mt-3 line-clamp-2 block font-display text-[0.92rem] leading-snug" />
               <span className="mt-1 block truncate text-[0.8rem] text-text-muted">{book.author ?? 'Author unknown'}</span>
+              {book.status !== 'want_to_read' && (
+                <span className="mt-1 block text-[0.75rem] font-bold text-tag-ink">{STATUS_LABELS[book.status]}</span>
+              )}
             </button>
           </li>
         );

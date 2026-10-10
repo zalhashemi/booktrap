@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Book, DeviceCredentials, Job, Tag, UpdateBookRequest } from '@booktrap/shared';
 import { api } from '../api/client';
-import { useDevice } from '../device/DeviceProvider';
+import { useDevice } from '../device/device-context';
 
 /**
  * Every library query is keyed by device: restoring a backup code switches devices, and one
@@ -88,6 +88,13 @@ function editBooks(queryClient: QueryClient, deviceId: string, change: (books: B
   queryClient.setQueryData<Book[]>(keys.books(deviceId), (books) => (books ? change(books) : books));
 }
 
+/**
+ * The latest edit sent for each book. One-tap status and shelf changes can overlap, and an older
+ * response landing late must not overwrite the newer state shown on screen.
+ */
+const latestEdit = new Map<string, number>();
+let editSeq = 0;
+
 export function useUpdateBook() {
   const credentials = useCredentials();
   const queryClient = useQueryClient();
@@ -100,10 +107,19 @@ export function useUpdateBook() {
       const early: Partial<Book> = {};
       if (patch.status) early.status = patch.status;
       if (patch.isNew === false) early.isNew = false;
+      // Shelves are toggled with one tap in the book sheet, so they show at once too.
       const before = queryClient.getQueryData<Book[]>(keys.books(deviceId))?.find((book) => book.id === id);
+      if (patch.tagIds) {
+        // From the shelves list, or the book's own tags for any shelf the list doesn't have yet.
+        const known = [...(queryClient.getQueryData<Tag[]>(keys.tags(deviceId)) ?? []), ...(before?.tags ?? [])];
+        early.tags = patch.tagIds.map((tagId) => known.find((tag) => tag.id === tagId)).filter((tag): tag is Tag => tag !== undefined);
+      }
+      const seq = ++editSeq;
+      latestEdit.set(id, seq);
       editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === id ? { ...book, ...early } : book)));
       // Undo only this book's early fields, leaving any other change made meanwhile alone.
       return {
+        seq,
         rollback: () => {
           if (!before) return;
           const restore: Partial<Book> = {};
@@ -112,8 +128,14 @@ export function useUpdateBook() {
         },
       };
     },
-    onError: (_error, _vars, context) => context?.rollback(),
-    onSuccess: (updated) => editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === updated.id ? updated : book))),
+    // Only the newest edit to a book decides what's shown; an older one finishing late is ignored.
+    onError: (_error, { id }, context) => {
+      if (context && latestEdit.get(id) === context.seq) context.rollback();
+    },
+    onSuccess: (updated, { id }, context) => {
+      if (context && latestEdit.get(id) !== context.seq) return;
+      editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === updated.id ? updated : book)));
+    },
   });
 }
 

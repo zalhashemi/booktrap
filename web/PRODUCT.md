@@ -21,7 +21,7 @@ It reads what's actually on screen: covers, spines, text overlays, captions and 
 - Mostly mobile and paste-driven: copy a link from the TikTok share sheet, switch to BookTrap, paste. Bulk pastes of many links at once are expected.
 - Processing runs in the background and takes from seconds to minutes. Users watch a live job panel or leave and come back.
 - No accounts. Each browser holds an anonymous identity, and a backup code restores the list on another device.
-- Exports go to Goodreads (CSV import at goodreads.com/review/import), PDF, plain text and CSV/JSON. BookTrap never logs into other services.
+- Exports go to Goodreads (CSV import at goodreads.com/review/import; Fable's beta import at fable.co/goodreads-import takes the same file), a PDF reading list (covers on a printable shelf, grouped by status), plain text and CSV/JSON. Each covers the whole shelf, the filtered view or the selected books. BookTrap never logs into other services.
 
 ## Capabilities and Constraints
 - Inputs: TikTok video and photo-carousel URLs, TikTok short links (vm./vt.tiktok.com), **public** TikTok collection links, and Instagram posts, carousels, reels and IGTV (instagram.com/p, /reel, /reels, /tv, share links and instagr.am). Instagram saved collections are private to their owner and cannot be read; the app says so and suggests pasting the posts' links instead.

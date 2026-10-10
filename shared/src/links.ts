@@ -1,6 +1,6 @@
-import { parseInstagramUrl } from './instagram';
+import { INSTAGRAM_HOSTS, parseInstagramUrl } from './instagram';
 import { linkKey, type SourceLink } from './source';
-import { parseTikTokUrl } from './tiktok';
+import { TIKTOK_HOSTS, parseTikTokUrl } from './tiktok';
 
 /** Parses one TikTok or Instagram URL; null for anything else. */
 export function parseSourceUrl(raw: string): SourceLink | null {
@@ -25,4 +25,31 @@ export function extractSourceLinks(text: string): SourceLink[] {
     links.push(link);
   }
   return links;
+}
+
+const PLATFORM_HOSTS = new Set<string>([...TIKTOK_HOSTS, ...INSTAGRAM_HOSTS]);
+
+/**
+ * How many distinct links in the text are on TikTok or Instagram but aren't a post, reel or
+ * collection BookTrap can read (a profile, a search page, a mistyped id), so the paste box can say
+ * so rather than silently leaving them out.
+ */
+export function countUnreadableLinks(text: string): number {
+  const unreadable = new Set<string>();
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const raw = match[0].replace(/[.,;:!?]+$/, '');
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      continue;
+    }
+    const host = url.hostname.toLowerCase();
+    // The same page however it's written: no www/m., query, hash, trailing slash or case.
+    const path = url.pathname.replace(/\/+$/, '').toLowerCase();
+    // A bare home page (a share message's "tiktok.com" footer) isn't a link anyone meant to send.
+    if (!PLATFORM_HOSTS.has(host) || path === '' || parseSourceUrl(raw)) continue;
+    unreadable.add(`${host.replace(/^(www|m)\./, '')}${path}`);
+  }
+  return unreadable.size;
 }

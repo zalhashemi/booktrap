@@ -1,4 +1,4 @@
-import { ArrowClockwise, CheckCircle, Images, Playlist, VideoCamera, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, CheckCircle, Images, Info, Playlist, VideoCamera, WarningCircle } from '@phosphor-icons/react';
 import { Link } from 'react-router';
 import { PLATFORM_LABELS, parseSourceUrl, type Job, type JobItem, type SourceLink } from '@booktrap/shared';
 import { useJobs, useRetryItem } from '../library/hooks';
@@ -38,13 +38,13 @@ function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?
   const working = item.status !== 'done' && item.status !== 'failed';
 
   return (
-    <li className="rounded-[16px] bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule)]">
+    <li className="rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule)]">
       <div className="flex items-center justify-between gap-3">
         <a
           href={item.inputUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-w-0 items-center gap-2 font-bold underline-offset-4 hover:underline"
+          className="-my-2.5 inline-flex min-h-11 min-w-0 items-center gap-2 font-bold underline-offset-4 hover:underline"
         >
           <PlatformIcon platform={platform} />
           <span className="truncate">{who}</span>
@@ -86,7 +86,7 @@ function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?
           {item.booksFound > 0 ? (
             <>
               <CheckCircle size={18} weight="fill" className="text-success-ink" aria-hidden="true" />
-              <Link to="/shelf" className="text-success-ink underline-offset-4 hover:underline">
+              <Link to="/shelf" className="-my-3 inline-flex min-h-11 items-center text-success-ink underline-offset-4 hover:underline">
                 {item.booksFound} {item.booksFound === 1 ? 'book' : 'books'} shelved
               </Link>
             </>
@@ -150,16 +150,21 @@ function CollectionProgress({ job, item, videos }: { job: Job; item: JobItem; vi
           />
         </div>
       )}
+      {item.note && (
+        <p className="flex items-start gap-1.5 text-sm text-note-ink">
+          <Info size={18} weight="fill" className="mt-px shrink-0" aria-hidden="true" />
+          {item.note}
+        </p>
+      )}
       {books === 0 && !reading && videos.length > 0 && <p className="text-sm text-text-muted">No books found in these videos</p>}
       {books > 0 && (
         <p className="flex items-center gap-1.5 text-sm font-bold">
           <CheckCircle size={18} weight="fill" className="text-success-ink" aria-hidden="true" />
-          <Link to="/shelf" className="text-success-ink underline-offset-4 hover:underline">
+          <Link to="/shelf" className="-my-3 inline-flex min-h-11 items-center text-success-ink underline-offset-4 hover:underline">
             {books} {books === 1 ? 'book' : 'books'} found so far
           </Link>
         </p>
       )}
-      {item.note && <p className="text-sm text-note-ink">{item.note}</p>}
       {failed.length > 0 && (
         <details className="group">
           <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-bold text-note-ink">

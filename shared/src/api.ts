@@ -20,6 +20,13 @@ export const MeResponseSchema = z.object({
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
+/** Today's reading for this device, against the daily cap (resets at midnight UTC). */
+export const UsageResponseSchema = z.object({
+  postsToday: z.number().int(),
+  dailyLimit: z.number().int(),
+});
+export type UsageResponse = z.infer<typeof UsageResponseSchema>;
+
 /** Every non-2xx response from the API uses this shape. */
 export const ApiErrorSchema = z.object({
   error: z.object({

@@ -1,22 +1,27 @@
-import { useId, useState } from 'react';
-import { FadersHorizontal, MagnifyingGlass, Rows, SquaresFour, X } from '@phosphor-icons/react';
-import { BOOK_STATUSES, type Tag } from '@booktrap/shared';
-import { STATUS_LABELS, type Flag, type ShelfQuery, type SortKey } from '../library/filters';
+import { useEffect, useId, useRef, useState } from 'react';
+import { FadersHorizontal, ListChecks, MagnifyingGlass, Rows, SquaresFour, X } from '@phosphor-icons/react';
+import type { Tag } from '@booktrap/shared';
+import { activeTab, tabQuery, type ShelfQuery, type ShelfTab, type SortKey } from '../library/filters';
 
 export type ViewMode = 'shelf' | 'list';
 
 interface Props {
   query: ShelfQuery;
   onChange: (query: ShelfQuery) => void;
-  counts: Record<Flag, number>;
+  counts: Record<ShelfTab, number>;
   tags: Tag[];
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  /** Phones start select mode from the tab row (desktop has a Select button in the header). */
+  onSelect?: () => void;
 }
 
-const FLAGS: { value: Flag; label: string }[] = [
+const TABS: { value: ShelfTab; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'new', label: 'New' },
+  { value: 'want_to_read', label: 'Want to read' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'read', label: 'Read' },
 ];
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -26,23 +31,40 @@ const SORTS: { value: SortKey; label: string }[] = [
 ];
 
 /**
- * Each page-tab wears the colour of the state it stands for (lime only for New, the accent for
- * everything): a soft tint at rest, full colour when pulled up.
+ * Each page-tab wears the colour of the state it stands for, the same colours as the tabs on the
+ * covers (lime only for New, slate for Reading, honeydew for Read, the accent for All and Want to read):
+ * a soft tint at rest, full colour when pulled up.
  */
-const TAB_FILL: Record<Flag, string> = {
+const TAB_FILL: Record<ShelfTab, string> = {
   all: 'bg-[color-mix(in_srgb,var(--accent)_22%,var(--surface))] aria-pressed:bg-accent',
-  new: 'bg-[color-mix(in_srgb,var(--lime)_20%,var(--surface))] aria-pressed:bg-lime',
+  new: 'bg-[var(--tab-new-rest)] shadow-[inset_0_0_0_1.5px_var(--tab-new-ring)] aria-pressed:bg-lime aria-pressed:shadow-none',
+  want_to_read: 'bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] aria-pressed:bg-accent',
+  reading: 'bg-[color-mix(in_srgb,var(--reading)_28%,var(--surface))] aria-pressed:bg-reading',
+  read: 'bg-[color-mix(in_srgb,var(--read)_45%,var(--surface))] shadow-[inset_0_0_0_1.5px_var(--cover-tab-edge)] aria-pressed:bg-read',
 };
 
-export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange }: Props) {
-  const ids = { search: useId(), status: useId(), tag: useId(), sort: useId(), pickers: useId() };
+export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange, onSelect }: Props) {
+  const ids = { search: useId(), tag: useId(), sort: useId(), pickers: useId() };
   const set = <K extends keyof ShelfQuery>(key: K, value: ShelfQuery[K]) => onChange({ ...query, [key]: value });
   // Phones fold the pickers away so books start near the top; desktop always shows them.
   const [pickersOpen, setPickersOpen] = useState(false);
-  const activePickers = Number(query.status !== 'any') + Number(query.tagId !== 'any') + Number(query.sort !== 'added');
+  const activePickers = Number(query.tagId !== 'any') + Number(query.sort !== 'added');
+  const current = activeTab(query);
+  // On phones the tab row scrolls: a fade on the right edge says so until the last tab is in view.
+  const scroller = useRef<HTMLDivElement>(null);
+  const [moreRight, setMoreRight] = useState(false);
+  const checkScroll = () => {
+    const element = scroller.current;
+    if (element) setMoreRight(element.scrollLeft + element.clientWidth < element.scrollWidth - 2);
+  };
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [counts]);
 
   return (
-    <div className="mt-6 space-y-5">
+    <div className="mt-5 space-y-4 md:mt-6 md:space-y-5">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <label htmlFor={ids.search} className="sr-only">
@@ -56,7 +78,7 @@ export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange
             onChange={(event) => set('search', event.target.value)}
             placeholder="Search your shelf"
             autoComplete="off"
-            className="field rounded-pill pr-11 pl-12"
+            className="field min-h-12 rounded-pill pr-11 pl-12"
           />
           {query.search && (
             <button
@@ -72,45 +94,60 @@ export function ShelfToolbar({ query, onChange, counts, tags, view, onViewChange
         <ViewToggle view={view} onViewChange={onViewChange} />
       </div>
 
-      <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">
-        <div className="tab-row min-w-max" role="group" aria-label="Show">
-          {FLAGS.map((flag) => {
-            const active = query.flag === flag.value;
-            return (
-              <button key={flag.value} type="button" aria-pressed={active} onClick={() => set('flag', flag.value)} className={`page-tab ${TAB_FILL[flag.value]}`}>
-                {flag.label}
-                <span className="tabular-nums opacity-80">{counts[flag.value]}</span>
+      <div className="flex items-end gap-2">
+        <div
+          ref={scroller}
+          onScroll={checkScroll}
+          className={`-ml-4 min-w-0 flex-1 overflow-x-auto pl-4 [scrollbar-width:none] md:mx-0 md:px-0 ${
+            moreRight ? '[mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)]' : ''
+          }`}
+        >
+          <div className="tab-row min-w-max" role="group" aria-label="Show">
+            {TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                aria-pressed={current === tab.value}
+                onClick={() => onChange({ ...query, ...tabQuery(tab.value) })}
+                className={`page-tab ${TAB_FILL[tab.value]}`}
+              >
+                {tab.label}
+                <span className="tabular-nums">{counts[tab.value]}</span>
               </button>
-            );
-          })}
+            ))}
+          </div>
+        </div>
+        {/* Phones: filter and select sit on the tab row instead of taking rows of their own. */}
+        <div className="flex shrink-0 gap-1.5 pb-1 md:hidden">
+          <button
+            type="button"
+            aria-expanded={pickersOpen}
+            aria-controls={ids.pickers}
+            aria-label={`Filter and sort${activePickers > 0 ? `, ${activePickers} on` : ''}`}
+            onClick={() => setPickersOpen((open) => !open)}
+            className={`relative flex size-11 items-center justify-center rounded-pill shadow-[inset_0_0_0_1.5px_var(--rule)] ${pickersOpen ? 'bg-accent text-on-tab' : 'bg-surface text-text'}`}
+          >
+            <FadersHorizontal size={20} weight="bold" aria-hidden="true" />
+            {activePickers > 0 && (
+              <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-pill bg-accent text-[0.7rem] font-bold text-on-tab tabular-nums" aria-hidden="true">
+                {activePickers}
+              </span>
+            )}
+          </button>
+          {onSelect && (
+            <button
+              type="button"
+              onClick={onSelect}
+              aria-label="Select books"
+              className="flex size-11 items-center justify-center rounded-pill bg-surface text-text shadow-[inset_0_0_0_1.5px_var(--rule)]"
+            >
+              <ListChecks size={20} weight="bold" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="md:hidden">
-        <button
-          type="button"
-          aria-expanded={pickersOpen}
-          aria-controls={ids.pickers}
-          onClick={() => setPickersOpen((open) => !open)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-surface px-4 text-[0.92rem] font-bold shadow-[inset_0_0_0_1.5px_var(--rule)]"
-        >
-          <FadersHorizontal size={18} weight="bold" aria-hidden="true" />
-          Filter &amp; sort
-          {activePickers > 0 && <span className="rounded-pill bg-accent px-2 text-[0.78rem] text-on-tab tabular-nums">{activePickers}</span>}
-        </button>
-      </div>
-
       <div id={ids.pickers} className={`${pickersOpen ? 'grid' : 'hidden'} grid-cols-2 gap-3 md:flex md:flex-wrap md:items-end`}>
-        <Picker id={ids.status} label="Status">
-          <select id={ids.status} value={query.status} onChange={(event) => set('status', event.target.value as ShelfQuery['status'])} className="field">
-            <option value="any">Any status</option>
-            {BOOK_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </Picker>
         {tags.length > 0 && (
           <Picker id={ids.tag} label="Shelf">
             <select id={ids.tag} value={query.tagId} onChange={(event) => set('tagId', event.target.value)} className="field">
@@ -150,7 +187,7 @@ function Picker({ id, label, children }: { id: string; label: string; children: 
 
 function ViewToggle({ view, onViewChange }: { view: ViewMode; onViewChange: (view: ViewMode) => void }) {
   return (
-    <div className="inline-flex shrink-0 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]" role="group" aria-label="View">
+    <div className="inline-flex shrink-0 rounded-pill bg-surface p-0.5 shadow-[inset_0_0_0_1.5px_var(--rule)]" role="group" aria-label="View">
       {(
         [
           ['shelf', 'Shelf', SquaresFour],
@@ -162,7 +199,7 @@ function ViewToggle({ view, onViewChange }: { view: ViewMode; onViewChange: (vie
           type="button"
           aria-pressed={view === value}
           onClick={() => onViewChange(value)}
-          className={`flex h-10 min-w-11 items-center justify-center gap-1.5 rounded-pill px-3 text-[0.85rem] font-bold transition-colors duration-200 ${
+          className={`flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-pill px-3 text-[0.85rem] font-bold transition-colors duration-200 ${
             view === value ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
           }`}
         >

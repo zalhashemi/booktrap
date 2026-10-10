@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Book } from '@booktrap/shared';
-import { DEFAULT_QUERY, applyQuery, flagCounts } from './filters';
+import { DEFAULT_QUERY, activeTab, applyQuery, flagCounts, tabQuery } from './filters';
 
 let n = 0;
 const book = (overrides: Partial<Book>): Book => ({
@@ -68,6 +68,17 @@ describe('applyQuery', () => {
 
 describe('flagCounts', () => {
   it('counts each flag', () => {
-    expect(flagCounts(books)).toEqual({ all: 4, new: 1 });
+    const counts = flagCounts(books);
+    expect(counts).toMatchObject({ all: 4, new: 1 });
+    expect(counts.want_to_read + counts.reading + counts.read).toBe(4);
+  });
+});
+
+describe('shelf page-tabs', () => {
+  it('maps each tab to a query and back', () => {
+    for (const tab of ['all', 'new', 'want_to_read', 'reading', 'read'] as const) {
+      expect(activeTab({ ...DEFAULT_QUERY, ...tabQuery(tab) })).toBe(tab);
+    }
+    expect(tabQuery('reading')).toEqual({ flag: 'all', status: 'reading' });
   });
 });

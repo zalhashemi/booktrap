@@ -287,7 +287,7 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
 
   // The listing is paid for: a brief database hiccup here must not send the next attempt to pay again.
   const newItems = listing.videos.map((video) => ({ inputUrl: video.url, platform: 'tiktok' as const, postId: video.postId, kind: video.kind }));
-  let children: JobItemRecord[] = [];
+  let children: JobItemRecord[];
   for (let attempt = 0; ; attempt++) {
     try {
       children = await store.addChildItems(item, newItems);

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowsMerge, Trash, X } from '@phosphor-icons/react';
+import { ArrowsMerge, Export, Trash, X } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
 import { CoverPlate } from './BookRow';
 import { Button } from './Button';
@@ -8,12 +8,13 @@ interface Props {
   selected: Book[];
   onDelete: () => void;
   onMerge: (keep: Book, others: Book[]) => void;
+  onExport: () => void;
   onCancel: () => void;
   busy: boolean;
 }
 
 /** Bulk actions for select mode: sits above the tab bar on phones, at the bottom on desktop. */
-export function SelectionBar({ selected, onDelete, onMerge, onCancel, busy }: Props) {
+export function SelectionBar({ selected, onDelete, onMerge, onExport, onCancel, busy }: Props) {
   const [merging, setMerging] = useState(false);
   const count = selected.length;
 
@@ -24,7 +25,8 @@ export function SelectionBar({ selected, onDelete, onMerge, onCancel, busy }: Pr
         aria-label="Selected books"
         className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-[640px] rounded-[22px] bg-surface shadow-[var(--elev-lift),inset_0_0_0_1.5px_var(--rule-accent)] md:bottom-6"
       >
-        <div className="flex items-center gap-2 px-2 py-2">
+        {/* Phones put the actions on their own row so every label fits; wider screens keep one row. */}
+        <div className="flex flex-wrap items-center gap-2 px-2 py-2">
           <button
             type="button"
             onClick={onCancel}
@@ -33,17 +35,24 @@ export function SelectionBar({ selected, onDelete, onMerge, onCancel, busy }: Pr
           >
             <X size={22} aria-hidden="true" />
           </button>
-          <p className="mr-auto min-w-0 truncate text-[0.9rem] font-bold whitespace-nowrap" aria-live="polite">
+          <p className="min-w-0 flex-1 truncate text-[0.9rem] font-bold whitespace-nowrap" aria-live="polite">
             {count === 0 ? 'Pick books' : `${count} selected`}
           </p>
-          <Button type="button" variant="quiet" onClick={() => setMerging(true)} disabled={count < 2 || busy} className="min-h-11 px-3">
-            <ArrowsMerge size={18} aria-hidden="true" />
-            Merge
-          </Button>
-          <Button type="button" onClick={onDelete} disabled={count === 0 || busy} className="min-h-11 px-3">
-            <Trash size={18} aria-hidden="true" />
-            Delete
-          </Button>
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+            <Button type="button" variant="quiet" onClick={onExport} disabled={count === 0} className="min-h-11 gap-1.5 px-2 sm:gap-2 sm:px-3">
+              <Export size={18} aria-hidden="true" className="shrink-0" />
+              Export
+            </Button>
+            <Button type="button" variant="quiet" onClick={() => setMerging(true)} disabled={count < 2 || busy} className="min-h-11 gap-1.5 px-2 sm:gap-2 sm:px-3">
+              <ArrowsMerge size={18} aria-hidden="true" className="shrink-0" />
+              Merge
+            </Button>
+            {/* Delete reads as it does in the book sheet: the note colour, not the teal that means "go". */}
+            <Button type="button" variant="quiet" onClick={onDelete} disabled={count === 0 || busy} className="min-h-11 gap-1.5 px-2 text-note-ink sm:gap-2 sm:px-3">
+              <Trash size={18} aria-hidden="true" className="shrink-0" />
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
       {merging && (
@@ -79,7 +88,7 @@ function MergeDialog({ books, onCancel, onConfirm }: { books: Book[]; onCancel: 
         onCancel();
       }}
       aria-labelledby="merge-title"
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[24px] bg-ground-raised p-0 text-text shadow-[0_24px_60px_-20px_rgb(0_0_0/0.8),inset_0_0_0_1px_var(--rule-accent)] backdrop:bg-[rgb(10_9_7/0.66)]"
+      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[24px] bg-ground-raised p-0 text-text shadow-[var(--elev-lift),inset_0_0_0_1px_var(--rule-accent)] backdrop:bg-[rgb(31_28_36/0.6)]"
     >
       <form
         method="dialog"

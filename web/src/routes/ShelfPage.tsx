@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
-import { Checks, ListChecks } from '@phosphor-icons/react';
+import { Checks, Export, ListChecks } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
 import { BookRow } from '../components/BookRow';
 import { BookSheet } from '../components/BookSheet';
 import { Button, ButtonLink } from '../components/Button';
+import { ExportSheet, type ExportScope } from '../components/ExportSheet';
 import { SelectionBar } from '../components/SelectionBar';
 import { ShelfGrid } from '../components/ShelfGrid';
 import { ShelfToolbar, type ViewMode } from '../components/ShelfToolbar';
@@ -57,11 +58,17 @@ export function ShelfPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exportScope, setExportScope] = useState<ExportScope | null>(null);
 
   const all = useMemo(() => books.data ?? [], [books.data]);
   const counts = useMemo(() => flagCounts(all), [all]);
   const visible = useMemo(() => applyQuery([...all], query), [all, query]);
   const openBook = all.find((book) => book.id === openId) ?? null;
+  const filtered = isFiltered(query);
+  // Exports keep the shelf's current sort, whichever books they cover.
+  const wholeShelf = useMemo(() => applyQuery([...all], { ...DEFAULT_QUERY, sort: query.sort }), [all, query.sort]);
+  // Every ticked book, as the selection bar counts them, even ones the current filters hide.
+  const selectedBooks = useMemo(() => wholeShelf.filter((book) => selected.has(book.id)), [wholeShelf, selected]);
 
   const updateQuery = (next: ShelfQuery) => {
     setQuery(next);
@@ -106,31 +113,45 @@ export function ShelfPage() {
   const newCount = counts.new;
 
   return (
-    <div className={selecting ? "pb-24" : undefined}>
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <div className={selecting ? 'pb-36 sm:pb-24' : undefined}>
+      {/* Phones keep this to the title, the count and Export: the books start high on the page. */}
+      <div className="flex items-start justify-between gap-x-6 gap-y-3">
         <div>
-          <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Your shelf</h1>
+          <h1 className="font-display text-[2.2rem] leading-[1.05] md:text-[3.1rem]">Your shelf</h1>
           {all.length > 0 && (
-            <p className="marginalia mt-1.5 text-[1.1rem]">
-              {all.length} {all.length === 1 ? 'book' : 'books'}
-              {newCount > 0 && <span className="text-text">, {newCount} new!</span>}
+            <p className="marginalia mt-1 flex flex-wrap items-baseline gap-x-2 text-[1.1rem]">
+              <span>
+                {all.length} {all.length === 1 ? 'book' : 'books'}
+                {newCount > 0 && <span className="text-text">, {newCount} new!</span>}
+              </span>
+              {newCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => markAllSeen.mutate()}
+                  className="-my-3 inline-flex min-h-11 items-center gap-1 font-sans text-[0.85rem] font-bold text-accent-ink underline-offset-4 hover:underline"
+                >
+                  <Checks size={16} weight="bold" aria-hidden="true" />
+                  Mark all as seen
+                </button>
+              )}
             </p>
           )}
         </div>
         {all.length > 0 && (
-          <div className="flex gap-2">
-            {newCount > 0 && (
-              <Button type="button" variant="quiet" onClick={() => markAllSeen.mutate()} className="min-h-11 px-4 text-[0.92rem]">
-                <Checks size={18} weight="bold" aria-hidden="true" />
-                Mark all as seen
-              </Button>
-            )}
+          <div className="flex shrink-0 gap-2 pt-1 md:pt-3">
             {!selecting && (
-              <Button type="button" variant="quiet" onClick={() => setSelecting(true)} className="min-h-11 px-4 text-[0.92rem]">
-                <ListChecks size={18} weight="bold" aria-hidden="true" />
-                Select
-              </Button>
+              // Phones start select mode from the tab row instead.
+              <span className="hidden md:contents">
+                <Button type="button" variant="quiet" onClick={() => setSelecting(true)} className="min-h-11 px-4 text-[0.92rem]">
+                  <ListChecks size={18} weight="bold" aria-hidden="true" />
+                  Select
+                </Button>
+              </span>
             )}
+            <Button type="button" variant="quiet" onClick={() => setExportScope(selecting && selected.size > 0 ? 'selected' : filtered ? 'view' : 'all')} className="min-h-11 px-4 text-[0.92rem]">
+              <Export size={18} weight="bold" aria-hidden="true" />
+              Export
+            </Button>
           </div>
         )}
       </div>
@@ -160,13 +181,21 @@ export function ShelfPage() {
         </>
       ) : (
         <>
-          <ShelfToolbar query={query} onChange={updateQuery} counts={counts} tags={tags.data ?? []} view={prefs.view} onViewChange={setView} />
+          <ShelfToolbar
+            query={query}
+            onChange={updateQuery}
+            counts={counts}
+            tags={tags.data ?? []}
+            view={prefs.view}
+            onViewChange={setView}
+            onSelect={selecting ? undefined : () => setSelecting(true)}
+          />
 
           {visible.length === 0 ? (
             <div className="mt-12 max-w-[34rem]">
               <h2 className="font-display text-[1.5rem]">No books match</h2>
               <p className="mt-2 text-text-muted">Try a different search, or clear the filters to see your whole shelf.</p>
-              {isFiltered(query) && (
+              {filtered && (
                 <Button type="button" variant="quiet" onClick={() => setQuery({ ...DEFAULT_QUERY, sort: query.sort })} className="mt-5">
                   Clear filters
                 </Button>
@@ -200,9 +229,20 @@ export function ShelfPage() {
         }}
       />
 
+      <ExportSheet
+        open={exportScope !== null}
+        onClose={() => setExportScope(null)}
+        all={wholeShelf}
+        view={visible}
+        filtered={filtered}
+        selected={selecting ? selectedBooks : null}
+        initialScope={exportScope ?? 'all'}
+      />
+
       {selecting && (
         <SelectionBar
-          selected={all.filter((book) => selected.has(book.id))}
+          selected={selectedBooks}
+          onExport={() => setExportScope('selected')}
           busy={deleteBooks.isPending || mergeBooks.isPending}
           onCancel={stopSelecting}
           onDelete={() => {

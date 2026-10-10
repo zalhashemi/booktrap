@@ -20,9 +20,11 @@ export interface AppDeps {
   queue: JobQueue;
   /** Test seam for book re-verification. */
   verifyBook?: typeof verifyBook;
+  /** Test seam for outbound fetches made by routes (book covers). */
+  fetchImpl?: typeof fetch;
 }
 
-export async function buildApp({ config, devices, store, queue, verifyBook: verify }: AppDeps) {
+export async function buildApp({ config, devices, store, queue, verifyBook: verify, fetchImpl }: AppDeps) {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'test' ? 'silent' : config.LOG_LEVEL,
@@ -82,7 +84,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       pipelineConfigured: Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
     },
   });
-  libraryRoutes(app, { devices, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify });
+  libraryRoutes(app, { devices, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
 
   return app;
 }

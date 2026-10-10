@@ -3,7 +3,8 @@ import { Copy, DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react
 import { ApiRequestError } from '../api/client';
 import { decodeBackupCode, encodeBackupCode } from '../device/backupCode';
 import { markBackupSaved } from '../device/backupPrompt';
-import { useDevice } from '../device/DeviceProvider';
+import { useDevice } from '../device/device-context';
+import { downloadFile } from '../library/export';
 import { useCreateTag, useDeleteTag, useRenameTag, useTags } from '../library/hooks';
 import { Button } from './Button';
 import { useToast } from './toast-context';
@@ -46,12 +47,7 @@ export function BackupSection() {
 
   const download = () => {
     const text = `BookTrap backup code\n\n${code}\n\nEnter it in BookTrap under Settings, "Restore from a backup code", to open this shelf on another browser.\nAnyone with this code can open your shelf, so keep it private.\n`;
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'booktrap-backup-code.txt';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadFile('booktrap-backup-code.txt', text);
     markBackupSaved();
   };
 
@@ -119,7 +115,7 @@ export function BackupSection() {
       )}
 
       <form onSubmit={(event) => void onRestore(event)} className="mt-8" noValidate>
-        <label htmlFor={inputId} className="block text-[0.95rem] font-medium">
+        <label htmlFor={inputId} className="block text-[0.95rem] font-bold">
           Restore from a backup code
         </label>
         <p id={helpId} className="mt-0.5 text-sm text-text-muted">
@@ -190,7 +186,7 @@ export function ShelvesSection() {
       )}
       <form onSubmit={add} className="mt-4 flex flex-wrap items-end gap-2" noValidate>
         <div className="min-w-[12rem] flex-1">
-          <label htmlFor={inputId} className="block text-[0.95rem] font-medium">
+          <label htmlFor={inputId} className="block text-[0.95rem] font-bold">
             New shelf
           </label>
           <input

@@ -8,6 +8,7 @@ import {
   parseSourceUrl,
   type Job,
   type JobListResponseSchema,
+  type UsageResponse,
 } from '@booktrap/shared';
 import type { z } from 'zod';
 import { requireDevice } from '../auth/device-auth';
@@ -132,6 +133,12 @@ export function jobRoutes(
       return toJobResponse(job);
     },
   );
+
+  /** How much of today's cap this device has used (shown in Settings). */
+  app.get('/v1/usage', auth, async (request): Promise<UsageResponse> => {
+    const postsToday = await store.countItemsSince({ deviceId: request.device!.id }, utcDayStart());
+    return { postsToday, dailyLimit: options.dailyCapPerDevice };
+  });
 
   app.get('/v1/jobs', auth, async (request): Promise<z.infer<typeof JobListResponseSchema>> => {
     const jobs = await store.listJobs(request.device!.id, 5);

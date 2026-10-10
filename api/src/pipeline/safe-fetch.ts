@@ -22,6 +22,18 @@ export const MEDIA_HOSTS: HostRule[] = [
   /^[a-z0-9-]+\.byteoversea\.com$/,
 ];
 
+/**
+ * Book covers from enrichment: Google Books (which can hand off to its googleusercontent image host)
+ * and Open Library (which redirects to the Internet Archive).
+ */
+export const COVER_HOSTS: HostRule[] = [
+  'books.google.com',
+  'books.googleusercontent.com',
+  'covers.openlibrary.org',
+  'archive.org',
+  /^ia\d+\.us\.archive\.org$/,
+];
+
 export class BlockedUrlError extends Error {
   constructor(readonly url: string) {
     super(`Refusing to fetch a URL outside the allowlist: ${new URL(url).hostname}`);

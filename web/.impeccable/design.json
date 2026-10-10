@@ -1,0 +1,510 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-09T20:20:24.254Z",
+  "title": "Design System: BookTrap",
+  "extensions": {
+    "colorMeta": {
+      "dusty-lavender": {
+        "role": "secondary",
+        "displayName": "Dusty Lavender",
+        "canonical": "oklch(49.0% 0.054 303)",
+        "tonalRamp": [
+          "#10041d",
+          "#2c1f3c",
+          "#4b3e5d",
+          "#6d5f80",
+          "#9081a4",
+          "#b5a6cb",
+          "#d5cde0",
+          "#f2eafe"
+        ]
+      },
+      "vintage-grape": {
+        "role": "neutral",
+        "displayName": "Vintage Grape",
+        "canonical": "oklch(43.7% 0.032 299)",
+        "tonalRamp": [
+          "#0d0816",
+          "#292334",
+          "#474154",
+          "#686276",
+          "#8c859a",
+          "#b0aac0",
+          "#d2cfda",
+          "#f0ecf8"
+        ]
+      },
+      "slate-grey": {
+        "role": "secondary",
+        "displayName": "Slate Grey",
+        "canonical": "oklch(61.1% 0.035 227)",
+        "tonalRamp": [
+          "#000e16",
+          "#122a34",
+          "#314954",
+          "#516a76",
+          "#748e9a",
+          "#98b3bf",
+          "#c6d4da",
+          "#e3f1f8"
+        ]
+      },
+      "muted-teal": {
+        "role": "primary",
+        "displayName": "Muted Teal",
+        "canonical": "oklch(74.5% 0.066 163)",
+        "tonalRamp": [
+          "#001304",
+          "#00301d",
+          "#1c503b",
+          "#3f725c",
+          "#62967e",
+          "#87bca3",
+          "#bed8cb",
+          "#dbf6e8"
+        ]
+      },
+      "honeydew": {
+        "role": "tertiary",
+        "displayName": "Honeydew",
+        "canonical": "oklch(91.9% 0.041 160)",
+        "tonalRamp": [
+          "#001006",
+          "#132d20",
+          "#314c3e",
+          "#526e5e",
+          "#749181",
+          "#99b6a5",
+          "#c6d5cc",
+          "#e4f3ea"
+        ]
+      },
+      "new-lime": {
+        "role": "tertiary",
+        "displayName": "New Lime (reserved for New)",
+        "canonical": "oklch(86.0% 0.173 118)",
+        "tonalRamp": [
+          "#090e00",
+          "#222d00",
+          "#3e4e00",
+          "#5e7100",
+          "#809600",
+          "#a4bc0f",
+          "#cbd999",
+          "#e8f7b5"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Washed Honeydew Ground (light default)",
+        "canonical": "oklch(97.1% 0.008 157)"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Card White"
+      },
+      "surface-sunk": {
+        "role": "neutral",
+        "displayName": "Sunk Page (fields)"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Grape Ink",
+        "canonical": "oklch(28.2% 0.022 300)"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Muted Teal (action)"
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Teal Ink (success, light focus)"
+      },
+      "note-ink": {
+        "role": "secondary",
+        "displayName": "Lavender Pencil"
+      },
+      "reading": {
+        "role": "secondary",
+        "displayName": "Reading Slate"
+      },
+      "read": {
+        "role": "tertiary",
+        "displayName": "Read Honeydew"
+      },
+      "on-tab": {
+        "role": "neutral",
+        "displayName": "Tab Ink"
+      },
+      "dark-ground": {
+        "role": "neutral",
+        "displayName": "Deep Grape Ground (dark)",
+        "canonical": "oklch(28.2% 0.022 300)"
+      },
+      "dark-surface": {
+        "role": "neutral",
+        "displayName": "Lifted Grape Card"
+      },
+      "dark-text": {
+        "role": "neutral",
+        "displayName": "Honeydew Ink"
+      },
+      "cloth-1": {
+        "role": "neutral",
+        "displayName": "Lavender Bookcloth"
+      },
+      "cloth-2": {
+        "role": "neutral",
+        "displayName": "Grape Bookcloth"
+      },
+      "cloth-3": {
+        "role": "neutral",
+        "displayName": "Slate Bookcloth"
+      },
+      "cloth-4": {
+        "role": "neutral",
+        "displayName": "Teal Bookcloth"
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Grape Scrim",
+        "canonical": "rgb(31 28 36 / 0.6)"
+      },
+      "wordmark-deboss": {
+        "role": "neutral",
+        "displayName": "Wordmark Deboss (dark only)",
+        "canonical": "rgb(0 0 0 / 0.35)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display (Young Serif)",
+        "purpose": "Every page headline from 768px."
+      },
+      "display-phone-lg": {
+        "displayName": "Display, phone large",
+        "purpose": "Settings headline on phones."
+      },
+      "display-phone": {
+        "displayName": "Display, phone",
+        "purpose": "Add headline on phones."
+      },
+      "display-phone-sm": {
+        "displayName": "Display, phone small",
+        "purpose": "Shelf headline on phones."
+      },
+      "display-compact": {
+        "displayName": "Display, compact",
+        "purpose": "404 headline at every width."
+      },
+      "display-state": {
+        "displayName": "Display, full-screen state",
+        "purpose": "Connection and waking-server screens."
+      },
+      "headline-lg": {
+        "displayName": "Headline, large",
+        "purpose": "Export sheet title."
+      },
+      "headline-sheet": {
+        "displayName": "Headline, sheet",
+        "purpose": "Book sheet title."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Settings sections and empty states."
+      },
+      "headline-sm": {
+        "displayName": "Headline, small",
+        "purpose": "Merge dialog title."
+      },
+      "headline-xs": {
+        "displayName": "Headline, extra small",
+        "purpose": "In progress heading beside the paste card."
+      },
+      "wordmark-lg": {
+        "displayName": "Wordmark, desktop",
+        "purpose": "Header wordmark from 768px; Opening your shelf line."
+      },
+      "wordmark": {
+        "displayName": "Wordmark, phone",
+        "purpose": "Header wordmark on phones."
+      },
+      "title": {
+        "displayName": "Book Title",
+        "purpose": "Book titles in list rows."
+      },
+      "title-grid": {
+        "displayName": "Book Title, grid",
+        "purpose": "Book titles under grid covers."
+      },
+      "body": {
+        "displayName": "Body (Nunito)",
+        "purpose": "Copy and field text."
+      },
+      "label-lg": {
+        "displayName": "Label, large",
+        "purpose": "Buttons."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Page-tabs, nav pills, field labels."
+      },
+      "label-sm": {
+        "displayName": "Label, small",
+        "purpose": "Segmented toggles and export row buttons."
+      },
+      "label-xs": {
+        "displayName": "Label, extra small",
+        "purpose": "Compact pills: view toggle, link chips, small export actions."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Tags, sources, picker labels."
+      },
+      "micro-chip": {
+        "displayName": "Micro, chip",
+        "purpose": "New and status chips, job stage badges."
+      },
+      "micro-nav": {
+        "displayName": "Micro, nav",
+        "purpose": "Phone tab-bar labels and the status word under grid covers."
+      },
+      "micro-count": {
+        "displayName": "Micro, count",
+        "purpose": "Only the numeric count badge on the phone filter button (count duplicated in the accessible name)."
+      },
+      "marginalia": {
+        "displayName": "Margin Note (Kalam)",
+        "purpose": "Sparing pencil asides, rotated -1.5deg, never the only carrier of actionable information."
+      }
+    },
+    "shadows": [
+      {
+        "name": "elev-soft",
+        "value": "0 10px 22px -14px rgb(43 39 51 / 0.3)",
+        "purpose": "Light theme: paste card, primary buttons, covers. Dark: 0 10px 24px -14px rgb(12 8 20 / 0.7)."
+      },
+      {
+        "name": "elev-lift",
+        "value": "0 18px 34px -18px rgb(43 39 51 / 0.4)",
+        "purpose": "Light theme: everything that floats or overlays: phone tab bar, selection bar, sheets, merge dialog, toasts. Dark: 0 18px 36px -18px rgb(12 8 20 / 0.8)."
+      },
+      {
+        "name": "hairline",
+        "value": "inset 0 0 0 1.5px var(--rule)",
+        "purpose": "Outline on cards, quiet buttons, toggles, nav; hover swaps to --rule-accent."
+      },
+      {
+        "name": "field-focus",
+        "value": "0 0 0 4px var(--rule-accent)",
+        "purpose": "Focus halo on fields."
+      },
+      {
+        "name": "cover-tab-edge",
+        "value": "inset 0 0 0 1.5px var(--cover-tab-edge)",
+        "purpose": "Keeps pale state tabs at 3:1 on the pale ground."
+      },
+      {
+        "name": "paper-grain",
+        "value": "fixed fractal-noise SVG overlay, opacity 0.035 light / 0.05 dark",
+        "purpose": "Paper texture over the whole page, never on a scrolling layer."
+      },
+      {
+        "name": "wordmark-deboss",
+        "value": "text-shadow: 0 1px 0 rgb(0 0 0 / 0.35)",
+        "purpose": "Hairline deboss under the dark-theme wordmark; none in light."
+      },
+      {
+        "name": "scrim",
+        "value": "rgb(31 28 36 / 0.6)",
+        "purpose": "Backdrop behind modal sheets and dialogs."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-snappy",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "State transitions, press-in, page-tab lift (220ms), toast rise."
+      },
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entrances: sheet (0.42s), cover-tab drop (0.5s), highlighter sweep (0.7s), ghost books settling (0.7s, 70ms stagger)."
+      },
+      {
+        "name": "press",
+        "value": "scale(0.97) on :active, 200ms",
+        "purpose": "The one physical response every control shares."
+      },
+      {
+        "name": "reading-room-loops",
+        "value": "flicker 2.8s, breathe 4.6s / 7s, dust drift",
+        "purpose": "The only infinite motion; transform and opacity only."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "entrances removed, loops stopped, transitions 0.01ms",
+        "purpose": "Static scene stays; nothing waits at a first-frame offset."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "reading-room",
+        "value": "1240px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The teal pill: the one colour that means act.",
+      "html": "<button class=\"ds-btn-primary\">Catch books</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; border: none; border-radius: 999px; background: var(--action, #85baa1); color: var(--on-action, #1f1c24); font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 0.98rem; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), var(--elev-soft, 0 10px 22px -14px rgb(43 39 51 / 0.3)); transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 200ms cubic-bezier(0.22, 1, 0.36, 1); cursor: pointer; } .ds-btn-primary:hover { background: var(--action-hover, #74ad92); } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus, #3e7a60); outline-offset: 3px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Card-coloured pill with a hairline, for secondary actions.",
+      "html": "<button class=\"ds-btn-quiet\">Export</button>",
+      "css": ".ds-btn-quiet { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 24px; border: none; border-radius: 999px; background: var(--surface, #fbfdfc); color: var(--text, #2b2733); font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 0.98rem; box-shadow: inset 0 0 0 1.5px var(--rule, #cfdcd5); transition: box-shadow 200ms, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); cursor: pointer; } .ds-btn-quiet:hover { box-shadow: inset 0 0 0 1.5px var(--rule-accent, rgb(62 122 96 / 0.45)); } .ds-btn-quiet:active { transform: scale(0.97); } .ds-btn-quiet:focus-visible { outline: 2px solid var(--focus, #3e7a60); outline-offset: 3px; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A lighter page set into the card; teal border and halo on focus.",
+      "html": "<input class=\"ds-field\" placeholder=\"Search your shelf\" />",
+      "css": ".ds-field { display: block; width: 100%; min-height: 46px; padding: 10px 15px; border: 1.5px solid var(--rule, #cfdcd5); border-radius: 14px; background: var(--surface-sunk, #eaf2ed); color: var(--text, #2b2733); font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-size: 1rem; line-height: 1.5; caret-color: var(--accent, #85baa1); transition: border-color 180ms, box-shadow 180ms; } .ds-field::placeholder { color: var(--placeholder, #6a6680); opacity: 1; } .ds-field:hover { border-color: var(--rule-accent, rgb(62 122 96 / 0.45)); } .ds-field:focus { outline: none; border-color: var(--accent, #85baa1); box-shadow: 0 0 0 4px var(--rule-accent, rgb(62 122 96 / 0.45)); }"
+    },
+    {
+      "name": "Page-Tabs",
+      "kind": "custom",
+      "refersTo": "page-tab",
+      "description": "Signature filter control: state-coloured paper tabs standing on a teal page edge.",
+      "html": "<div class=\"ds-tab-row\"><button class=\"ds-tab ds-tab-all\" aria-pressed=\"true\">All <span>42</span></button><button class=\"ds-tab ds-tab-new\" aria-pressed=\"false\">New <span>5</span></button><button class=\"ds-tab ds-tab-reading\" aria-pressed=\"false\">Reading <span>3</span></button><button class=\"ds-tab ds-tab-read\" aria-pressed=\"false\">Read <span>12</span></button></div>",
+      "css": ".ds-tab-row { display: flex; gap: 0.4rem; padding-inline: 0.25rem; border-bottom: 3px solid var(--accent, #85baa1); } .ds-tab { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; padding: 0.4rem 0.95rem 0.45rem; border: none; border-radius: 12px 12px 3px 3px; font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 0.92rem; color: var(--text-muted, #54506a); transform: translateY(4px); transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms, color 160ms; cursor: pointer; } .ds-tab span { font-variant-numeric: tabular-nums; } .ds-tab:hover { transform: translateY(1px); color: var(--text, #2b2733); } .ds-tab[aria-pressed='true'] { transform: translateY(0); color: var(--on-tab, #1f1c24); } .ds-tab:focus-visible { outline: 2px solid var(--focus, #3e7a60); outline-offset: 3px; } .ds-tab-all { background: color-mix(in srgb, #85baa1 22%, #fbfdfc); } .ds-tab-all[aria-pressed='true'] { background: #85baa1; } .ds-tab-new { background: color-mix(in srgb, #c6e04a 20%, #fbfdfc); } .ds-tab-new[aria-pressed='true'] { background: #c6e04a; } .ds-tab-reading { background: color-mix(in srgb, #9db3bd 28%, #fbfdfc); } .ds-tab-reading[aria-pressed='true'] { background: #9db3bd; } .ds-tab-read { background: color-mix(in srgb, #ceeddb 45%, #fbfdfc); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, #2b2733 45%, transparent); } .ds-tab-read[aria-pressed='true'] { background: #ceeddb; }"
+    },
+    {
+      "name": "Cover with State Tabs",
+      "kind": "custom",
+      "refersTo": "cover-tab",
+      "description": "A 2:3 cover (bookcloth placeholder shown) with state tabs and glyphs peeking from its top edge.",
+      "html": "<div class=\"ds-cover\"><div class=\"ds-cover-tabs\"><span class=\"ds-ctab ds-ctab-new\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><path fill=\"currentColor\" d=\"M208 144l-56 16-16 56a8 8 0 0 1-16 0l-16-56-56-16a8 8 0 0 1 0-16l56-16 16-56a8 8 0 0 1 16 0l16 56 56 16a8 8 0 0 1 0 16Z\"/></svg></span><span class=\"ds-ctab ds-ctab-read\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"24\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M40 144l56 56L224 72\"/></svg></span></div><div class=\"ds-plate\"><span class=\"ds-plate-rule\"></span><span class=\"ds-plate-title\">The Night Circus</span><span class=\"ds-plate-author\">E. Morgenstern</span><span class=\"ds-plate-rule\"></span></div></div>",
+      "css": ".ds-cover { position: relative; width: 120px; } .ds-cover-tabs { position: absolute; top: -14px; left: 8px; right: 8px; display: flex; justify-content: flex-end; gap: 4px; } .ds-ctab { display: flex; justify-content: center; width: 28px; height: 28px; padding-top: 2px; border-radius: 6px 6px 0 0; color: #1f1c24; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, #2b2733 45%, transparent); } .ds-ctab-new { background: #c6e04a; } .ds-ctab-read { background: #ceeddb; } .ds-plate { position: relative; aspect-ratio: 2 / 3; border-radius: 5px; overflow: hidden; background: #67597a; color: #f2faf5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 9%; text-align: center; box-shadow: 0 10px 22px -14px rgb(43 39 51 / 0.3); } .ds-plate::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 7%; background: linear-gradient(to right, rgb(0 0 0 / 0.25), transparent); } .ds-plate-rule { width: 50%; height: 1px; background: rgb(133 186 161 / 0.8); } .ds-plate-title { font-family: 'Young Serif', Georgia, serif; font-size: 1rem; line-height: 1.15; } .ds-plate-author { font-family: 'Kalam', 'Segoe Print', cursive; font-size: 0.8rem; opacity: 0.9; }"
+    },
+    {
+      "name": "New Highlighter Title",
+      "kind": "custom",
+      "refersTo": "new-chip",
+      "description": "A new book's Young Serif title on a hand-cut lime marker stroke.",
+      "html": "<p class=\"ds-title\"><span class=\"ds-highlight\">Fourth Wing</span></p>",
+      "css": ".ds-title { font-family: 'Young Serif', Georgia, serif; font-size: 1.12rem; line-height: 1.375; color: var(--text, #2b2733); } .ds-highlight { color: #1f1c24; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath fill='%23c6e04a' d='M3 13C30 8 70 11 97 6L99 30L96.5 52L99.5 74L97 95C70 97 30 99 2 97L0 72L3 50L0.5 28Z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-size: 100% 100%; box-decoration-break: clone; -webkit-box-decoration-break: clone; padding-inline: 0.12em; margin-inline: -0.12em; }"
+    },
+    {
+      "name": "Header Nav",
+      "kind": "nav",
+      "refersTo": "nav-pill-active",
+      "description": "Desktop pill nav in the header; the active item fills teal with dark ink.",
+      "html": "<ul class=\"ds-nav\"><li><a class=\"ds-nav-item is-active\" href=\"#\">Add</a></li><li><a class=\"ds-nav-item\" href=\"#\">Shelf</a></li><li><a class=\"ds-nav-item\" href=\"#\">Settings</a></li></ul>",
+      "css": ".ds-nav { display: flex; gap: 4px; padding: 4px; margin: 0; list-style: none; border-radius: 999px; background: var(--surface, #fbfdfc); box-shadow: inset 0 0 0 1.5px var(--rule, #cfdcd5); width: max-content; } .ds-nav-item { display: flex; align-items: center; height: 44px; padding: 0 16px; border-radius: 999px; font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--text-muted, #54506a); text-decoration: none; transition: color 200ms, background-color 200ms; } .ds-nav-item:hover { color: var(--text, #2b2733); } .ds-nav-item.is-active { background: var(--accent, #85baa1); color: var(--on-tab, #1f1c24); } .ds-nav-item:focus-visible { outline: 2px solid var(--focus, #3e7a60); outline-offset: 3px; }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "status-chip-reading",
+      "description": "State as word plus colour: New in lime, Reading in slate, Read in honeydew, tags as bold slate text.",
+      "html": "<span class=\"ds-chip ds-chip-new\">New</span> <span class=\"ds-chip ds-chip-reading\">Reading</span> <span class=\"ds-chip ds-chip-read\">Read</span> <span class=\"ds-tag\">#fantasy</span>",
+      "css": ".ds-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-size: 0.78rem; font-weight: 700; color: #1f1c24; } .ds-chip-new { background: #c6e04a; font-weight: 800; } .ds-chip-reading { background: #9db3bd; } .ds-chip-read { background: #ceeddb; } .ds-tag { font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; font-size: 0.8rem; font-weight: 700; color: var(--tag-ink, #4f6670); }"
+    },
+    {
+      "name": "Paste Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The 20px card with hairline and soft drop, a label and a Kalam margin note.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><strong>TikTok or Instagram links</strong><span class=\"ds-note\">share links work too!</span></div></div>",
+      "css": ".ds-card { padding: 24px; border-radius: 20px; background: var(--surface, #fbfdfc); box-shadow: var(--elev-soft, 0 10px 22px -14px rgb(43 39 51 / 0.3)), inset 0 0 0 1.5px var(--rule, #cfdcd5); font-family: 'Nunito Variable', ui-rounded, system-ui, sans-serif; color: var(--text, #2b2733); } .ds-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; } .ds-note { font-family: 'Kalam', 'Segoe Print', cursive; font-size: 0.95rem; line-height: 1.3; color: var(--note-ink, #67597a); transform: rotate(-1.5deg); display: inline-block; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Annotated Paperback",
+    "overview": "BookTrap is a well-loved paperback that its reader has marked up: coloured sticky page-tabs, a lime highlighter stroke across a fresh find, pencil notes in the margin. The shelf is a reading list annotated the way BookTok readers annotate books. It rejects both the generic grey list app and the museum-piece dark-academia library: playful, rounded and warm, never solemn.\n\nLight is the default: a washed Honeydew ground with near-white cards and deep-grape ink. The dark theme is a softer night version on deep Vintage Grape, never near-black. Depth is soft and low (hairline inset rules plus a diffuse drop), a faint paper grain sits over everything, and the type does the hierarchy through scale contrast rather than ornament. On wide screens the page sits inside a drawn reading room (arched window, candle on a book stack with a bookworm, hanging lamp, bookcase with ladder) that changes from day to night with the theme.\n\nDensity is relaxed and mobile-first: one 1080px column, 44px minimum targets, a floating tab bar on phones and a pill nav in the header on desktop.",
+    "keyCharacteristics": [
+      "Page-tabs are the signature control: filter tabs standing on a teal page edge, and state tabs peeking from every cover's top edge.",
+      "Teal is the one colour that means \"act\"; lime appears only for New.",
+      "Young Serif for headlines and book titles, Nunito for every control, Kalam for sparing margin notes.",
+      "Pills for anything you press, 20px cards, 14px fields, 5px covers.",
+      "Status is never colour alone: every state carries a word or a glyph.",
+      "Motion is small and physical: a press-in on tap, a tab dropping onto a cover, a highlighter sweeping in once."
+    ],
+    "rules": [
+      {
+        "name": "The One Action Colour Rule",
+        "body": "Teal means \"act\". Nothing decorative wears a teal fill except the page edge and the reading room's flame and leaves.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reserved Lime Rule",
+        "body": "Lime is for New and nothing else: highlighter, New chip, New tab, New cover tab. It is the same value in both themes; dark mode shows the resting New tab as a lime outline on the card colour because a lime tint goes olive on grape.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink-On-Tab Rule",
+        "body": "Every tab and state fill (teal, slate, honeydew, lime) carries the same dark ink (on-tab), never white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Titles-Are-Serif Rule",
+        "body": "Headlines and book titles are Young Serif; every control, label and number is Nunito. A button is never serif and a book title is never sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Micro Floor Rule",
+        "body": "Nothing smaller than 0.75rem carries words; 0.7rem is for a single count in a badge that duplicates an accessible name.",
+        "section": "typography"
+      },
+      {
+        "name": "The Pencil Rule",
+        "body": "Kalam is sparing and decorative: a margin note is never the only carrier of something you must read to act, and it is aria-hidden when it duplicates visible text.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline-Not-Border Rule",
+        "body": "Containers are outlined with a 1.5px inset shadow, not a CSS border, so the outline never changes the box size. Fields are the exception (a real 1.5px border that turns teal on focus).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use the semantic role tokens (accent, note, reading, read, surface) in components, never a palette hex.",
+      "**Do** pair every status colour with its word or glyph: tab labels, status chips, cover-tab glyphs.",
+      "**Do** keep every interactive target at 44px or more, including icon-only buttons and nav pills.",
+      "**Do** keep ink dark (on-tab) on every teal, slate, honeydew and lime fill.",
+      "**Do** give every entrance and loop a reduced-motion path; entrances are skipped entirely, never left at a first-frame offset.",
+      "**Do** keep covers at one 2:3 ratio on a shared baseline, with the bookcloth plate always underneath so a slow cover never leaves a blank.",
+      "**Do** keep the dark theme on deep grape (#2b2733) and check both themes for AA contrast."
+    ],
+    "donts": [
+      "**Don't** use lime for anything but New.",
+      "**Don't** use teal fills for decoration on interface surfaces; teal means act.",
+      "**Don't** set controls in Young Serif or book titles in Nunito.",
+      "**Don't** put information you need to act on only in Kalam margin notes.",
+      "**Don't** use near-black for the dark ground or white text on state fills.",
+      "**Don't** square off a pressable control; anything you press is a pill.",
+      "**Don't** let the reading room catch pointer events, carry meaning, or animate under reduced motion."
+    ]
+  }
+}

@@ -49,6 +49,8 @@ export default defineConfig(({ command, mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          // The PDF engine loads only when someone exports a PDF, and needs the network for covers anyway.
+          globIgnores: ['**/renderPdf-*.js'],
           navigateFallback: 'index.html',
           // The API lives on another origin and is never cached by the service worker.
           runtimeCaching: [],

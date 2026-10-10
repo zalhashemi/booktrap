@@ -13,11 +13,8 @@ export interface ShelfQuery {
 
 export const DEFAULT_QUERY: ShelfQuery = { search: '', flag: 'all', status: 'any', tagId: 'any', sort: 'added' };
 
-export const STATUS_LABELS: Record<BookStatus, string> = {
-  want_to_read: 'Want to read',
-  reading: 'Reading',
-  read: 'Read',
-};
+/** Shared with the exports, so the shelf and a plain-text copy always say the same thing. */
+export { STATUS_LABELS } from '@booktrap/shared';
 
 function fold(text: string): string {
   return text
@@ -61,11 +58,29 @@ export function applyQuery(books: Book[], query: ShelfQuery): Book[] {
   return filtered.sort(compare[query.sort]);
 }
 
-export function flagCounts(books: Book[]) {
+/** Counts for the shelf's page-tabs: everything, New, and each status. */
+export function flagCounts(books: Book[]): Record<ShelfTab, number> {
+  const byStatus = (status: BookStatus) => books.filter((book) => book.status === status).length;
   return {
     all: books.length,
     new: books.filter((book) => book.isNew).length,
+    want_to_read: byStatus('want_to_read'),
+    reading: byStatus('reading'),
+    read: byStatus('read'),
   };
+}
+
+/** The shelf's page-tabs: one row for New and every status (the contract's signature control). */
+export type ShelfTab = Flag | BookStatus;
+
+export function tabQuery(tab: ShelfTab): Pick<ShelfQuery, 'flag' | 'status'> {
+  if (tab === 'all' || tab === 'new') return { flag: tab, status: 'any' };
+  return { flag: 'all', status: tab };
+}
+
+export function activeTab(query: ShelfQuery): ShelfTab | null {
+  if (query.flag === 'new') return query.status === 'any' ? 'new' : null;
+  return query.status === 'any' ? 'all' : query.status;
 }
 
 export function isFiltered(query: ShelfQuery): boolean {

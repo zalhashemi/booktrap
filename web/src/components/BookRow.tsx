@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Check } from '@phosphor-icons/react';
+import { BookOpen, Check, Sparkle, type Icon } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
 import { sourceSummary } from '../library/links';
-import { claimHighlightSweep, clothFor, coverTabs, type CoverTab } from '../library/covers';
+import { bindingFor, claimHighlightSweep, clothFor, coverTabs, type CoverTab } from '../library/covers';
 import { STATUS_LABELS } from '../library/filters';
+
+/** Each cover tab carries a glyph as well as its colour, so state never rests on colour alone. */
+const TAB_GLYPHS: Record<CoverTab['key'], Icon> = { new: Sparkle, reading: BookOpen, read: Check };
 
 /** Cover at a fixed 2:3 ratio, with a bookcloth placeholder when there is no cover. */
 export function CoverPlate({
@@ -11,31 +14,38 @@ export function CoverPlate({
   className = '',
   tabs = true,
   flags: givenFlags,
+  dropTab = null,
 }: {
   book: Book;
   className?: string;
   tabs?: boolean;
   /** Precomputed tabs, when the caller already has them. */
   flags?: CoverTab[];
+  /** A tab that has just been set (in the book sheet): it drops onto the cover once. */
+  dropTab?: CoverTab['key'] | null;
 }) {
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const flags = tabs ? (givenFlags ?? coverTabs(book)) : [];
   return (
     <div className={`relative shrink-0 ${className}`}>
       {flags.length > 0 && (
-        <div className="absolute -top-2.5 right-2 left-2 flex justify-end gap-1" aria-hidden="true">
-          {flags.map((flag) => (
-            <span key={flag.key} className={`h-5 w-[20%] max-w-6 min-w-3 rounded-t-[5px] shadow-[0_-1px_0_rgb(255_255_255/0.15)_inset] ${flag.className}`} />
-          ))}
+        <div className="absolute -top-3.5 right-2 left-2 flex justify-end gap-1" aria-hidden="true">
+          {flags.map((flag) => {
+            const Glyph = TAB_GLYPHS[flag.key];
+            return (
+              <span
+                key={flag.key}
+                className={`cover-tab flex h-7 w-[24%] max-w-7 min-w-5 justify-center rounded-t-[6px] pt-[2px] text-on-tab ${flag.className} ${flag.key === dropTab ? 'cover-tab-drop' : ''}`}
+              >
+                <Glyph size={14} weight="bold" />
+              </span>
+            );
+          })}
         </div>
       )}
       <div className={`relative aspect-[2/3] overflow-hidden rounded-cover shadow-soft ${clothFor(book.title)}`}>
         {/* The bookcloth plate is always underneath, so slow or missing covers never leave a blank. */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-1.5 text-center" aria-hidden="true">
-          <span className="h-px w-1/2 bg-accent/70" />
-          <span className="line-clamp-4 font-display text-[0.62rem] leading-tight text-on-cloth">{book.title}</span>
-          <span className="h-px w-1/2 bg-accent/70" />
-        </div>
+        <LetteredPlate book={book} />
         {book.coverUrl && state !== 'failed' && (
           <img
             src={book.coverUrl}
@@ -53,6 +63,42 @@ export function CoverPlate({
         )}
         {/* A soft page-edge sheen on the spine side makes covers read as books, not tiles. */}
         <span className="pointer-events-none absolute inset-y-0 left-0 w-[7%] bg-gradient-to-r from-black/25 to-transparent" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A cover we don't have, lettered like a cloth binding: the title in Young Serif sized to the plate,
+ * the author in pencil, and one of three bindings (gilt rules, head-and-tail bands, a label panel),
+ * so a shelf of them reads as books rather than missing images.
+ */
+function LetteredPlate({ book }: { book: Book }) {
+  const binding = bindingFor(book.title);
+  return (
+    <div
+      className="@container absolute inset-0 flex flex-col items-center justify-center px-[9%] text-center text-on-cloth"
+      aria-hidden="true"
+    >
+      {binding === 1 && (
+        <>
+          <span className="absolute inset-x-0 top-[9%] h-[3%] min-h-0.5 bg-accent/60" />
+          <span className="absolute inset-x-0 bottom-[9%] h-[3%] min-h-0.5 bg-accent/60" />
+        </>
+      )}
+      <div
+        className={`flex w-full flex-col items-center gap-[0.35em] ${
+          binding === 2 ? 'rounded-[3px] border border-on-cloth/45 px-[6%] py-[10%]' : ''
+        }`}
+      >
+        {binding === 0 && <span className="h-px w-1/2 bg-accent/80" />}
+        <span className="line-clamp-5 font-display text-[clamp(0.5rem,12cqw,1.1rem)] leading-[1.15] [overflow-wrap:anywhere]">{book.title}</span>
+        {book.author && (
+          <span className="hidden max-w-full truncate font-hand text-[clamp(0.55rem,9cqw,0.9rem)] leading-tight opacity-90 @[5.5rem]:block">
+            {book.author}
+          </span>
+        )}
+        {binding === 0 && <span className="h-px w-1/2 bg-accent/80" />}
       </div>
     </div>
   );
@@ -107,7 +153,7 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
         onClick={() => (selecting ? onToggle(book) : onOpen(book))}
         aria-pressed={selecting ? selected : undefined}
         aria-label={selecting ? `${selected ? 'Deselect' : 'Select'} ${book.title}` : undefined}
-        className={`group flex w-full items-center gap-4 rounded-[18px] p-3 text-left transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.99] ${
+        className={`group flex w-full items-center gap-4 rounded-card p-3 text-left transition-[background-color,transform] duration-200 ease-snappy active:scale-[0.99] ${
           selected ? 'bg-surface shadow-[inset_0_0_0_2px_var(--accent)]' : 'hover:bg-surface'
         }`}
       >
@@ -128,7 +174,7 @@ export function BookRow({ book, onOpen, selecting, selected, onToggle }: RowProp
                 #{tag.name}
               </span>
             ))}
-            {book.sources.length > 0 && <span className="text-[0.8rem] text-text-faint">{sourceSummary(book.sources)}</span>}
+            {book.sources.length > 0 && <span className="text-[0.8rem] font-bold text-tag-ink">{sourceSummary(book.sources)}</span>}
           </span>
         </span>
       </button>

@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { useDevice } from '../device/DeviceProvider';
+import { useDevice } from '../device/device-context';
 import { BackupSection, Section, ShelvesSection } from '../components/SettingsSections';
 import { useTheme, type Theme } from '../theme';
 
@@ -18,10 +18,10 @@ export function SettingsPage() {
   return (
     <div className="max-w-[640px]">
       <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Settings</h1>
-      <DeviceSection />
       <BackupSection />
       <ShelvesSection />
       <AppearanceSection />
+      <DeviceSection />
       <ServerSection />
     </div>
   );
@@ -38,6 +38,11 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 function DeviceSection() {
   const { session, persisted } = useDevice();
+  const usage = useQuery({
+    queryKey: ['usage', session?.credentials.deviceId],
+    queryFn: ({ signal }) => api.usage(session!.credentials, signal),
+    enabled: Boolean(session),
+  });
   if (!session) return null;
 
   const storage = !session.durable
@@ -47,12 +52,24 @@ function DeviceSection() {
       : { text: 'Saved, but the browser may clear it if space runs low', tone: 'text-text' };
 
   return (
-    <Section title="This device">
+    <Section title="About this device">
       <p className="mt-2 max-w-[52ch] text-sm text-text-muted">
         BookTrap has no accounts. Your shelf belongs to this browser, identified by a private key that never
         leaves it except to talk to BookTrap.
       </p>
       <dl className="mt-4">
+        <Row label="Today">
+          {usage.data ? (
+            <span>
+              <span className="font-bold tabular-nums">
+                {usage.data.postsToday} of {usage.data.dailyLimit}
+              </span>{' '}
+              posts read. The count resets at midnight UTC.
+            </span>
+          ) : (
+            <span className="text-text-muted">{usage.isError ? 'Couldn’t check just now.' : 'Checking…'}</span>
+          )}
+        </Row>
         <Row label="Device">
           <span className="font-medium tabular-nums">{session.me.deviceId.slice(0, 8)}</span>
         </Row>

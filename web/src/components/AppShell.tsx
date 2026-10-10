@@ -1,6 +1,6 @@
 import { Books, GearSix, Plus, type Icon } from '@phosphor-icons/react';
 import { Link, NavLink, Outlet } from 'react-router';
-import { useDevice } from '../device/DeviceProvider';
+import { useDevice } from '../device/device-context';
 import { ConnectionGate } from './ConnectionGate';
 import { LibraryBackdrop, ShelfFooter } from './LibraryBackdrop';
 
@@ -40,7 +40,7 @@ export function AppShell() {
                     to={to}
                     end={to === '/'}
                     className={({ isActive }) =>
-                      `flex h-10 items-center gap-2 rounded-pill px-4 text-[0.95rem] font-bold transition-colors duration-200 ${
+                      `flex h-11 items-center gap-2 rounded-pill px-4 text-[0.95rem] font-bold transition-colors duration-200 ${
                         isActive ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
                       }`
                     }

@@ -8,11 +8,24 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 2 | Single-link pipeline | Done |
 | 3 | List experience | Done |
 | 4 | Bulk, collections and Instagram | Done |
-| 5 | Exports | Not started |
-| 6 | Design pass | Not started |
+| 5 | Exports | Done (Goodreads test import pending) |
+| 6 | Design pass | Done |
 | 7 | Hardening and deploy | Not started |
 
 ## Decisions log
+
+- 2026-10-09: **Legal and proxy research before Phase 7** (user's request; not legal advice). BookTrap reads single public posts on a user's request via Apify (logged out) and keeps book titles, the post link and the creator handle. Risks, in order: TikTok's and Meta's terms forbid automated collection (TikTok's US terms of May 2026 also name commercial use); a 2024 US ruling (Meta v. Bright Data) held logged-out scraping isn't bound by Meta's terms, but that is one district court and not TikTok. Personal data (handles, frames with people) needs a privacy policy and a lawful basis. Copyright risk is low (titles are facts; media is never republished). Charging money raises the stakes. Apify puts legal responsibility on the customer. No official API covers analysing other people's videos. **User is in Bahrain**: the Personal Data Protection Law (Law No. 30 of 2018) applies, with prior notification of processing to the Personal Data Protection Authority and rules on transfers abroad (our processors are outside Bahrain); GDPR also applies to EU users. **Before charging money, the user gets a short review from a lawyer.**
+- 2026-10-09: **Phase 7 legal scope (user):** draft a privacy policy and terms page (for the user or a lawyer to check), a takedown/contact address, and an expiry on the post cache so full scraped records aren't kept indefinitely.
+- 2026-10-09: **Proxies (user):** Apify's actors already use Apify's proxies (included in their price), and our volume is far below platform rate limits. Our server contacts the platforms directly for share-link lookups (`api/src/pipeline/resolve.ts`) and carousel images, subtitles and Instagram media (`media.ts`). Phase 7 tests these from Render first; only if blocked, they go through Apify's proxy on the existing account.
+
+- 2026-10-09: **Phone Add screen** gets a slice of the reading room above the headline (user's pick, B, from three rendered phone mockups: page-tab card, reading-room strip, annotated page), plus a "Paste what you copied" button in the empty field.
+- 2026-10-09: **Book sheet is view-first** (user): status and shelves save on tap; title, author, notes and ISBNs sit behind "Edit details" with a Save and an unsaved-changes guard.
+- 2026-10-09: **Phase 6 took on all critique findings** (user: "All 5 + minor").
+
+- 2026-10-09: **PDF layout is the Shelf** (user's pick from three rendered layouts: List, Shelf, Checklist): five covers across, grouped by status.
+- 2026-10-09: **Covers in the PDF come through the API** (user's choice): Google Books images have no CORS headers, so `GET /v1/books/:id/cover` passes the stored cover through (owner only, cover hosts only, images only, 2 MB cap, its own 600/min rate limit).
+- 2026-10-09: **Exports cover the whole shelf, the filtered view or the selected books** (user added "Selected").
+- 2026-10-09: **Goodreads CSV** uses Goodreads' own 24-column export header (the import page needs a login, so it couldn't be read). The status is repeated in Bookshelves, because an import with Exclusive Shelf alone has been reported to shelve everything as "read". **Fable** has a beta CSV import at fable.co/goodreads-import (website only) for Goodreads data, so the same file is the one to use. Neither has been tested with a real import yet.
 
 - 2026-10-09: **Change request 001** (`CHANGES_001.md`) applied. It overrides the brief where they conflict. The user confirmed the lavender/teal palette and the light default stay, even though the change request named the old dark-academia colours.
 - 2026-10-09: **No "unsure" state.** Every book is added as read; enrichment (cover, ISBN, year) is quiet. The Unsure and Verified chips, badges and banner are gone.
@@ -47,6 +60,79 @@ Public Instagram posts (Penguin UK, chosen for testing):
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Phase 6: Design pass (2026-10-09)
+
+Process: an Impeccable critique of the whole app with two isolated reviews (design director, and detector plus browser evidence) scored **27/40** (2 P1, 3 P2). You chose to fix everything. Three phone Add mockups were rendered with the real CSS and fonts for you to pick from. Then an Impeccable finish review (disposition "fix", 8 material fixes, applied), Code Review (high, 10 findings, all fixed), a final Playwright pass and a confirming finish review. UI/UX Pro Max (feedback, loading and focus rules) and Taste (no em-dashes, one radius system, no hairline per row, full state cycle) were applied throughout.
+
+Changes:
+- **Feedback shows over sheets.** Toasts render inside an open sheet (a modal sheet makes the rest of the page inert), at its bottom, and take no taps unless they carry an action. Export rows confirm on the button itself ("Saved ✓", "Copied ✓"); Copy keeps its toast as the brief asks.
+- **Accessibility.** Cover page-tabs are bigger, carry a glyph (sparkle New, open book Reading, check Read) and, in light mode, an ink edge, so state is never colour alone and each tab reaches 3:1. The grid shows a text status line. Focus ring uses teal ink in light mode (2.1:1 to 4.7:1). Dark New tab is a lime outline (no more olive), counts at full strength, placeholders 5.3:1. Every tap target is 44px or more (nav pills, view toggle, job and import links).
+- **Shelf filters are all page-tabs:** All, New, To read, Reading, Read, coloured like the cover tabs (the Status dropdown is gone; Sort and Shelf remain in the pickers).
+- **Phone shelf header:** "Mark all as seen" is a link in the count note; Filter and Select are icon buttons on the tab row; Export stays in the title row. The first cover moved from y=510 to y=332 on a 390x844 phone.
+- **Phone Add:** the reading-room strip (window, shelf run, candle; day and night, flicker off under reduced motion) below 1240px, a "Paste what you copied" button inside the empty field (Clipboard API, with a fallback message), a one-line intro on phones, the margin note on phones, a quiet note when pasted TikTok or Instagram links aren't readable posts (profiles, search pages), and the collection cap shown as a limit with an info glyph rather than under "No books found".
+- **Lettered placeholder plates:** title sized to the plate (container units), author in Kalam, one of three bindings (gilt rules, head-and-tail bands, label panel). The PDF plates carry the author too.
+- **The New highlighter** is an authored marker stroke (tilted top edge, ragged ends), not a flat block.
+- **Book sheet** (view-first, see the decisions log): a newly set Reading or Read tab drops onto the cover once (the one authored status moment). The discard guard makes "Keep editing" the filled choice. One shared `Sheet` component.
+- **Export:** Goodreads CSV is the one primary action, with the import steps in a disclosure right under it.
+- **Settings** leads with the backup code; "About this device" shows today's usage from a new `GET /v1/usage` (posts today of the daily limit, resets at midnight UTC).
+- **Smaller:** the 404 page offers "Go to your shelf"; Delete in the selection bar is quiet (note colour), like the sheet; one clear button in search fields; section labels are one weight; the desktop window waits for a wing of about 1340px instead of squeezing in at 1280 (candle and lamp still from 1240).
+- Dev: `useDevice` moved to `device/device-context.ts`, so hot reloads no longer throw "useDevice must be used inside <DeviceProvider>" (and the last lint warning is gone).
+
+Finish review (Impeccable) found 8 material fixes, 7 applied. The eighth, collection copy saying "reads the first 3", is stored text from the Phase 4 test run, where the limit was set to 3; the live limit is still 25. The confirming re-review passed the seven and caught two regressions from them, both fixed: the new status tab said "To read" while the sheet and PDF say "Want to read" (now "Want to read" everywhere), and the phone tab row cut a count in half with no sign it scrolls (a fade on the right edge until the last tab is in view, and tighter tabs on phones). It also asked for evidence of the status tab on the sheet's cover (captured) and, optionally, toasts in a sheet clear of the row buttons and "Keep editing" on the right (both done).
+
+Code review (high) found 10 issues, all fixed:
+- A second Esc could close the book sheet past the unsaved-changes guard and leave it stuck. Fix: the sheet reopens if its owner keeps it open.
+- After a save that re-verified the book, the edit form kept the old ISBNs. Fix: the draft resets from the server's book.
+- Quick status or shelf taps could be overwritten by an older response arriving late. Fix: edits per book are sequenced, and each tap has its own error.
+- A huge shelf's PDF could hit the cover rate limit and print blank plates. Fix: covers wait and retry after a 429.
+- Toasts outside a modal sheet were inert to screen readers. Fix: they render inside the sheet.
+- Optimistic shelves could drop a shelf the list hadn't loaded. Fix: the book's own shelves fill the gap.
+- The Goodreads CSV had no formula guard. Fix: `=`, `+`, `@` are always defused, and a leading `-` when it looks like a formula, so titles like "-273.15" still import as they are.
+- The unreadable-link note counted variants of one page twice and bare home pages. Fix: links are normalised, and home pages ignored.
+- The header Export ignored the selection. Fix: it opens on Selected while selecting.
+- Duplicate hash and fetch plumbing. Fix: one `hashString` and one `send` helper.
+
+**DESIGN.md** (`web/DESIGN.md` plus `web/.impeccable/design.json`) was written by Impeccable's documenter from the shipped code: tokens for both themes, the full type ramp and radius scale, the signature components and the named rules (One Action Colour, Reserved Lime, Ink-On-Tab, Titles-Are-Serif, Pencil, Hairline-Not-Border, Micro Floor). Writing it surfaced three bits of drift, fixed: a warm-black backdrop and pure-black shadows left from the first world (now a grape scrim and the lift shadow), an instruction carried only in Kalam (now plain text), and two off-scale radii (now 20px cards).
+
+Tests: 55 shared, 135 API, 30 web. Lint clean (0 warnings). Impeccable detector: 0 findings against DESIGN.md.
+
+Playwright MCP (real Supabase shelf of 43 books): Add, Shelf, Settings and 404 at 390 and 1280 in light and dark; Add at 768, 1440, 1920 and 2560 in both themes. No horizontal overflow, no tap target under 44px, no console errors. Behaviours checked: status tabs filter (statuses mocked in the browser, nothing saved), the Copy toast inside the Export sheet without blocking the toggles, "Saved" on the Goodreads row, one-tap status change and revert, the unsaved-changes guard surviving two Escapes, Discard closing the sheet.
+
+Still open: the Goodreads test import (Phase 5). Ceiling ideas from the finish review, not done: the backup reminder as a lavender sticky note, pencil marks on the active nav item, a richer Settings layout at 1280.
+
+## Phase 5: Exports (2026-10-09)
+
+Done:
+- **Export sheet** (`web/src/components/ExportSheet.tsx`), opened from the shelf header or the selection bar. Scope: Whole shelf, This view (when filters are on) or Selected (while selecting); one plain line when only the whole shelf applies. Exports keep the shelf's sort. Formats are grouped: For Goodreads and Fable (Goodreads CSV), To read or share (PDF, Copy as text with Numbered and With status toggles, remembered per browser), Your data (CSV, JSON). A "Moving to Goodreads or Fable" note with links. Toasts confirm each download or copy.
+- **Formats** in one place, `shared/src/export.ts`: Goodreads CSV (24 columns; Exclusive Shelf from status; Bookshelves = status + tag slugs; Author l-f handles particles and suffixes), generic CSV (one row per book and source, platform-neutral source columns, formula-safe), JSON (sources nested), plain text. No unsure, verified, confidence or evidence anywhere. UTF-8 BOM and CRLF for the CSVs.
+- **PDF** (`web/src/library/pdf/`): `@react-pdf/renderer` in a lazy chunk (1.2 MB, kept out of the PWA precache, so the precache went from 2.2 MB to 1.0 MB). Young Serif, Nunito and Kalam with latin-ext, Cyrillic and Vietnamese fallbacks (no CJK face: it would add megabytes). A4, or Letter for US/Canadian locales. Covers are fetched 6 at a time, versioned by cover URL so a re-matched book never shows a stale cover, re-encoded to small JPEGs on a paper-coloured canvas. Progress shows on the button ("Covers 12/40", "Binding…"), and closing the sheet cancels it. A real 43-book shelf: 3 Letter pages, 680 KB, about 8s.
+- **API**: `GET /v1/books/:id/cover` (see the decisions log). `COVER_HOSTS` covers Google Books (and its googleusercontent hand-off), Open Library and the Internet Archive.
+- Shared `Sheet` component now behind both the book sheet and the export sheet. `downloadFile` is shared with the backup-code download. Status labels moved to `shared`.
+- The selection bar goes to two rows on phones (count, then Export, Merge, Delete) so every label fits.
+- Tests: 53 shared, 134 API, 29 web. Impeccable detector: 0 findings.
+
+Design process: ui-ux-pro-max searches (UX guidance on feedback, loading and focus; its font pairings were off-direction and the fonts are locked). Taste's anti-slop rules (no em-dashes, no hairline on every row, one radius system, full state cycle). Impeccable shape, with three PDF layouts rendered from the real component, with real covers, for the user to choose.
+
+Code review (high) found 10 issues, all fixed:
+- A big shelf's PDF could spend the app's whole 300/minute rate limit on covers and 429 everything else. Fix: covers have their own limit.
+- "Selected" was taken from the filtered list while the bar counted every ticked book. Fix: both use all ticked books.
+- Only latin fonts were registered, so Polish or Cyrillic text lost glyphs. Fix: fallback subsets (checked with "Stanisław Lem" and "Мастер и Маргарита").
+- Google's googleusercontent redirect host wasn't allowed. Fix: added, with a test.
+- The header row (Mark all as seen, Select, Export) could overflow at 360px. Fix: it wraps (checked, no sideways scroll).
+- Transparent cover pixels turned black in JPEG. Fix: paper-coloured canvas.
+- With no session the PDF button did nothing, and closing the sheet didn't stop a PDF. Fix: disabled without a session; an AbortController cancels the covers and the download.
+- A cached cover could outlive a re-match. Fix: the cover URL carries a version.
+- "Ursula K. Le Guin" became "Guin, Ursula K. Le". Fix: particles and suffixes (Spanish double surnames still come out as "Zafón, Carlos Ruiz"; Goodreads matches on ISBN and title anyway).
+- The dialog scaffolding was copied from the book sheet. Fix: a shared `Sheet`.
+
+Also fixed from Playwright and the PDF previews: the lime highlighter spanned the full width on two-line titles (now per line), a group heading could vanish at a page break (each heading is kept with its first row), react-pdf logged "Buffer is not defined" per cover (`buffer` polyfill in the PDF chunk), and the selection bar's icons were squashed at 390px.
+
+Playwright MCP (real Supabase shelf, 43 books), 390px and 1280px, light and dark: Goodreads CSV, CSV, JSON and PDF all download with the right file names and contents (43 rows, correct headers, no flag columns, `%PDF`). This view (New, 7 books) and Selected (2, then 3 with a search hiding some) export exactly those books. Copy as text with Numbered puts 43 numbered lines on the clipboard and toasts "Copied 43 books". Closing mid-PDF downloads nothing. No overflow at 360, 390 or 1280; tap targets at least 44px.
+
+**Waiting on the user:** import the Goodreads CSV into Goodreads once (and Fable if wanted) and report what came through. The Phase 4 open item (a real public BookTok collection) is still open: no link was provided this phase.
+
+Dev note: the PDF previews are rendered from the real component by `web/.impeccable/review/pdf/preview.tsx` (gitignored) with `npx tsx`.
 
 ## Phase 4: Bulk, collections and Instagram (2026-10-09)
 
