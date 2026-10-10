@@ -52,6 +52,14 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       new HttpError(429, ERROR_CODES.rateLimited, `Too many requests. Try again in ${context.after}.`),
   });
 
+  // Shelves and job state are private to a device: no cache keeps them (routes that may be cached, like
+  // covers, set their own). nosniff stops a passed-through cover from ever being read as anything but an image.
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('referrer-policy', 'no-referrer');
+    if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'no-store');
+  });
+
   app.setErrorHandler((error: FastifyError | HttpError, request, reply) => {
     if (error instanceof HttpError) {
       return reply.code(error.statusCode).send(errorBody(error.code, error.message));
@@ -80,7 +88,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       dailyCapPerIp: config.DAILY_LINK_CAP_PER_IP,
       monthlyBudgetUsd: config.MONTHLY_BUDGET_USD,
       killSwitch: config.GLOBAL_SPEND_KILL_SWITCH,
-      ipHashKey: config.SUPABASE_SERVICE_ROLE_KEY ?? 'booktrap-dev-ip-key',
+      ipHashKey: config.ipHashKey,
       pipelineConfigured: Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
     },
   });

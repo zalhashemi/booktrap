@@ -14,8 +14,8 @@ export function healthRoutes(app: FastifyInstance, repo: DeviceRepo) {
     storage: repo.kind,
   }));
 
-  // Readiness: the database answers.
-  app.get('/health/ready', { config: { rateLimit: false } }, async (request, reply) => {
+  // Readiness: the database answers. Rate limited, since every call reaches the database.
+  app.get('/health/ready', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
       await repo.ping();
       return { ok: true };

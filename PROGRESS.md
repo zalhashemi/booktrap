@@ -10,9 +10,13 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Hardening and deploy | Not started |
+| 7 | Hardening and deploy | In progress (7a hardening done; 7b legal, 7c deploy, 7d production checks to go) |
 
 ## Decisions log
+
+- 2026-10-10: **Moved to a Mac** (from Windows). Node 24 via nvm, a fresh `npm ci` (the copied `node_modules` held Windows binaries), Playwright MCP added for this project. Phases 5 and 6 had never been committed; they are now (`89fd4c9`).
+- 2026-10-10: **Retention (7a):** cached posts are deleted after `POST_CACHE_DAYS` (default 90; re-reading one costs again), captions are no longer cached at all, and hashed networks are cleared from jobs after 2 days. To be stated in the privacy policy (7b).
+- 2026-10-10: **`IP_HASH_KEY`** is its own secret, required in production, so rotating the Supabase key doesn't reset every network's daily count.
 
 - 2026-10-09: **Legal and proxy research before Phase 7** (user's request; not legal advice). BookTrap reads single public posts on a user's request via Apify (logged out) and keeps book titles, the post link and the creator handle. Risks, in order: TikTok's and Meta's terms forbid automated collection (TikTok's US terms of May 2026 also name commercial use); a 2024 US ruling (Meta v. Bright Data) held logged-out scraping isn't bound by Meta's terms, but that is one district court and not TikTok. Personal data (handles, frames with people) needs a privacy policy and a lawful basis. Copyright risk is low (titles are facts; media is never republished). Charging money raises the stakes. Apify puts legal responsibility on the customer. No official API covers analysing other people's videos. **User is in Bahrain**: the Personal Data Protection Law (Law No. 30 of 2018) applies, with prior notification of processing to the Personal Data Protection Authority and rules on transfers abroad (our processors are outside Bahrain); GDPR also applies to EU users. **Before charging money, the user gets a short review from a lawyer.**
 - 2026-10-09: **Phase 7 legal scope (user):** draft a privacy policy and terms page (for the user or a lawyer to check), a takedown/contact address, and an expiry on the post cache so full scraped records aren't kept indefinitely.
@@ -60,6 +64,27 @@ Public Instagram posts (Penguin UK, chosen for testing):
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Phase 7a: Hardening (2026-10-10)
+
+Done:
+- **Daily caps are atomic.** Submitting counted today's posts and inserted the job in separate requests, so parallel submissions could each pass the check: 30 parallel pastes of 30 links could queue about 900 paid posts against a cap of 40. The Phase 4 collection race was the same bug. `supabase/migrations/0007_hardening.sql` adds `create_job_capped` and `add_child_items_capped`, which take a per-device and a per-network advisory lock (always device first, so no deadlock), count and insert in one transaction. Collection videos are capped again as they're saved, and saving them is idempotent (a retry after a lost response no longer adds them twice). Pasted order is kept (a microsecond apart).
+- **Less data kept:** captions are no longer cached (they were never read back; the migration strips existing ones), cached posts expire after 90 days, and `jobs.ip_hash` is cleared after 2 days, all in the 6-hourly purge.
+- **API headers:** `cache-control: no-store` unless a route sets its own (covers keep `private, max-age=86400`), `x-content-type-options: nosniff`, `referrer-policy: no-referrer`. `/health/ready` reaches the database, so it's rate limited (60/min); Render's health check should use `/health`.
+- **`IP_HASH_KEY`** (see the decisions log).
+- Tests: 55 shared, 143 API (8 new), 30 web. The race tests use a real listening server and a store whose answers arrive late; both fail on the old code and pass on the new. The migration was run in PGlite on top of 0001-0006, as `service_role` with Supabase's grants and RLS bypass: caps refuse per device and per network, order is kept, children stop at the room left and aren't added twice, captions are stripped, and `anon` can't execute the functions.
+
+Security review (the skill, over everything since the last push, including Phases 5 and 6): no findings above its bar. Checked: covers can't be redirected to another host (`coverUrl` is never reader-set, every hop is allowlisted, images only), every new route and function is device-scoped, no dynamic SQL, functions granted to `service_role` only.
+
+Code review (high) found 10 issues; 5 fixed:
+- `lock_daily_caps` had no grant for `service_role`, so in Supabase every paste would have failed with "permission denied" (the first PGlite run was as superuser and missed it; now granted, and the test runs as `service_role`).
+- A collection cut short by the caps while saving got no note when its listing was complete. Fix: the note follows what was actually saved.
+- The production check for `IP_HASH_KEY` could never fire (it fell back to the Supabase key). Fix: required in production.
+- The race tests' servers weren't closed when an assertion failed. Fix: `onTestFinished`.
+- The collection limit message was written twice. Fix: one helper.
+- Not fixed, judged acceptable: a listing paid for in the split second before a parallel paste takes the last room is paid again on retry ($0.09); a collection retried more than 2 days later skips the network cap (the device cap still holds, at most 25 over); the race tests' store delay placement; one extra read after creating a job.
+
+**Waiting on the user:** run `0007_hardening.sql` in the Supabase SQL Editor. Until then, local pastes fail (the API calls the new functions).
 
 ## Phase 6: Design pass (2026-10-09)
 

@@ -69,13 +69,23 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 
 await app.listen({ port: config.PORT, host: config.HOST });
 
-// Books deleted over 30 days ago are purged every 6 hours (Undo only needs the recent ones).
+// Every 6 hours: purge books deleted over 30 days ago (Undo only needs the recent ones), and expire
+// what the privacy policy says we stop keeping: old cached posts, and hashed networks past their day.
 const PURGE_EVERY_MS = 6 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const purge = () =>
-  store.purgeDeletedBooks().then(
-    (count) => count && app.log.info({ count }, 'purged deleted books'),
-    (error: unknown) => app.log.warn({ err: error }, 'purge of deleted books failed'),
-  );
+  Promise.all([
+    store.purgeDeletedBooks().then(
+      (count) => count && app.log.info({ count }, 'purged deleted books'),
+      (error: unknown) => app.log.warn({ err: error }, 'purge of deleted books failed'),
+    ),
+    store
+      .expireRetention({ postCacheBefore: new Date(Date.now() - config.POST_CACHE_DAYS * DAY_MS), ipHashBefore: new Date(Date.now() - 2 * DAY_MS) })
+      .then(
+        (expired) => (expired.posts || expired.ipHashes) && app.log.info(expired, 'expired retained data'),
+        (error: unknown) => app.log.warn({ err: error }, 'data expiry failed'),
+      ),
+  ]);
 void purge();
 setInterval(() => void purge(), PURGE_EVERY_MS).unref();
 

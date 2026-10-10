@@ -37,6 +37,10 @@ const EnvSchema = z.object({
   APIFY_TOKEN: optionalString,
   ANTHROPIC_API_KEY: optionalString,
   GOOGLE_BOOKS_API_KEY: optionalString,
+  /** Key for hashing client IPs (raw IPs are never stored). Required in production; development falls back. */
+  IP_HASH_KEY: optionalString,
+  /** Cached posts (books, link, creator, thumbnail) older than this are deleted; re-reading one costs again. */
+  POST_CACHE_DAYS: z.coerce.number().int().min(1).default(90),
 
   ALLOWED_ORIGIN: csv.default(['http://localhost:5180']),
   DAILY_LINK_CAP_PER_DEVICE: z.coerce.number().int().positive().default(40),
@@ -78,8 +82,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.');
   }
 
+  // Its own key in production: borrowing the Supabase key would reset every network's count when it's rotated.
+  if (config.NODE_ENV === 'production' && !config.IP_HASH_KEY) throw new Error('IP_HASH_KEY is required in production.');
+
   return {
     ...config,
+    ipHashKey: config.IP_HASH_KEY ?? config.SUPABASE_SERVICE_ROLE_KEY ?? 'booktrap-dev-ip-key',
     TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.NODE_ENV === 'production' ? 1 : 0),
     storage: hasSupabase ? ('supabase' as const) : ('memory' as const),
   };

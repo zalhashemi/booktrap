@@ -157,7 +157,6 @@ async function readPost(
       postId: post.postId,
       url: post.url || postUrl,
       kind: post.kind,
-      caption: post.caption,
       creatorHandle: post.creatorHandle,
       thumbnailUrl: post.thumbnailUrl,
     },
@@ -234,6 +233,9 @@ async function shelve(
   return 'added';
 }
 
+const collectionDailyLimit = () =>
+  new PipelineError('budget_exhausted', 'You’ve reached today’s limit, so this collection can’t be read now. It resets at midnight UTC.', true);
+
 /**
  * A collection link becomes one queued item per video (read like any pasted link, and cached), up to the
  * free per-collection limit and whatever is left of today's caps. The collection item itself only lists.
@@ -266,7 +268,7 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
   const room = Math.min(settings.dailyCapPerDevice - byDevice, ipHash ? settings.dailyCapPerIp - byIp : Infinity);
   const limit = Math.min(settings.videosPerCollection, room);
   if (limit <= 0) {
-    throw new PipelineError('budget_exhausted', 'You’ve reached today’s limit, so this collection can’t be read now. It resets at midnight UTC.', true);
+    throw collectionDailyLimit();
   }
   await assertSpendAllowed(deps);
 
@@ -285,24 +287,31 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
     detail: { platform: 'tiktok', collectionId, videos: listing.videos.length },
   });
 
-  // The listing is paid for: a brief database hiccup here must not send the next attempt to pay again.
+  // The listing is paid for: a brief database hiccup here must not send the next attempt to pay again
+  // (adding children is idempotent, so a retry after a lost response doesn't add them twice).
+  // The caps are counted again as the videos are saved: other links may have used today's room meanwhile.
   const newItems = listing.videos.map((video) => ({ inputUrl: video.url, platform: 'tiktok' as const, postId: video.postId, kind: video.kind }));
+  const caps = { perDevice: settings.dailyCapPerDevice, perIp: settings.dailyCapPerIp, since };
   let children: JobItemRecord[];
   for (let attempt = 0; ; attempt++) {
     try {
-      children = await store.addChildItems(item, newItems);
+      children = await store.addChildItems(item, newItems, caps);
       break;
     } catch (error) {
       if (attempt >= 2) throw error;
       await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
     }
   }
-  const cappedByDay = limit < settings.videosPerCollection;
-  const note = !listing.more
-    ? null
-    : cappedByDay
-      ? `Reading ${children.length} videos: that’s all today’s limit allows. Paste the collection again tomorrow for more.`
-      : `This collection has more than ${settings.videosPerCollection} videos. BookTrap reads the first ${settings.videosPerCollection}; bigger collections are coming as a paid option.`;
+  if (children.length === 0 && newItems.length > 0) {
+    throw collectionDailyLimit();
+  }
+  // Cut short by today's caps: when listing (more videos than the room), or when saving (room used meanwhile).
+  const cappedByDay = children.length < newItems.length || (listing.more && limit < settings.videosPerCollection);
+  const note = cappedByDay
+    ? `Reading ${children.length} videos: that’s all today’s limit allows. Paste the collection again tomorrow for more.`
+    : listing.more
+      ? `This collection has more than ${settings.videosPerCollection} videos. BookTrap reads the first ${settings.videosPerCollection}; bigger collections are coming as a paid option.`
+      : null;
   await store.updateItem(item.id, { status: 'done', error: null, note, booksFound: 0 });
   children.forEach(queue);
   log.info({ itemId: item.id, collectionId, videos: children.length, more: listing.more }, 'collection expanded');

@@ -16,7 +16,7 @@ import { HttpError } from '../errors';
 import { MAX_ATTEMPTS, monthStart, utcDayStart } from '../pipeline/process';
 import type { JobQueue } from '../pipeline/queue';
 import type { DeviceRepo } from '../repo/types';
-import type { ItemKind, JobWithItems, LibraryStore } from '../store/types';
+import { DailyCapError, type ItemKind, type JobWithItems, type LibraryStore } from '../store/types';
 
 export interface JobRouteOptions {
   maxLinksPerSubmission: number;
@@ -97,18 +97,28 @@ export function jobRoutes(
         throw new HttpError(503, ERROR_CODES.paused, 'BookTrap has reached its reading budget for this month. Please try again next month.');
       }
 
-      const since = utcDayStart();
-      const hash = ipHash(request);
-      const [deviceCount, ipCount] = await Promise.all([
-        store.countItemsSince({ deviceId: device.id }, since),
-        store.countItemsSince({ ipHash: hash }, since),
-      ]);
       // A collection link isn't a post: its videos count when it expands, against what's left of today.
       // It still needs at least one post of room, or there is nothing it could read.
       const hasCollection = unique.some((link) => link.kind === 'collection');
       const posts = unique.filter((link) => link.kind !== 'collection').length + (hasCollection ? 1 : 0);
-      if (deviceCount + posts > options.dailyCapPerDevice) {
-        const left = Math.max(0, options.dailyCapPerDevice - deviceCount);
+
+      // An Instagram /p/ post may be a photo, a carousel or a video: its kind is known after fetching.
+      const kindOf = (kind: string): ItemKind | null => (kind === 'video' ? 'video' : kind === 'photo' ? 'carousel' : kind === 'collection' ? 'collection' : null);
+      let job: JobWithItems;
+      try {
+        // Counted and inserted atomically, so parallel submissions can't each slip under a cap.
+        job = await store.createJob(
+          device.id,
+          ipHash(request),
+          unique.map((link) => ({ inputUrl: link.url, platform: link.platform, postId: link.postId, kind: kindOf(link.kind) })),
+          { posts, perDevice: options.dailyCapPerDevice, perIp: options.dailyCapPerIp, since: utcDayStart() },
+        );
+      } catch (error) {
+        if (!(error instanceof DailyCapError)) throw error;
+        if (error.scope === 'ip') {
+          throw new HttpError(429, ERROR_CODES.limitReached, 'This network has reached today’s limit. It resets at midnight UTC.');
+        }
+        const left = Math.max(0, options.dailyCapPerDevice - error.used);
         throw new HttpError(
           429,
           ERROR_CODES.limitReached,
@@ -117,17 +127,6 @@ export function jobRoutes(
             : `You can add ${left} more ${left === 1 ? 'post' : 'posts'} today (limit ${options.dailyCapPerDevice}). It resets at midnight UTC.`,
         );
       }
-      if (ipCount + posts > options.dailyCapPerIp) {
-        throw new HttpError(429, ERROR_CODES.limitReached, 'This network has reached today’s limit. It resets at midnight UTC.');
-      }
-
-      // An Instagram /p/ post may be a photo, a carousel or a video: its kind is known after fetching.
-      const kindOf = (kind: string): ItemKind | null => (kind === 'video' ? 'video' : kind === 'photo' ? 'carousel' : kind === 'collection' ? 'collection' : null);
-      const job = await store.createJob(
-        device.id,
-        hash,
-        unique.map((link) => ({ inputUrl: link.url, platform: link.platform, postId: link.postId, kind: kindOf(link.kind) })),
-      );
       for (const item of job.items) queue.enqueue(item.id, device.id);
       reply.code(201);
       return toJobResponse(job);

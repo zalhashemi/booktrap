@@ -44,7 +44,6 @@ export interface CachedPostMeta {
   postId: string;
   url: string;
   kind: 'video' | 'carousel';
-  caption: string;
   creatorHandle: string | null;
   thumbnailUrl: string | null;
 }
@@ -95,15 +94,43 @@ export interface SpendEvent {
   detail?: Record<string, unknown>;
 }
 
+/** Today's per-device and per-network post caps. A collection link itself isn't a post; its videos are. */
+export interface DailyCaps {
+  perDevice: number;
+  perIp: number;
+  /** Start of the day being counted (midnight UTC). */
+  since: Date;
+}
+
+/** A job refused because it would pass a daily cap. `used` is that scope's count so far today. */
+export class DailyCapError extends Error {
+  constructor(
+    readonly scope: 'device' | 'ip',
+    readonly used: number,
+  ) {
+    super(`Daily ${scope} cap reached`);
+    this.name = 'DailyCapError';
+  }
+}
+
 /** Everything the jobs pipeline and the library routes need from storage. Always scoped by device. */
 export interface LibraryStore {
+  /**
+   * With `caps`, counting today's posts and inserting the job happen atomically (parallel submissions
+   * can't each slip under a cap): throws DailyCapError when `caps.posts` more would pass one.
+   */
   createJob(
     deviceId: string,
     ipHash: string | null,
     items: NewItem[],
+    caps?: DailyCaps & { posts: number },
   ): Promise<JobWithItems>;
-  /** Adds the videos a collection expanded into, as children of that item, to the same job. */
-  addChildItems(parent: JobItemRecord, items: NewItem[]): Promise<JobItemRecord[]>;
+  /**
+   * Adds the videos a collection expanded into, as children of that item, to the same job: with `caps`,
+   * only as many as today's caps still allow, counted atomically. Idempotent: when the item already has
+   * children (a retry after a lost response), those are returned and nothing is added.
+   */
+  addChildItems(parent: JobItemRecord, items: NewItem[], caps?: DailyCaps): Promise<JobItemRecord[]>;
   childItems(parentItemId: string): Promise<JobItemRecord[]>;
   /** The keyed IP hash the job was created from, for the per-IP cap on collection expansion. */
   jobIpHash(jobId: string): Promise<string | null>;
@@ -159,6 +186,11 @@ export interface LibraryStore {
   setBookTags(deviceId: string, bookId: string, tagIds: string[]): Promise<void>;
   /** Permanently removes books deleted more than 30 days ago. Returns how many. */
   purgeDeletedBooks(): Promise<number>;
+  /**
+   * Data we stop keeping (privacy policy): cached posts fetched before `postCacheBefore`, and the hashed
+   * network of jobs created before `ipHashBefore` (only today's caps need it). Returns how many of each.
+   */
+  expireRetention(cutoffs: { postCacheBefore: Date; ipHashBefore: Date }): Promise<{ posts: number; ipHashes: number }>;
 }
 
 export interface BookPatch {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { postKey, type Book, type BookSource, type Tag } from '@booktrap/shared';
 import {
+  DailyCapError,
   TERMINAL_STATUSES,
   TagNameTakenError,
   deriveJobStatus,
@@ -9,6 +10,7 @@ import {
   type JobRecord,
   type JobWithItems,
   type LibraryStore,
+  type NewItem,
 } from './types';
 
 type BookRow = Omit<Book, 'sources' | 'tags'> & { deviceId: string; normalizedKey: string; verified: boolean; deletedAt: string | null };
@@ -17,7 +19,7 @@ type BookRow = Omit<Book, 'sources' | 'tags'> & { deviceId: string; normalizedKe
 export function createMemoryLibraryStore(): LibraryStore {
   const jobs = new Map<string, JobRecord & { ipHash: string | null }>();
   const items = new Map<string, JobItemRecord>();
-  const cache = new Map<string, CachedPost>();
+  const cache = new Map<string, CachedPost & { fetchedAt: Date }>();
   const spend: { usd: number; at: Date }[] = [];
   const books = new Map<string, BookRow>();
   const sources = new Map<string, (BookSource & { bookId: string })[]>();
@@ -44,59 +46,66 @@ export function createMemoryLibraryStore(): LibraryStore {
       .sort((a, b) => a.name.localeCompare(b.name)),
   });
   const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const childrenOf = (parentItemId: string) =>
+    [...items.values()].filter((item) => item.parentItemId === parentItemId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  /** Posts counted against the daily caps: every item except a collection link itself. */
+  const countPosts = (since: Date, match: (item: JobItemRecord) => boolean) =>
+    [...items.values()].filter((item) => new Date(item.createdAt) >= since && item.kind !== 'collection' && match(item)).length;
+  const postsSince = (deviceId: string, ipHash: string | null, since: Date) => ({
+    byDevice: countPosts(since, (item) => item.deviceId === deviceId),
+    byIp: ipHash ? countPosts(since, (item) => jobs.get(item.jobId)?.ipHash === ipHash) : 0,
+  });
+  const addItem = (jobId: string, deviceId: string, parentItemId: string | null, item: NewItem, at: number): JobItemRecord => {
+    const record: JobItemRecord = {
+      id: randomUUID(),
+      jobId,
+      deviceId,
+      inputUrl: item.inputUrl,
+      platform: item.platform,
+      postId: item.postId,
+      kind: item.kind,
+      status: 'queued',
+      error: null,
+      booksFound: 0,
+      attempts: 0,
+      parentItemId,
+      note: null,
+      // Distinct timestamps keep the pasted (or listed) order.
+      createdAt: new Date(at).toISOString(),
+    };
+    items.set(record.id, record);
+    return record;
+  };
 
   const store: LibraryStore = {
-    async createJob(deviceId, ipHash, newItems) {
+    // No awaits between counting and inserting: in one process that makes the caps atomic, as in Postgres.
+    async createJob(deviceId, ipHash, newItems, caps) {
+      if (caps) {
+        const used = postsSince(deviceId, ipHash, caps.since);
+        if (used.byDevice + caps.posts > caps.perDevice) throw new DailyCapError('device', used.byDevice);
+        if (ipHash && used.byIp + caps.posts > caps.perIp) throw new DailyCapError('ip', used.byIp);
+      }
       const job = { id: randomUUID(), deviceId, status: 'queued' as const, clearedNew: false, createdAt: now(), ipHash };
       jobs.set(job.id, job);
-      newItems.forEach((item, index) => {
-        const id = randomUUID();
-        items.set(id, {
-          id,
-          jobId: job.id,
-          deviceId,
-          inputUrl: item.inputUrl,
-          platform: item.platform,
-          postId: item.postId,
-          kind: item.kind,
-          status: 'queued',
-          error: null,
-          booksFound: 0,
-          attempts: 0,
-          parentItemId: null,
-          note: null,
-          // Keep insertion order stable for equal timestamps.
-          createdAt: new Date(Date.now() + index).toISOString(),
-        });
-      });
+      const base = Date.now();
+      newItems.forEach((item, index) => addItem(job.id, deviceId, null, item, base + index));
       return withItems(strip(job));
     },
-    async addChildItems(parent, children) {
-      const base = Date.now();
-      return children.map((child, index) => {
-        const id = randomUUID();
-        const record: JobItemRecord = {
-          id,
-          jobId: parent.jobId,
-          deviceId: parent.deviceId,
-          inputUrl: child.inputUrl,
-          platform: child.platform,
-          postId: child.postId,
-          kind: child.kind,
-          status: 'queued',
-          error: null,
-          booksFound: 0,
-          attempts: 0,
-          parentItemId: parent.id,
-          note: null,
-          createdAt: new Date(base + 1000 + index).toISOString(),
-        };
-        items.set(id, record);
-        return record;
-      });
+    async addChildItems(parent, children, caps) {
+      if (children.length === 0) return [];
+      const existing = childrenOf(parent.id);
+      if (existing.length) return existing;
+      let room = children.length;
+      if (caps) {
+        const ipHash = jobs.get(parent.jobId)?.ipHash ?? null;
+        const used = postsSince(parent.deviceId, ipHash, caps.since);
+        room = Math.min(room, caps.perDevice - used.byDevice, ipHash ? caps.perIp - used.byIp : Infinity);
+      }
+      const base = Date.now() + 1000;
+      return children.slice(0, Math.max(0, room)).map((child, index) => addItem(parent.jobId, parent.deviceId, parent.id, child, base + index));
     },
     async childItems(parentItemId) {
-      return [...items.values()].filter((item) => item.parentItemId === parentItemId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return childrenOf(parentItemId);
     },
     async jobIpHash(jobId) {
       return jobs.get(jobId)?.ipHash ?? null;
@@ -127,17 +136,18 @@ export function createMemoryLibraryStore(): LibraryStore {
       if (job) job.status = deriveJobStatus(withItems(job).items);
     },
     async countItemsSince(filter, since) {
-      return [...items.values()].filter((item) => {
-        if (new Date(item.createdAt) < since || item.kind === 'collection') return false;
-        if ('deviceId' in filter) return item.deviceId === filter.deviceId;
-        return jobs.get(item.jobId)?.ipHash === filter.ipHash;
-      }).length;
+      return countPosts(since, (item) =>
+        'deviceId' in filter ? item.deviceId === filter.deviceId : jobs.get(item.jobId)?.ipHash === filter.ipHash,
+      );
     },
     async getCachedPost(platform, postId) {
-      return cache.get(postKey(platform, postId)) ?? null;
+      const hit = cache.get(postKey(platform, postId));
+      if (!hit) return null;
+      const { fetchedAt: _fetchedAt, ...value } = hit;
+      return value;
     },
     async putCachedPost(platform, postId, value) {
-      cache.set(postKey(platform, postId), value);
+      cache.set(postKey(platform, postId), { ...value, fetchedAt: new Date() });
     },
     async recordSpend(event) {
       spend.push({ usd: event.usd, at: new Date() });
@@ -312,6 +322,23 @@ export function createMemoryLibraryStore(): LibraryStore {
         }
       }
       return count;
+    },
+    async expireRetention({ postCacheBefore, ipHashBefore }) {
+      let posts = 0;
+      for (const [key, value] of cache) {
+        if (value.fetchedAt < postCacheBefore) {
+          cache.delete(key);
+          posts++;
+        }
+      }
+      let ipHashes = 0;
+      for (const job of jobs.values()) {
+        if (job.ipHash && new Date(job.createdAt) < ipHashBefore) {
+          job.ipHash = null;
+          ipHashes++;
+        }
+      }
+      return { posts, ipHashes };
     },
     async setBookTags(deviceId, bookId, tagIds) {
       if (!liveBook(deviceId, bookId)) return;

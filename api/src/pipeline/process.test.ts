@@ -146,6 +146,16 @@ describe('processItem', () => {
     expect(books[0]!.sources.map((s) => s.postId)).toEqual(['7672440936101727519', '7674670540518395169']);
   });
 
+  it('keeps no caption in the shared post cache, only what a later paste needs', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, { x: [book('Babel', 'R. F. Kuang')] });
+    const job = await store.createJob(DEVICE, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
+    await processItem(job.items[0]!.id, deps);
+    const cached = await store.getCachedPost('tiktok', '7672440936101727519');
+    expect(cached?.books).toHaveLength(1);
+    expect(cached?.post).not.toHaveProperty('caption');
+  });
+
   it('pays for a post only once: a second paste of the same post uses the cache', async () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost, extractBooks } = makeDeps(store, { x: [book('Babel', 'R. F. Kuang')] });
@@ -310,6 +320,33 @@ describe('collections', () => {
     expect(job.items).toHaveLength(3);
   });
 
+  it('counts the caps again as the videos are saved, so room used meanwhile is not spent twice', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, { x: [] });
+    deps.settings = { ...deps.settings, dailyCapPerDevice: 4 };
+    deps.listCollection = vi.fn(async (_id: string, limit: number) => {
+      // While the listing runs, another paste from the same reader uses 3 of the 4.
+      await store.createJob(DEVICE, null, ids(3, 100).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok' as const, postId, kind: 'video' as const })));
+      // The whole collection fits the listing (no "more"), yet only 1 can be saved.
+      return listing(ids(limit), false);
+    });
+    const job = await runCollection(store, deps);
+    expect(deps.listCollection).toHaveBeenCalledWith(expect.any(String), 4, expect.anything());
+    expect(job.items.filter((item) => item.parentItemId)).toHaveLength(1);
+    expect(job.items[0]!.note).toMatch(/Reading 1 videos: that’s all today’s limit allows/);
+    expect(await store.countItemsSince({ deviceId: DEVICE }, new Date(0))).toBe(4);
+  });
+
+  it('adds a collection’s videos only once, even when saving is retried after it went through', async () => {
+    const store = createMemoryLibraryStore();
+    const job = await store.createJob(DEVICE, null, [{ inputUrl: COLLECTION, platform: 'tiktok', postId: null, kind: 'collection' }]);
+    const videos = ids(2).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok' as const, postId, kind: 'video' as const }));
+    const first = await store.addChildItems(job.items[0]!, videos);
+    const again = await store.addChildItems(job.items[0]!, videos);
+    expect(again.map((item) => item.id)).toEqual(first.map((item) => item.id));
+    expect(await store.childItems(job.items[0]!.id)).toHaveLength(2);
+  });
+
   it('records the listing cost when a collection turns out empty or private', async () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, {});
@@ -394,7 +431,7 @@ describe('processItem with Instagram', () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost } = makeDeps(store, { x: [book('Babel', null)] });
     await store.putCachedPost('tiktok', 'DeJvdqUjLd1', {
-      post: { platform: 'tiktok', postId: 'DeJvdqUjLd1', url: 'u', kind: 'video', caption: '', creatorHandle: null, thumbnailUrl: null },
+      post: { platform: 'tiktok', postId: 'DeJvdqUjLd1', url: 'u', kind: 'video', creatorHandle: null, thumbnailUrl: null },
       books: [],
       model: 'm',
     });

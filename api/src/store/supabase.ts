@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Book, BookSource, Tag } from '@booktrap/shared';
 import {
+  DailyCapError,
   TERMINAL_STATUSES,
   TagNameTakenError,
   deriveJobStatus,
@@ -9,6 +10,7 @@ import {
   type JobRecord,
   type JobWithItems,
   type LibraryStore,
+  type NewItem,
 } from './types';
 
 const UNIQUE_VIOLATION = '23505';
@@ -99,6 +101,17 @@ const toItem = (row: ItemRow): JobItemRecord => ({
   createdAt: row.created_at,
 });
 
+/** The shape `create_job_capped` and `add_child_items_capped` read (0007_hardening.sql). */
+const toItemJson = (item: NewItem) => ({
+  input_url: item.inputUrl,
+  source_platform: item.platform,
+  source_post_id: item.postId,
+  kind: item.kind,
+});
+
+/** Caps off: the functions still insert atomically, with nothing to refuse. */
+const NO_CAP = 2_147_483_647;
+
 const toJob = (row: JobRow): JobWithItems => ({
   id: row.id,
   deviceId: row.device_id,
@@ -163,49 +176,38 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
   const jobSelect = `id, device_id, status, cleared_new, created_at, job_items (${ITEM_COLUMNS})`;
 
   return {
-    async createJob(deviceId, ipHash, items) {
-      const job = checkOne(
-        await db.from('jobs').insert({ device_id: deviceId, ip_hash: ipHash }).select('id').single<{ id: string }>(),
-        'jobs.insert',
-      );
-      check(
-        await db.from('job_items').insert(
-          items.map((item) => ({
-            job_id: job.id,
-            device_id: deviceId,
-            input_url: item.inputUrl,
-            source_platform: item.platform,
-            source_post_id: item.postId,
-            kind: item.kind,
-          })),
-        ),
-        'job_items.insert',
-      );
-      const created = await this.getJob(deviceId, job.id);
+    async createJob(deviceId, ipHash, items, caps) {
+      const result = check(
+        await db.rpc('create_job_capped', {
+          p_device_id: deviceId,
+          p_ip_hash: ipHash,
+          p_items: items.map(toItemJson),
+          p_posts: caps?.posts ?? 0,
+          p_device_cap: caps?.perDevice ?? NO_CAP,
+          p_ip_cap: caps?.perIp ?? NO_CAP,
+          p_since: (caps?.since ?? new Date()).toISOString(),
+        }),
+        'create_job_capped',
+      ) as { job_id?: string; capped?: 'device' | 'ip'; used?: number };
+      if (result.capped) throw new DailyCapError(result.capped, result.used ?? 0);
+      const created = result.job_id ? await this.getJob(deviceId, result.job_id) : null;
       if (!created) throw new Error('job vanished after insert');
       return created;
     },
 
-    async addChildItems(parent, children) {
+    async addChildItems(parent, children, caps) {
       if (children.length === 0) return [];
       const rows = check(
-        await db
-          .from('job_items')
-          .insert(
-            children.map((child) => ({
-              job_id: parent.jobId,
-              device_id: parent.deviceId,
-              parent_item_id: parent.id,
-              input_url: child.inputUrl,
-              source_platform: child.platform,
-              source_post_id: child.postId,
-              kind: child.kind,
-            })),
-          )
-          .select(ITEM_COLUMNS),
-        'job_items.insert_children',
+        await db.rpc('add_child_items_capped', {
+          p_parent_id: parent.id,
+          p_items: children.map(toItemJson),
+          p_device_cap: caps?.perDevice ?? NO_CAP,
+          p_ip_cap: caps?.perIp ?? NO_CAP,
+          p_since: (caps?.since ?? new Date()).toISOString(),
+        }),
+        'add_child_items_capped',
       ) as ItemRow[];
-      return rows.map(toItem);
+      return rows.map(toItem).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     },
 
     async childItems(parentItemId) {
@@ -431,6 +433,18 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     async purgeDeletedBooks() {
       const count = check(await db.rpc('purge_deleted_books'), 'purge_deleted_books');
       return Number(count ?? 0);
+    },
+
+    async expireRetention({ postCacheBefore, ipHashBefore }) {
+      const posts = await db.from('post_cache').delete({ count: 'exact' }).lt('fetched_at', postCacheBefore.toISOString());
+      if (posts.error) throw new Error(`post_cache.expire failed: ${posts.error.message}`);
+      const jobs = await db
+        .from('jobs')
+        .update({ ip_hash: null }, { count: 'exact' })
+        .lt('created_at', ipHashBefore.toISOString())
+        .not('ip_hash', 'is', null);
+      if (jobs.error) throw new Error(`jobs.expire_ip failed: ${jobs.error.message}`);
+      return { posts: posts.count ?? 0, ipHashes: jobs.count ?? 0 };
     },
 
     async getBook(deviceId, bookId) {

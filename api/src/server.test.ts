@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { loadConfig } from './config';
 import { createMemoryDeviceRepo } from './repo/memory';
 import type { DeviceRepo } from './repo/types';
@@ -8,16 +8,43 @@ import { buildApp } from './server';
 import { createMemoryLibraryStore } from './store/memory';
 
 /** App with in-memory storage and a queue that never runs anything (route-level tests). */
-function testApp(env: Record<string, string>, devices: DeviceRepo = createMemoryDeviceRepo()) {
+function testApp(env: Record<string, string>, devices: DeviceRepo = createMemoryDeviceRepo(), store = createMemoryLibraryStore()) {
   return buildApp({
     config: loadConfig({ NODE_ENV: 'test', ...env }),
     devices,
-    store: createMemoryLibraryStore(),
+    store,
     queue: new JobQueue(async () => {}),
   });
 }
 
+/**
+ * A store whose reads take a moment, like a real database, so parallel requests really overlap.
+ * Paired with `listening()`: inject() hands requests over one at a time, so races need real HTTP.
+ */
+function slowStore() {
+  const store = createMemoryLibraryStore();
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const { countItemsSince, spendSince } = store;
+  // Read, then the answer takes a moment to arrive: what a request saw can be stale by the time it acts.
+  const slow = <A extends unknown[], R>(read: (...args: A) => Promise<R>) => async (...args: A) => {
+    const result = await read(...args);
+    await pause();
+    return result;
+  };
+  store.countItemsSince = slow(countItemsSince);
+  store.spendSince = slow(spendSince);
+  return store;
+}
+
 type App = Awaited<ReturnType<typeof buildApp>>;
+
+/** Starts the app on a free port and returns a fetch for it, for tests that need truly parallel requests. */
+async function listening(app: App) {
+  const base = await app.listen({ port: 0, host: '127.0.0.1' });
+  onTestFinished(() => app.close());
+  return (path: string, init: { method: string; headers: Record<string, string>; body: unknown }) =>
+    fetch(`${base}${path}`, { ...init, headers: { ...init.headers, 'content-type': 'application/json' }, body: JSON.stringify(init.body) });
+}
 
 function newCredentials() {
   return { deviceId: randomUUID(), deviceSecret: randomBytes(32).toString('base64url') };
@@ -114,6 +141,13 @@ describe('API', () => {
     expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:5180');
     const denied = await app.inject({ method: 'GET', url: '/health', headers: { origin: 'https://evil.example' } });
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('keeps private responses out of caches and turns off content sniffing', async () => {
+    const creds = newCredentials();
+    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
+    const res = await app.inject({ method: 'GET', url: '/v1/me', headers: authHeaders(creds) });
+    expect(res.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
   });
 
   it('uses the standard error shape for unknown routes', async () => {
@@ -238,6 +272,33 @@ describe('jobs API', () => {
     await app.close();
   });
 
+  it('never lets parallel submissions slip past the daily cap together', async () => {
+    const app = await testApp(KEYS, createMemoryDeviceRepo(), slowStore());
+    const headers = await registered(app);
+    const urls = ['7672440936101727519', '7672440936101727520', '7672440936101727521', '7672440936101727522', '7672440936101727523'];
+    const post = await listening(app);
+    const responses = await Promise.all(
+      urls.map((id) => post('/v1/jobs', { method: 'POST', headers, body: { urls: [`https://www.tiktok.com/@reader/video/${id}`] } })),
+    );
+    // Cap 2: exactly two get in, however the requests interleave.
+    expect(responses.map((res) => res.status).sort()).toEqual([201, 201, 429, 429, 429]);
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers })).json().postsToday).toBe(2);
+  });
+
+  it('holds the per-network cap across devices submitting at once', async () => {
+    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_DEVICE: '10', DAILY_LINK_CAP_PER_IP: '2' }, createMemoryDeviceRepo(), slowStore());
+    const devices = await Promise.all([registered(app), registered(app), registered(app)]);
+    const post = await listening(app);
+    const responses = await Promise.all(
+      devices.map((headers, index) =>
+        post('/v1/jobs', { method: 'POST', headers, body: { urls: [`https://www.tiktok.com/@reader/video/767244093610172752${index}`] } }),
+      ),
+    );
+    expect(responses.map((res) => res.status).sort()).toEqual([201, 201, 429]);
+    const refused = responses.find((res) => res.status === 429)!;
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/network has reached today’s limit/);
+  });
+
   it('never shows one device another device’s job', async () => {
     const app = await testApp(KEYS);
     const owner = await registered(app);
@@ -273,9 +334,15 @@ describe('rate limiting behind a proxy', () => {
 
 describe('config', () => {
   it('trusts one proxy hop by default in production only', () => {
-    const prodEnv = { NODE_ENV: 'production', SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k' };
+    const prodEnv = { NODE_ENV: 'production', SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k', IP_HASH_KEY: 'h' };
     expect(loadConfig(prodEnv).TRUST_PROXY_HOPS).toBe(1);
     expect(loadConfig({}).TRUST_PROXY_HOPS).toBe(0);
+  });
+
+  it('requires its own IP hash key in production, rather than borrowing the Supabase key', () => {
+    const env = { NODE_ENV: 'production', SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k' };
+    expect(() => loadConfig(env)).toThrow(/IP_HASH_KEY is required/);
+    expect(loadConfig({ ...env, IP_HASH_KEY: 'h' }).ipHashKey).toBe('h');
   });
 
   it('requires Supabase in production', () => {
