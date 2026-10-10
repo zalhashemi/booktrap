@@ -8,10 +8,15 @@ import {
 import { requireDevice } from '../auth/device-auth';
 import { hashSecret, verifySecret } from '../auth/secret';
 import { HttpError } from '../errors';
+import type { JobQueue } from '../pipeline/queue';
 import type { DeviceRepo } from '../repo/types';
+import type { LibraryStore } from '../store/types';
 
 export interface DeviceRouteOptions {
   registrationsPerIpPerHour: number;
+  /** For "Delete my shelf": the device's data, and its queued work. */
+  store: LibraryStore;
+  queue: JobQueue;
 }
 
 export function deviceRoutes(app: FastifyInstance, repo: DeviceRepo, options: DeviceRouteOptions) {
@@ -47,5 +52,18 @@ export function deviceRoutes(app: FastifyInstance, repo: DeviceRepo, options: De
   app.get('/v1/me', { preHandler: requireDevice(repo) }, async (request): Promise<MeResponse> => {
     const device = request.device!;
     return { deviceId: device.id, createdAt: device.createdAt };
+  });
+
+  /**
+   * "Delete my shelf" (privacy policy: the right to erasure). Removes the device and every book, source,
+   * shelf and job it owns. Its credentials and backup code stop working for good: the id can't come back.
+   */
+  app.delete('/v1/devices/me', { preHandler: requireDevice(repo), config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (request, reply) => {
+    const deviceId = request.device!.id;
+    options.queue.forgetDevice(deviceId);
+    await options.store.eraseDevice(deviceId);
+    await repo.remove(deviceId);
+    request.log.info({ deviceId }, 'device deleted by its owner');
+    reply.code(204);
   });
 }

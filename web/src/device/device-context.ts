@@ -12,6 +12,8 @@ export interface DeviceContextValue {
   retry: () => void;
   /** Discards this device's credentials and starts a new, empty shelf. */
   startFresh: () => void;
+  /** Deletes this shelf from the server for good, then starts a new, empty one. Throws if the server refuses. */
+  deleteShelf: () => Promise<void>;
   /** Switches this browser to the shelf a backup code belongs to. Throws if the code is rejected. */
   restore: (credentials: DeviceCredentials) => Promise<void>;
 }

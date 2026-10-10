@@ -51,6 +51,22 @@ To bring the list into Goodreads, download the Goodreads CSV and upload it at go
 
 All API configuration is in `api/.env.example`. The web app reads only `VITE_API_URL`, which is public. **Never put a key in `web/.env`**: anything prefixed `VITE_` ships to every visitor. CI fails the build if a known key pattern shows up in `web/dist`.
 
+## Privacy and removal requests
+
+The privacy policy and terms are at `/privacy` and `/terms` (`web/src/routes/LegalPages.tsx`, which also holds the operator name, contact address and the retention periods it promises). They're drafts for a lawyer to check before BookTrap charges money.
+
+Readers delete their own shelf in Settings, Your data (`DELETE /v1/devices/me`). Other requests arrive at the contact address:
+
+- **A reader asking about their data**: they send the device id from Settings (never the backup code). Find it with `select id, created_at from devices where id::text like '<first 8 chars>%';`.
+- **A creator asking for removal** (promised within 14 days): in the Supabase SQL Editor, for each post id (`<platform>` is `tiktok` or `instagram`):
+
+  ```sql
+  delete from post_cache  where source_platform = '<platform>' and source_post_id = '<post id>';
+  delete from book_sources where source_platform = '<platform>' and source_post_id = '<post id>';
+  ```
+
+  For a whole handle, find its posts first: `select distinct source_platform, source_post_id from book_sources where creator_handle = '<handle>';` (and the same on `post_cache` with `post->>'creatorHandle'`). Books stay on readers' shelves without that source. A post can come back if someone pastes it again; if a creator asks for that not to happen, the platform's own privacy settings are the reliable answer.
+
 ## Deploy
 
 Deployment (Cloudflare Pages + Render + Supabase) is set up in Phase 7. Steps will be added here then.

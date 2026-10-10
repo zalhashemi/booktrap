@@ -147,6 +147,9 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
         schema: RegisterDeviceResponseSchema,
       }),
     me: (credentials: DeviceCredentials) => request('/v1/me', { schema: MeResponseSchema, credentials }),
+    /** Deletes this device's shelf from the server for good. */
+    deleteDevice: (credentials: DeviceCredentials) =>
+      request('/v1/devices/me', { method: 'DELETE', schema: z.unknown(), credentials }),
     usage: (credentials: DeviceCredentials, signal?: AbortSignal) => request('/v1/usage', { schema: UsageResponseSchema, credentials, signal }),
     createJob: (credentials: DeviceCredentials, urls: string[]) =>
       request('/v1/jobs', { method: 'POST', body: { urls }, schema: JobSchema, credentials }),

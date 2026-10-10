@@ -6,6 +6,7 @@ import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/Toaster';
 import { DeviceProvider } from './device/DeviceProvider';
 import { AddPage } from './routes/AddPage';
+import { PrivacyPage, TermsPage } from './routes/LegalPages';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { SettingsPage } from './routes/SettingsPage';
 import { ShelfPage } from './routes/ShelfPage';
@@ -20,6 +21,9 @@ const router = createBrowserRouter([
       { index: true, element: <AddPage /> },
       { path: 'shelf', element: <ShelfPage /> },
       { path: 'settings', element: <SettingsPage /> },
+      // Readable before (and without) a shelf: even when the server is asleep or unreachable.
+      { path: 'privacy', element: <PrivacyPage />, handle: { open: true } },
+      { path: 'terms', element: <TermsPage />, handle: { open: true } },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

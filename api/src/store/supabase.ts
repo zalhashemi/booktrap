@@ -14,6 +14,7 @@ import {
 } from './types';
 
 const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
 
 function check<T>(result: { data: T; error: { message: string; code?: string } | null }, what: string): T {
   if (result.error) throw new Error(`${what} failed: ${result.error.message}`);
@@ -325,16 +326,11 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     },
 
     async recordSpend(event) {
-      check(
-        await db.from('spend_events').insert({
-          device_id: event.deviceId,
-          job_item_id: event.jobItemId,
-          provider: event.provider,
-          usd: event.usd,
-          detail: event.detail ?? null,
-        }),
-        'spend_events.insert',
-      );
+      const row = { device_id: event.deviceId, job_item_id: event.jobItemId, provider: event.provider, usd: event.usd, detail: event.detail ?? null };
+      let result = await db.from('spend_events').insert(row);
+      // The shelf was deleted while its post was being read: the money is still spent, so keep it without them.
+      if (result.error?.code === FOREIGN_KEY_VIOLATION) result = await db.from('spend_events').insert({ ...row, device_id: null, job_item_id: null });
+      check(result, 'spend_events.insert');
     },
 
     async spendSince(since) {
@@ -430,6 +426,10 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return rows.map(toBook);
     },
 
+    async eraseDevice(deviceId) {
+      check(await db.rpc('delete_device', { p_device_id: deviceId }), 'delete_device');
+    },
+
     async purgeDeletedBooks() {
       const count = check(await db.rpc('purge_deleted_books'), 'purge_deleted_books');
       return Number(count ?? 0);
@@ -444,7 +444,9 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         .lt('created_at', ipHashBefore.toISOString())
         .not('ip_hash', 'is', null);
       if (jobs.error) throw new Error(`jobs.expire_ip failed: ${jobs.error.message}`);
-      return { posts: posts.count ?? 0, ipHashes: jobs.count ?? 0 };
+      const carried = await db.from('network_usage').delete({ count: 'exact' }).lt('used_at', ipHashBefore.toISOString());
+      if (carried.error) throw new Error(`network_usage.expire failed: ${carried.error.message}`);
+      return { posts: posts.count ?? 0, ipHashes: (jobs.count ?? 0) + (carried.count ?? 0) };
     },
 
     async getBook(deviceId, bookId) {

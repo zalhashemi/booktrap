@@ -125,6 +125,18 @@ describe('API', () => {
     expect(res.json().error.code).toBe('unauthorized');
   });
 
+  it('deletes a device on its owner’s request, after which its credentials stop working', async () => {
+    const creds = newCredentials();
+    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
+    expect((await app.inject({ method: 'DELETE', url: '/v1/devices/me' })).statusCode).toBe(401);
+    const res = await app.inject({ method: 'DELETE', url: '/v1/devices/me', headers: authHeaders(creds) });
+    expect(res.statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: authHeaders(creds) })).statusCode).toBe(401);
+    expect(await repo.find(creds.deviceId)).toBeNull();
+    // Another browser holding the same key (or a backup code) can't quietly bring it back.
+    expect((await app.inject({ method: 'POST', url: '/v1/devices', payload: creds })).statusCode).toBe(409);
+  });
+
   it('returns 401 for a registered device with the wrong secret', async () => {
     const creds = newCredentials();
     await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
@@ -297,6 +309,27 @@ describe('jobs API', () => {
     expect(responses.map((res) => res.status).sort()).toEqual([201, 201, 429]);
     const refused = responses.find((res) => res.status === 429)!;
     expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/network has reached today’s limit/);
+  });
+
+  it('erases a deleted shelf’s books and jobs, but its posts still count against the network’s cap', async () => {
+    const store = createMemoryLibraryStore();
+    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_DEVICE: '10', DAILY_LINK_CAP_PER_IP: '2' }, createMemoryDeviceRepo(), store);
+    const first = newCredentials();
+    await app.inject({ method: 'POST', url: '/v1/devices', payload: first });
+    const urls = ['7672440936101727519', '7672440936101727520'].map((id) => `https://www.tiktok.com/@reader/video/${id}`);
+    expect((await app.inject({ method: 'POST', url: '/v1/jobs', headers: authHeaders(first), payload: { urls } })).statusCode).toBe(201);
+    await store.insertBook(first.deviceId, { title: 'Babel', author: null, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, verified: false, normalizedKey: 'babel' });
+
+    expect((await app.inject({ method: 'DELETE', url: '/v1/devices/me', headers: authHeaders(first) })).statusCode).toBe(204);
+    expect(await store.listBooks(first.deviceId)).toEqual([]);
+    expect(await store.listJobs(first.deviceId, 5)).toEqual([]);
+
+    // Starting over on the same network doesn't buy a fresh daily allowance.
+    const second = await registered(app);
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers: second, payload: { urls: [`https://www.tiktok.com/@reader/video/7672440936101727521`] } });
+    expect(res.statusCode).toBe(429);
+    expect(res.json().error.message).toMatch(/network has reached today’s limit/);
+    await app.close();
   });
 
   it('never shows one device another device’s job', async () => {

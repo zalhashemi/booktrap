@@ -7,10 +7,11 @@ import { Button } from './Button';
 /** After this long, explain that the free server may be waking up. */
 const SLOW_AFTER_MS = 4000;
 
-export function ConnectionGate({ children }: { children: ReactNode }) {
+/** `open` pages (the privacy policy and terms) render whatever the shelf's state. */
+export function ConnectionGate({ open = false, children }: { open?: boolean; children: ReactNode }) {
   const { status, error, retry, startFresh } = useDevice();
 
-  if (status === 'ready') return <>{children}</>;
+  if (open || status === 'ready') return <>{children}</>;
   if (status === 'loading') return <Opening />;
 
   const copy = describe(error);
@@ -62,7 +63,7 @@ function describe(error: Error | null): { title: string; body: string; fresh?: b
     if (error.code === ERROR_CODES.deviceExists || error.status === 401) {
       return {
         title: 'This device’s key was rejected',
-        body: 'The key saved in this browser doesn’t match our records, so this shelf can’t be opened here. You can start a fresh, empty shelf on this device.',
+        body: 'This shelf may have been deleted, or the key saved in this browser doesn’t match our records, so it can’t be opened here. You can start a fresh, empty shelf on this device.',
         fresh: true,
       };
     }

@@ -25,6 +25,8 @@ export function createMemoryLibraryStore(): LibraryStore {
   const sources = new Map<string, (BookSource & { bookId: string })[]>();
   const tags = new Map<string, Tag & { deviceId: string }>();
   const bookTags = new Map<string, Set<string>>();
+  /** Recent posts of erased devices, still counted against their networks' daily caps. */
+  const networkUsage: { ipHash: string; usedAt: Date }[] = [];
 
   const now = () => new Date().toISOString();
   const withItems = (job: JobRecord): JobWithItems => ({
@@ -51,9 +53,10 @@ export function createMemoryLibraryStore(): LibraryStore {
   /** Posts counted against the daily caps: every item except a collection link itself. */
   const countPosts = (since: Date, match: (item: JobItemRecord) => boolean) =>
     [...items.values()].filter((item) => new Date(item.createdAt) >= since && item.kind !== 'collection' && match(item)).length;
+  const carriedOver = (ipHash: string, since: Date) => networkUsage.filter((use) => use.ipHash === ipHash && use.usedAt >= since).length;
   const postsSince = (deviceId: string, ipHash: string | null, since: Date) => ({
     byDevice: countPosts(since, (item) => item.deviceId === deviceId),
-    byIp: ipHash ? countPosts(since, (item) => jobs.get(item.jobId)?.ipHash === ipHash) : 0,
+    byIp: ipHash ? countPosts(since, (item) => jobs.get(item.jobId)?.ipHash === ipHash) + carriedOver(ipHash, since) : 0,
   });
   const addItem = (jobId: string, deviceId: string, parentItemId: string | null, item: NewItem, at: number): JobItemRecord => {
     const record: JobItemRecord = {
@@ -136,9 +139,8 @@ export function createMemoryLibraryStore(): LibraryStore {
       if (job) job.status = deriveJobStatus(withItems(job).items);
     },
     async countItemsSince(filter, since) {
-      return countPosts(since, (item) =>
-        'deviceId' in filter ? item.deviceId === filter.deviceId : jobs.get(item.jobId)?.ipHash === filter.ipHash,
-      );
+      if ('deviceId' in filter) return countPosts(since, (item) => item.deviceId === filter.deviceId);
+      return countPosts(since, (item) => jobs.get(item.jobId)?.ipHash === filter.ipHash) + carriedOver(filter.ipHash, since);
     },
     async getCachedPost(platform, postId) {
       const hit = cache.get(postKey(platform, postId));
@@ -310,6 +312,24 @@ export function createMemoryLibraryStore(): LibraryStore {
       for (const set of bookTags.values()) set.delete(tagId);
       return true;
     },
+    async eraseDevice(deviceId) {
+      const recent = Date.now() - 2 * 24 * 60 * 60 * 1000;
+      for (const [id, item] of items) {
+        if (item.deviceId !== deviceId) continue;
+        const ipHash = jobs.get(item.jobId)?.ipHash;
+        const usedAt = new Date(item.createdAt);
+        if (ipHash && item.kind !== 'collection' && usedAt.getTime() >= recent) networkUsage.push({ ipHash, usedAt });
+        items.delete(id);
+      }
+      for (const [id, job] of jobs) if (job.deviceId === deviceId) jobs.delete(id);
+      for (const [id, book] of books) {
+        if (book.deviceId !== deviceId) continue;
+        books.delete(id);
+        sources.delete(id);
+        bookTags.delete(id);
+      }
+      for (const [id, tag] of tags) if (tag.deviceId === deviceId) tags.delete(id);
+    },
     async purgeDeletedBooks() {
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       let count = 0;
@@ -332,6 +352,12 @@ export function createMemoryLibraryStore(): LibraryStore {
         }
       }
       let ipHashes = 0;
+      for (let index = networkUsage.length - 1; index >= 0; index--) {
+        if (networkUsage[index]!.usedAt < ipHashBefore) {
+          networkUsage.splice(index, 1);
+          ipHashes++;
+        }
+      }
       for (const job of jobs.values()) {
         if (job.ipHash && new Date(job.createdAt) < ipHashBefore) {
           job.ipHash = null;

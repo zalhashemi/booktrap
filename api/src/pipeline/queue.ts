@@ -29,6 +29,17 @@ export class JobQueue {
     this.pump();
   }
 
+  /** Drops a device's waiting items (its shelf was deleted). One already running finishes on its own. */
+  forgetDevice(deviceId: string): void {
+    for (let index = this.pending.length - 1; index >= 0; index--) {
+      const entry = this.pending[index]!;
+      if (entry.deviceId !== deviceId) continue;
+      this.pending.splice(index, 1);
+      this.queued.delete(entry.itemId);
+    }
+    for (const [itemId, owner] of this.rerun) if (owner === deviceId) this.rerun.delete(itemId);
+  }
+
   /** Resolves when nothing is pending or running (tests and graceful shutdown). */
   idle(): Promise<void> {
     if (this.running === 0 && this.pending.length === 0) return Promise.resolve();

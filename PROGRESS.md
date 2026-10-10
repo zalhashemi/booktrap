@@ -10,10 +10,11 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Hardening and deploy | In progress (7a hardening done; 7b legal, 7c deploy, 7d production checks to go) |
+| 7 | Hardening and deploy | In progress (7a hardening and 7b privacy done; 7c deploy, 7d production checks to go) |
 
 ## Decisions log
 
+- 2026-10-10: **Operator and contact (7b):** the policies name **VistaHunt Co.** (Kingdom of Bahrain) as controller, contact **vistahuntco@gmail.com**. Both pages are drafts for a lawyer before BookTrap charges money.
 - 2026-10-10: **Moved to a Mac** (from Windows). Node 24 via nvm, a fresh `npm ci` (the copied `node_modules` held Windows binaries), Playwright MCP added for this project. Phases 5 and 6 had never been committed; they are now (`89fd4c9`).
 - 2026-10-10: **Retention (7a):** cached posts are deleted after `POST_CACHE_DAYS` (default 90; re-reading one costs again), captions are no longer cached at all, and hashed networks are cleared from jobs after 2 days. To be stated in the privacy policy (7b).
 - 2026-10-10: **`IP_HASH_KEY`** is its own secret, required in production, so rotating the Supabase key doesn't reset every network's daily count.
@@ -65,6 +66,33 @@ Public Instagram posts (Penguin UK, chosen for testing):
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
 
+## Phase 7b: Privacy, terms and "Delete my shelf" (2026-10-10)
+
+Done:
+- **`/privacy` and `/terms`** (`web/src/routes/LegalPages.tsx`), each opening with "The short version". The privacy policy covers: who the controller is (PDPL Law No. 30 of 2018, GDPR for EU/UK visitors), what's collected and why, how public posts are read (media and captions not kept), the processors (Supabase, Render, Cloudflare, Apify, Anthropic, Google Books, Open Library) and transfers abroad, legal bases, retention (shelf until deleted, Undo bin 30 days, cache 90 days, network hashes 2 days), rights (self-service export, edit and delete, emailed requests with the device id, never the backup code, answered within 30 days, complaints to Bahrain's PDP Authority or an EU/UK authority), a creators' removal route (within 14 days), children under 13, and changes. The terms cover fair use, others' posts and non-affiliation, accuracy, the backup code, no warranty, and Bahraini law. Both open without a shelf, even when the server is asleep or unreachable (`handle: { open: true }`, `ConnectionGate open`). A footer on every page links Privacy, Terms and Contact. Contact constants live in `web/src/legal.ts`.
+- **Delete my shelf** (Settings, Your data; also the brief's "clear data"): `DELETE /v1/devices/me` calls `delete_device` (`supabase/migrations/0008_delete_device.sql`). It removes the device and everything it owns, keeps a tombstone of the random id so no browser holding the key or a backup code can register it again, and carries the posts its networks read in the last 2 days into `network_usage` so deleting doesn't reset a network's daily cap (cleared after 2 days). The device's waiting queue items are dropped, and spend from a post already being read is still recorded without the device. In the app, a two-step inline confirmation focuses "Keep my shelf", then the browser moves to a new, empty shelf. A second browser opening a deleted shelf sees "This shelf may have been deleted…" with Start a fresh shelf.
+- **No client IPs in API logs** (request lines log method and path only).
+- README: how to handle removal requests (SQL for a post or a handle).
+- Tests: 55 shared, 146 API, 30 web. Migration 0008 run in PGlite as `service_role`: a deleted device's network count survives, all its rows go, re-registering the id fails with 23505, and spend against it fails with 23503, which the store catches and records without the device.
+
+Playwright (local, real Supabase): the 7a limit message on Add at 390 (with the cap set to 1, refused before anything was read); `/privacy` at 390 with the API blocked (renders, no gate, no overflow, title "Privacy · BookTrap"); `/terms` and the footer at 1280 in dark (links 44px tall); Settings, Your data at 390: focus lands on "Keep my shelf", Delete everything works, the old credentials get 401 and the browser is on a new shelf. Impeccable detector: 0 findings.
+
+Code review (high) found 10 issues; 9 fixed:
+- Deleting a shelf reset its network's daily cap, since the count came from its own job rows. Fix: `network_usage` carry-over.
+- A shelf deleted mid-read lost that read's spend (foreign key). Fix: queued items dropped, spend recorded without the device.
+- Another browser with the same key re-registered the deleted device, so the backup code worked again. Fix: tombstones.
+- "Nothing was removed" was shown after a timeout that may have deleted it, and a retry then got stuck on 401. Fix: honest copy, and 401 on delete counts as done.
+- Deleting with no open session reported success. Fix: it throws.
+- The memory store didn't erase anything, so tests couldn't check it. Fix: it erases like Postgres, and the tests check books, jobs and the cap.
+- Delete and restore switched shelves in different orders. Fix: one `switchShelf`.
+- Components imported contact details from a route module. Fix: `web/src/legal.ts`.
+- Two render paths for the outlet. Fix: `ConnectionGate open`.
+- Not fixed: opening `/privacy` still registers a device. The id is random and the policy says a key is made on the first visit.
+
+Known gap for the lawyer: a removed creator post can come back if someone pastes it again (no blocklist yet).
+
+**Waiting on the user:** run `0008_delete_device.sql` in the Supabase SQL Editor. Until then, Delete my shelf fails.
+
 ## Phase 7a: Hardening (2026-10-10)
 
 Done:
@@ -84,7 +112,7 @@ Code review (high) found 10 issues; 5 fixed:
 - The collection limit message was written twice. Fix: one helper.
 - Not fixed, judged acceptable: a listing paid for in the split second before a parallel paste takes the last room is paid again on retry ($0.09); a collection retried more than 2 days later skips the network cap (the device cap still holds, at most 25 over); the race tests' store delay placement; one extra read after creating a job.
 
-**Waiting on the user:** run `0007_hardening.sql` in the Supabase SQL Editor. Until then, local pastes fail (the API calls the new functions).
+Migration 0007 is applied (2026-10-10). Live check: a cached TikTok fixture pasted from a test device shelved 7 books for $0 through `create_job_capped`.
 
 ## Phase 6: Design pass (2026-10-09)
 

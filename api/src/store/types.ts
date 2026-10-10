@@ -184,6 +184,11 @@ export interface LibraryStore {
   deleteTag(deviceId: string, tagId: string): Promise<boolean>;
   /** Replaces a book's tags. Tag ids that aren't this device's are ignored. */
   setBookTags(deviceId: string, bookId: string, tagIds: string[]): Promise<void>;
+  /**
+   * "Delete my shelf": removes the device and everything it owns. The posts its networks read in the
+   * last 2 days keep counting against those networks' daily caps, and its id can't be registered again.
+   */
+  eraseDevice(deviceId: string): Promise<void>;
   /** Permanently removes books deleted more than 30 days ago. Returns how many. */
   purgeDeletedBooks(): Promise<number>;
   /**

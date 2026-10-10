@@ -503,6 +503,22 @@ describe('JobQueue', () => {
     expect(runs).toBe(2);
   });
 
+  it('drops a deleted device’s waiting items, leaving other devices’ alone', async () => {
+    const ran: string[] = [];
+    let release!: () => void;
+    const queue = new JobQueue(async (id) => {
+      ran.push(id);
+      if (id === 'a1') await new Promise<void>((resolve) => (release = resolve));
+    }, 1);
+    queue.enqueue('a1', 'device-a');
+    queue.enqueue('a2', 'device-a');
+    queue.enqueue('b1', 'device-b');
+    queue.forgetDevice('device-a');
+    release();
+    await queue.idle();
+    expect(ran).toEqual(['a1', 'b1']);
+  });
+
   it('runs different devices in parallel but one item at a time per device', async () => {
     const order: string[] = [];
     let active = 0;

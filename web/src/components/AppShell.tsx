@@ -1,5 +1,6 @@
 import { Books, GearSix, Plus, type Icon } from '@phosphor-icons/react';
-import { Link, NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useMatches } from 'react-router';
+import { contactHref } from '../legal';
 import { useDevice } from '../device/device-context';
 import { ConnectionGate } from './ConnectionGate';
 import { LibraryBackdrop, ShelfFooter } from './LibraryBackdrop';
@@ -17,6 +18,8 @@ const TABS: Tab[] = [
 ];
 
 export function AppShell() {
+  // Pages that don't need a shelf (the privacy policy and terms) skip the connection gate.
+  const open = useMatches().some((match) => (match.handle as { open?: boolean } | undefined)?.open);
   return (
     <div className="flex min-h-dvh flex-col">
       <LibraryBackdrop />
@@ -62,9 +65,10 @@ export function AppShell() {
       <StorageNotice />
 
       <main id="main" className="mx-auto w-full max-w-[1080px] flex-1 px-4 pt-6 pb-36 md:px-8 md:pt-10 md:pb-20">
-        <ConnectionGate>
+        <ConnectionGate open={open}>
           <Outlet />
         </ConnectionGate>
+        <SiteFooter />
       </main>
       <ShelfFooter />
 
@@ -94,6 +98,33 @@ export function AppShell() {
         </ul>
       </nav>
     </div>
+  );
+}
+
+function SiteFooter() {
+  const link = 'inline-flex min-h-11 items-center px-2 underline-offset-[0.2em] hover:text-text hover:underline';
+  return (
+    <footer className="mt-16 border-t-[1.5px] border-rule pt-4 text-sm text-text-muted md:mt-20">
+      <nav aria-label="About BookTrap">
+        <ul className="-mx-2 flex flex-wrap items-center">
+          <li>
+            <Link to="/privacy" className={link}>
+              Privacy
+            </Link>
+          </li>
+          <li>
+            <Link to="/terms" className={link}>
+              Terms
+            </Link>
+          </li>
+          <li>
+            <a href={contactHref()} className={link}>
+              Contact
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </footer>
   );
 }
 

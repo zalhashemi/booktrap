@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DeviceCredentials } from '@booktrap/shared';
-import { api, NetworkError } from '../api/client';
+import { api, ApiRequestError, NetworkError } from '../api/client';
 import { bootstrapDevice, requestPersistentStorage } from './bootstrap';
+import { clearBackupSaved } from './backupPrompt';
 import { CREDENTIALS_KEY, createCredentialStore } from './credentials';
 import { DeviceContext, type DeviceContextValue } from './device-context';
 
@@ -53,17 +54,37 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     void queryClient.resetQueries({ queryKey: SESSION_KEY });
   }, [queryClient]);
 
+  /** Points this browser at another shelf (or none: a new one) and drops every cached view of the old one. */
+  const switchShelf = useCallback(
+    async (next: DeviceCredentials | null) => {
+      if (next) store.save({ ...next, registered: true });
+      else store.clear();
+      await queryClient.resetQueries({ queryKey: SESSION_KEY });
+      queryClient.removeQueries({ predicate: (cached) => cached.queryKey[0] !== SESSION_KEY[0] });
+    },
+    [queryClient],
+  );
+
+  const session = query.data;
+  const deleteShelf = useCallback(async () => {
+    if (!session) throw new Error('No shelf is open.');
+    try {
+      await api.deleteDevice(session.credentials);
+    } catch (error) {
+      // Already gone (a retry after an answer that never arrived): carry on as deleted.
+      if (!(error instanceof ApiRequestError && error.status === 401)) throw error;
+    }
+    clearBackupSaved();
+    await switchShelf(null);
+  }, [session, switchShelf]);
+
   const restore = useCallback(
     async (credentials: DeviceCredentials) => {
       // Prove the code works before replacing anything on this browser.
       await api.me(credentials);
-      store.save({ ...credentials, registered: true });
-      // Re-run bootstrap with the restored credentials. Library data is keyed by device, so the
-      // old shelf's cache can never be shown under the new one; it is dropped to free memory.
-      await queryClient.resetQueries({ queryKey: SESSION_KEY });
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
+      await switchShelf(credentials);
     },
-    [queryClient],
+    [switchShelf],
   );
 
   const value: DeviceContextValue = {
@@ -73,6 +94,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     persisted,
     retry,
     startFresh,
+    deleteShelf,
     restore,
   };
 

@@ -31,6 +31,10 @@ export function createSupabaseDeviceRepo(db: SupabaseClient): DeviceRepo {
       const { error } = await db.from('devices').update({ last_seen_at: at.toISOString() }).eq('id', id);
       if (error) throw new Error(`devices.touch failed: ${error.message}`);
     },
+    async remove(id) {
+      const { error } = await db.from('devices').delete().eq('id', id);
+      if (error) throw new Error(`devices.remove failed: ${error.message}`);
+    },
     async ping() {
       const { error } = await db.from('devices').select('id').limit(1);
       if (error) throw new Error(`database unreachable: ${error.message}`);

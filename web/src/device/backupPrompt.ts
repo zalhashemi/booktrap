@@ -16,3 +16,12 @@ export function markBackupSaved(): void {
     // Private mode: the reminder may show again, which is harmless.
   }
 }
+
+/** A new shelf has a new code: forget that the old one was saved. */
+export function clearBackupSaved(): void {
+  try {
+    localStorage.removeItem(SAVED_KEY);
+  } catch {
+    // Nothing stored, nothing to clear.
+  }
+}

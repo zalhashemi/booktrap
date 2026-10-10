@@ -30,6 +30,8 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       level: config.NODE_ENV === 'test' ? 'silent' : config.LOG_LEVEL,
       // Belt and braces: the default serializers do not log headers, but never let a secret through.
       redact: [`req.headers["${DEVICE_SECRET_HEADER}"]`, 'req.headers.authorization'],
+      // Request lines carry the method and path only: no client IP in the logs (privacy policy).
+      serializers: { req: (request: { method: string; url: string }) => ({ method: request.method, url: request.url }) },
     },
     // Trust exactly the proxy hops we deploy behind (Render's edge = 1). Trusting "all" would let
     // clients pick their own IP via X-Forwarded-For and walk around every IP rate limit.
@@ -77,7 +79,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
   );
 
   healthRoutes(app, devices);
-  deviceRoutes(app, devices, { registrationsPerIpPerHour: config.REGISTRATIONS_PER_IP_PER_HOUR });
+  deviceRoutes(app, devices, { registrationsPerIpPerHour: config.REGISTRATIONS_PER_IP_PER_HOUR, store, queue });
   jobRoutes(app, {
     devices,
     store,
