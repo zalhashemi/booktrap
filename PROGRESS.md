@@ -10,9 +10,111 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Hardening and deploy | In progress (7a hardening and 7b privacy done; 7c deploy, 7d production checks to go) |
+| 7 | Accounts (Supabase Auth) | Not started (next) |
+| 8 | Limits, moderation, report and takedown | Not started |
+| 9 | Scale, storage and cost | Not started |
+| 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
+
+The old "Phase 7: Hardening and deploy" became Phase 10 on 2026-10-10. Its finished work keeps the names 7a, 7b and 7c in the sections below. Section §12 of the brief follows the new order.
+
+## Plan for Phases 7 to 10 (user decisions, 2026-10-09)
+
+Decisions:
+- **Guests** can try BookTrap without an account and sign up to keep their shelf. Guests get 5 posts a day. An unclaimed guest shelf is deleted after 30 days without a visit.
+- **Sign-in**: email and password, passkeys, and an email code or magic link. No Google or Apple for now. This uses **Supabase Auth**, whose passkeys are in beta (since May 2026).
+- **A guest's shelf is kept on sign-up**: the user id never changes. The old device identity is removed with no migration, so existing device data is dropped (export it as JSON first if it's worth keeping).
+- **Moderation**: every post the AI reads is checked, and only explicit non-book content is blocked (adult book covers and talk about adult books are fine). There is a report-and-takedown flow.
+- **Upload and payload limits** are audited and enforced. **Caching**: videos are never stored; the result cache stays, with an expiry.
+- **Email**: no domain yet. Claude suggests one and the user buys it.
+- **Scale target**: 100 people at once, with hosting up to about $10 a month.
+- **Order**: Accounts, then Limits and moderation, then Scale and cost, then Legal and deploy.
+
+Migrations 0007 and 0008 are already used by 7a and 7b, so the accounts migration is **0009** and the reports table is **0010**.
+
+### Phase 7: Accounts
+- Every visitor gets a Supabase session; a guest is an anonymous user. Signing up adds an email and password, a passkey or an email code to that same user.
+- The device identity is deleted: `web/src/device/*`, `POST /v1/devices`, `DELETE /v1/devices/me`, the device headers, `api/src/auth/device-auth.ts` and the related Settings sections.
+- API:
+  - `api/src/auth/session-auth.ts` verifies the Supabase access token (asymmetric JWT, checked with jose against Supabase's published signing keys) and sets `request.user = { id, isAnonymous }`. `request.device` becomes `request.user` throughout.
+  - Caps: guests get 5 posts a day (`DAILY_LINK_CAP_GUEST`), signed-in users 40 (`DAILY_LINK_CAP_PER_DEVICE`), and the per-IP caps stay.
+  - A timer deletes anonymous users inactive for 30 days, next to the 6-hourly purge.
+  - `DELETE /v1/account` deletes everything. The JSON export is "download my data".
+- Database: `0009_accounts.sql` makes ownership go by `user_id`, which references `auth.users(id)` on delete cascade.
+  - It drops `devices`, the device tombstones and the device-owned rows, and keeps cached posts and spend history.
+  - It reworks `create_job_capped`, `add_child_items_capped` and `delete_device` (from 0007/0008) for users.
+  - It is tested in PGlite first. The user runs it in Supabase.
+- Web:
+  - supabase-js is used for auth only. The app never reads the database directly, and RLS stays on with no policies.
+  - `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are public. The CI secret scan allows the publishable key and still blocks secret keys.
+  - `web/src/api/client.ts` sends `Authorization: Bearer` and refreshes the token.
+  - `AccountProvider` replaces `DeviceProvider`: it holds the session, an `onAuthStateChange` listener and the guest-to-account upgrade.
+- Screens (mockups shown before building):
+  - A Sign up / Log in sheet: email and password, "Use a passkey", "Email me a code", "Forgot password", and the Terms and Privacy line.
+  - A "Save your shelf" prompt after a guest's first books, and an "unsaved" margin note on the guest's shelf header.
+  - Settings, Account: email, passkeys, change password, sign out and delete account.
+  - Landing routes for email confirmation and password reset.
+  - `/terms` and `/privacy` rewritten for accounts (no device ids or backup codes).
+- Passkeys are offered only where WebAuthn exists. Email and password, and the email code, still work if the beta fails.
+- Email uses Supabase's built-in sender in development.
+- Tests:
+  - API: token verification (valid, expired, wrong issuer), guest versus user caps, delete account.
+  - Web: the account provider's states.
+  - Playwright: sign up; password login; email code; passkey with Chromium's virtual authenticator; a guest's shelf surviving sign-up; delete account. All at 390 and 1280 in both themes.
+  - No device-identity code remains (grep).
+- Needs from the user:
+  - Enable "Anonymous sign-ins", "Email" and "Passkeys (beta)".
+  - Allow `http://localhost:5180` as a redirect URL.
+  - Run 0009.
+
+### Phase 8: Limits, moderation, report and takedown
+- **Limits**, each in `shared/` with a test, so the web app shows a limit before the server refuses:
+  - body size (256 KB)
+  - links per paste (30), pasted text length, notes (5,000 characters)
+  - shelf names and shelves per user, and books per account (about 5,000)
+  - books per PDF, cover proxy (2 MB), video and slide bytes (`media.ts`)
+  - job history kept per user
+- **Moderation**:
+  - The structured output in `api/src/pipeline/extract.ts` gains `content: "books" | "not_books" | "explicit_non_book" | "graphic_violence"`, judged from the same frames at no extra cost. Adult book covers and discussion count as books.
+  - A blocked post adds nothing, is cached so it's never paid for again, and shows a plain message on its job item.
+  - Tests come from fixtures and a prompt check with `api/scripts/compare-models.ts`.
+- **Report and takedown**:
+  - "Report this post" on each source in the book sheet writes to a `reports` table (`0010`).
+  - The takedown email is on the privacy page.
+  - An admin-only route (`ADMIN_TOKEN`) and `api/scripts/takedown.ts` remove the post from the cache and from every shelf, and delete books seen only there. This also closes the 7b gap: a removed post shouldn't come back when pasted again.
+  - A small hidden admin page lists open reports.
+
+### Phase 9: Scale, storage and cost
+- **Storage**: real per-user size measured in Supabase, projected to 1k, 10k and 100k users against Free (500 MB), Pro (8 GB) and beyond.
+- **Load test**:
+  - k6 or autocannon scripts in `api/scripts/load/`, with Apify and Claude stubbed so nothing is paid for.
+  - 100 simultaneous users submit links and poll; the shelf and export endpoints are tested too.
+  - Run in Docker at Render-like limits (512 MB first, then the paid plan's size), measuring memory (ffmpeg), CPU, queue wait and errors.
+- **Tuning**:
+  - Queue concurrency (currently 2) set to what memory allows.
+  - A fair per-user share of the queue.
+  - A "you're in the queue" estimate in the job panel.
+  - An explicit check that no video or temp directory is kept after frames are taken.
+- **Cost report** here: hosting, Supabase, Apify, Claude and email at 100, 1k and 10k users, set against the $20 reading budget and the ~$10 hosting budget, with a recommendation.
+
+### Phase 10: Legal and deploy
+- **Legal**: the 7b privacy policy and terms are rewritten for accounts, guests, moderation, reports and Resend. They are marked for review by the user or a lawyer.
+  - The user's checklist: notify Bahrain's Personal Data Protection Authority, and get a lawyer's review before any paid tier.
+  - The post cache already expires (7a, 90 days); it is slimmed further to what extraction and dedupe need.
+- **Domain and email**: Claude suggests a domain (about $10-15 a year) and the user buys it.
+  - Resend (free for 3,000 emails a month) becomes Supabase's mail sender, with SPF, DKIM and DMARC.
+  - Auth emails are branded in the app's style.
+- **Deploy**:
+  - Render's always-on Starter plan (about $7 a month) replaces free in `render.yaml`.
+  - Cloudflare Pages serves the web app on the domain.
+  - Supabase gets production settings and redirect URLs.
+- **Proxies**: share-link lookups and media downloads are tested from Render. They go through Apify's proxy only if they're blocked.
+- **Hardening**: a security review, rate limits, error states and environment docs, then a Playwright full-flow test against production and a final Code Review.
+
+Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown first. Code Review (high), with all findings fixed. Playwright at 390 and 1280 in both themes. Update this file and the brief, then stop with a short status. Ask for keys, accounts and decisions.
 
 ## Decisions log
+
+- 2026-10-10: **Phase order replaced** with the plan above (Accounts, Limits and moderation, Scale and cost, then Legal and deploy). **The live deploy (Render API, Cloudflare Pages) is to be taken offline** until the plan is done, since real users would otherwise create device-owned shelves that Phase 7 drops.
 
 - 2026-10-10: **Operator and contact (7b):** the policies name **VistaHunt Co.** (Kingdom of Bahrain) as controller, contact **vistahuntco@gmail.com**. Both pages are drafts for a lawyer before BookTrap charges money.
 - 2026-10-10: **Moved to a Mac** (from Windows). Node 24 via nvm, a fresh `npm ci` (the copied `node_modules` held Windows binaries), Playwright MCP added for this project. Phases 5 and 6 had never been committed; they are now (`89fd4c9`).
@@ -66,9 +168,33 @@ Public Instagram posts (Penguin UK, chosen for testing):
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
 
-## Phase 7c: Deploy (in progress, 2026-10-10)
+## 7c: Deploy (live on 2026-10-10, then taken offline)
 
-Prepared:
+Deployed: API on Render (`booktrap-api.onrender.com`, Singapore, next to Supabase `ap-southeast-1`), web on Cloudflare Pages (`booktrap.pages.dev`). The user suspended both the same day under the new plan (Phase 10 redeploys).
+
+Production checks run before it went offline (Playwright against the live site, cached fixtures, $0):
+- First visit registered a device in 1.5s. CORS allowed only `https://booktrap.pages.dev` with the device headers. The live `_headers` carried the CSP naming the Render origin.
+- A mixed paste of 2 TikTok and 2 Instagram posts (carousel 5, video 7, Instagram carousel 35, reel 1): 48 books, all New, no console errors. A re-paste added no rows. A reload and a second tab kept the shelf.
+- Every export from the 48-book shelf: Goodreads CSV (24 columns, 48 rows, BOM, CRLF), CSV (48 rows, both platforms), JSON (48), PDF (3 pages, 35 covers), Copy as text (48 lines, "Copied 48 books").
+- Backup code in a fresh browser: a typo was caught; the code typed in lowercase with spaces restored the same shelf.
+- Add and Shelf at 390, 768, 1280, 1440, 1920 and 2560 in both themes: no horizontal overflow, no tap target under 44px.
+- Delete my shelf: the old credentials got 401. The test shelves were deleted.
+- The only console error was an Open Library 404 for a missing cover (`default=false`), shown as a lettered plate as designed.
+
+Not checked before it went offline, carried into Phase 10:
+- **Client IP behind Render's proxies.** `TRUST_PROXY_HOPS=1` is unverified. Render's community reports differing chains (Cloudflare then Render's load balancer), and Cloudflare adds `CF-Connecting-IP`. If the hop count is wrong, every reader behind one Cloudflare edge shares the per-IP caps. Measure the real chain on the deployment first, then set the hops, or read `CF-Connecting-IP` if it can be trusted. A temporary `/health/whoami` probe was deployed for this, got no answer (the service was already suspended), and was removed.
+- **Direct platform fetches from Render** (share links, carousel slides, Instagram media) need 2 posts that aren't cached (about $0.10-0.20).
+- From the final code review of the deploy work (open):
+  - `autoDeployTrigger: checksPass` in `render.yaml`, so a red CI never deploys.
+  - Retention while the free plan sleeps: the 6-hourly timer doesn't run, so expiry waits for the next wake. Move it into Supabase with `pg_cron` (with Starter it stays awake, but the database is the right home).
+  - The Pages build command needs no `npm ci` (Pages installs dependencies itself): `npm run build -w @booktrap/web`.
+  - `render.yaml` repeats the API's defaults. Keep only secrets and differences.
+  - `allowScripts` keys are exact versions. Re-approve after updating ffmpeg-static or esbuild.
+  - Redundant config: `theme-init.js` in `includeAssets` and the plugin's `apply: 'build'`.
+  - The theme script could go back inline with a CSP hash, saving a request on first load.
+  - Pages preview deployments would need their origins in `ALLOWED_ORIGIN`.
+
+Prepared for the deploy:
 - `render.yaml` (Blueprint for the API: free plan, `npm ci --include=dev` so tsup is there, `/health` as the health check, secrets entered in the dashboard, `IP_HASH_KEY` generated). README "Deploy" has the Render and Cloudflare Pages steps.
 - **Security headers for the web app**: the build writes `web/dist/_headers` with a Content-Security-Policy naming the API origin (scripts from the site only, plus WebAssembly for the PDF engine; `connect-src` the site, `data:` and the API; any https image for covers), `nosniff`, `X-Frame-Options: DENY`, a Permissions-Policy and immutable caching for hashed assets. The theme script moved out of `index.html` into `public/theme-init.js` so no inline script is needed.
 - Checked under that exact policy on a production build (Playwright, real Supabase): paste, shelf with 7/7 covers, PDF export, no violations and no console errors. The first run caught two: the PDF engine fetching its WebAssembly from a `data:` URL (now allowed; it had fallen back and still worked) and Zod probing `new Function` (now `jitless`, set in `web/src/zod-config.ts`, imported first).
