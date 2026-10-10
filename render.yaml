@@ -1,0 +1,56 @@
+# Render blueprint for the BookTrap API (README, "Deploy"). The web app is on Cloudflare Pages.
+services:
+  - type: web
+    name: booktrap-api
+    runtime: node
+    plan: free
+    # Pick the region nearest the Supabase project (it can't be changed later): every request
+    # makes several database round trips.
+    region: frankfurt
+    # Dev dependencies are needed to build (tsup), even with NODE_ENV=production.
+    buildCommand: npm ci --include=dev && npm run build -w @booktrap/api
+    startCommand: npm start -w @booktrap/api
+    # Liveness only: /health/ready reaches the database and is rate limited.
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: IP_HASH_KEY
+        generateValue: true
+      # Secrets: entered in the Render dashboard, never committed.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_BOOKS_API_KEY
+        sync: false
+      # The Cloudflare Pages address (and a custom domain later), comma-separated.
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: EXTRACTION_MODEL
+        value: claude-sonnet-5-5
+      - key: EXTRACTION_EFFORT
+        value: medium
+      - key: DAILY_LINK_CAP_PER_DEVICE
+        value: "40"
+      - key: DAILY_LINK_CAP_PER_IP
+        value: "120"
+      - key: MAX_LINKS_PER_SUBMISSION
+        value: "30"
+      - key: MAX_VIDEOS_PER_COLLECTION
+        value: "100"
+      - key: MONTHLY_BUDGET_USD
+        value: "20"
+      - key: GLOBAL_SPEND_KILL_SWITCH
+        value: "false"
+      - key: POST_CACHE_DAYS
+        value: "90"

@@ -69,4 +69,17 @@ Readers delete their own shelf in Settings, Your data (`DELETE /v1/devices/me`).
 
 ## Deploy
 
-Deployment (Cloudflare Pages + Render + Supabase) is set up in Phase 7. Steps will be added here then.
+Three services: **Supabase** (database, already set up), **Render** (the API, `render.yaml`) and **Cloudflare Pages** (the web app). Pushing to `main` on GitHub runs CI and redeploys both.
+
+1. **Supabase**: every file in `supabase/migrations/` must have been run in order (0001 to 0008).
+2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` is generated. Change `region` in `render.yaml` first if the Supabase project isn't in Europe; it can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
+3. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this GitHub repo.
+   - Build command: `npm ci && npm run build -w @booktrap/web`
+   - Build output directory: `web/dist`
+   - Environment variable: `VITE_API_URL` = the Render address (e.g. `https://booktrap-api.onrender.com`). It's public; it ships in the bundle.
+   - Node comes from `.nvmrc`. Unknown paths fall back to `index.html` (no `404.html`), so `/shelf` and `/privacy` load directly.
+   - The build writes `web/dist/_headers`: a Content-Security-Policy naming the API origin, `nosniff`, `frame-ancestors 'none'` and long caching for hashed assets.
+4. Set Render's `ALLOWED_ORIGIN` to the Pages address (`https://<project>.pages.dev`) and let it redeploy.
+5. Check: open the Pages address, paste a link, and see it shelved.
+
+The free Render plan sleeps after about 15 minutes idle; the first request then takes 30 to 60 seconds, and the app says so. Unfinished jobs resume when it wakes.

@@ -66,6 +66,17 @@ Public Instagram posts (Penguin UK, chosen for testing):
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
 
+## Phase 7c: Deploy (in progress, 2026-10-10)
+
+Prepared:
+- `render.yaml` (Blueprint for the API: free plan, `npm ci --include=dev` so tsup is there, `/health` as the health check, secrets entered in the dashboard, `IP_HASH_KEY` generated). README "Deploy" has the Render and Cloudflare Pages steps.
+- **Security headers for the web app**: the build writes `web/dist/_headers` with a Content-Security-Policy naming the API origin (scripts from the site only, plus WebAssembly for the PDF engine; `connect-src` the site, `data:` and the API; any https image for covers), `nosniff`, `X-Frame-Options: DENY`, a Permissions-Policy and immutable caching for hashed assets. The theme script moved out of `index.html` into `public/theme-init.js` so no inline script is needed.
+- Checked under that exact policy on a production build (Playwright, real Supabase): paste, shelf with 7/7 covers, PDF export, no violations and no console errors. The first run caught two: the PDF engine fetching its WebAssembly from a `data:` URL (now allowed; it had fallen back and still worked) and Zod probing `new Function` (now `jitless`, set in `web/src/zod-config.ts`, imported first).
+- `allowScripts` in package.json approves the install scripts of ffmpeg-static, esbuild and fsevents, so a stricter npm on Render can't silently skip downloading ffmpeg.
+- The production API build was started locally: it serves `/health/ready` against Supabase, finds ffmpeg, and refuses to start without `IP_HASH_KEY`.
+- PWA manifest and meta description now say "TikTok or Instagram links".
+- Test-harness note: a fresh Playwright context with `route()` interception sometimes stalls at "Opening your shelf" until a reload (3/3 fresh contexts without interception load in about 1.4s). Watch for it in the production checks.
+
 ## Phase 7b: Privacy, terms and "Delete my shelf" (2026-10-10)
 
 Done:
@@ -91,7 +102,7 @@ Code review (high) found 10 issues; 9 fixed:
 
 Known gap for the lawyer: a removed creator post can come back if someone pastes it again (no blocklist yet).
 
-**Waiting on the user:** run `0008_delete_device.sql` in the Supabase SQL Editor. Until then, Delete my shelf fails.
+Migration 0008 is applied (2026-10-10). Live check with two browsers on one shelf: deleting in one moved it to a new shelf; the other, reopened, was refused (old credentials 401) and offered Start a fresh shelf. A delete during a read made that read's book insert fail on the foreign key, logged, with nothing written.
 
 ## Phase 7a: Hardening (2026-10-10)
 

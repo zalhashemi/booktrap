@@ -20,6 +20,11 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // Plain scripts the page loads as they are (public/theme-init.js).
+    files: ['web/public/**/*.js'],
+    languageOptions: { globals: globals.browser, sourceType: 'script' },
+  },
+  {
     files: ['web/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
