@@ -56,6 +56,14 @@ export interface CachedPostMeta {
  */
 export type PostContent = 'books' | 'not_books' | 'explicit_non_book' | 'graphic_violence' | 'refused';
 
+/** The verdicts that skip a post, as job items and the admin page name them. The one place this lives. */
+export const BLOCKED_BY_CONTENT: Partial<Record<PostContent, BlockedKind>> = {
+  explicit_non_book: 'explicit',
+  graphic_violence: 'graphic',
+  refused: 'refused',
+};
+export const BLOCKING_CONTENT = Object.keys(BLOCKED_BY_CONTENT) as PostContent[];
+
 export interface CachedPost {
   post: CachedPostMeta;
   /** Kept even for a skipped post, so an operator's unblock can shelve them without paying again. */
@@ -264,6 +272,11 @@ export interface LibraryStore {
   findOwnSource(userId: string, platform: SourcePlatform, postId: string): Promise<{ url: string; creatorHandle: string | null } | null>;
   /** False when this reader already has an open report on the post (reporting again changes nothing). */
   createReport(userId: string, report: NewReport): Promise<boolean>;
+  /**
+   * What is known about a post for a takedown: its link and creator from any report, the cache or a
+   * shelf, and whether anyone reported it. Nulls when nothing is known (a link from an email).
+   */
+  describePost(platform: SourcePlatform, postId: string): Promise<{ url: string | null; creatorHandle: string | null; reported: boolean }>;
   countReportsSince(userId: string, since: Date): Promise<number>;
   listReports(status: 'open' | 'dismissed', limit: number): Promise<ReportRecord[]>;
   countReports(status: 'open' | 'dismissed'): Promise<number>;

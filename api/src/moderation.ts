@@ -1,17 +1,12 @@
-import type { AdminPost, AdminPostList, AdminTab, BlockedKind, SourcePlatform, TakedownResponse } from '@booktrap/shared';
+import type { AdminPost, AdminPostList, AdminTab, SourcePlatform, TakedownResponse } from '@booktrap/shared';
 import { parseSourceUrl } from '@booktrap/shared';
 import { resolveLink } from './pipeline/resolve';
-import type { LibraryStore, PostContent, RemovedPostRecord, ReportRecord } from './store/types';
+import { BLOCKED_BY_CONTENT, type LibraryStore, type RemovedPostRecord, type ReportRecord } from './store/types';
 
 /** Posts listed per admin tab. Reports are read in a bigger batch first, then grouped by post. */
 const POSTS_PER_TAB = 100;
 const REPORTS_READ = 1000;
 
-const VERDICT_KIND: Partial<Record<PostContent, BlockedKind>> = {
-  explicit_non_book: 'explicit',
-  graphic_violence: 'graphic',
-  refused: 'refused',
-};
 
 export class NotAPostError extends Error {
   constructor(message: string) {
@@ -21,8 +16,8 @@ export class NotAPostError extends Error {
 }
 
 /** Reports grouped by post, newest activity first. */
-function groupReports(reports: ReportRecord[]): Omit<AdminPost, 'reach'>[] {
-  const byPost = new Map<string, Omit<AdminPost, 'reach'>>();
+function groupReports(reports: ReportRecord[]): AdminPost[] {
+  const byPost = new Map<string, AdminPost>();
   for (const report of reports) {
     const key = `${report.platform}:${report.postId}`;
     const entry = byPost.get(key) ?? {
@@ -52,10 +47,12 @@ const removedToPost = (post: RemovedPostRecord): AdminPost => ({
   blocked: 'removed',
   since: post.removedAt,
   last: post.removedAt,
-  reach: null,
 });
 
-/** One tab of the admin page, with every tab's count for the page-tabs. */
+/**
+ * One tab of the admin page, with every tab's count for the page-tabs. How far a post reached is
+ * asked for the chosen post only (`/admin/reach`), not for every row.
+ */
 export async function listAdminPosts(store: LibraryStore, tab: AdminTab): Promise<AdminPostList> {
   const [open, blocked, removed, dismissed] = await Promise.all([
     store.countReports('open'),
@@ -65,9 +62,7 @@ export async function listAdminPosts(store: LibraryStore, tab: AdminTab): Promis
   ]);
   let posts: AdminPost[];
   if (tab === 'open' || tab === 'dismissed') {
-    const grouped = groupReports(await store.listReports(tab, REPORTS_READ));
-    // How far each reported post reached: the operator sees what a takedown would remove.
-    posts = await Promise.all(grouped.map(async (post) => ({ ...post, reach: await store.postReach(post.platform, post.postId) })));
+    posts = groupReports(await store.listReports(tab, REPORTS_READ));
   } else if (tab === 'blocked') {
     posts = (await store.listBlockedPosts(POSTS_PER_TAB)).map((entry) => ({
       platform: entry.post.platform,
@@ -75,10 +70,9 @@ export async function listAdminPosts(store: LibraryStore, tab: AdminTab): Promis
       url: entry.post.url,
       creatorHandle: entry.post.creatorHandle,
       reports: [],
-      blocked: VERDICT_KIND[entry.content] ?? 'explicit',
+      blocked: BLOCKED_BY_CONTENT[entry.content] ?? 'explicit',
       since: entry.fetchedAt,
       last: entry.fetchedAt,
-      reach: null,
     }));
   } else {
     posts = (await store.listRemovedPosts(POSTS_PER_TAB)).map(removedToPost);
@@ -98,23 +92,23 @@ export async function postFromUrl(url: string, resolve: typeof resolveLink = res
 }
 
 /**
- * Takes a post down everywhere. The link and handle come from its reports when there are any (they're
- * what readers saw), otherwise from what the operator gave.
+ * Takes a post down everywhere. Its link and handle are kept on the record: from a report (what readers
+ * saw), the cache or a shelf, otherwise what the operator gave. Read before the takedown deletes them.
  */
 export async function takeDown(
   store: LibraryStore,
   post: { platform: SourcePlatform; postId: string; url?: string | null; creatorHandle?: string | null },
   reason: RemovedPostRecord['reason'],
 ): Promise<TakedownResponse> {
-  const reported = (await store.listReports('open', REPORTS_READ)).find((r) => r.platform === post.platform && r.postId === post.postId);
+  const known = await store.describePost(post.platform, post.postId);
   const result = await store.takeDownPost(
     {
       platform: post.platform,
       postId: post.postId,
-      url: reported?.url ?? post.url ?? null,
-      creatorHandle: reported?.creatorHandle ?? post.creatorHandle ?? null,
+      url: known.url ?? post.url ?? null,
+      creatorHandle: known.creatorHandle ?? post.creatorHandle ?? null,
     },
-    reported && reason === 'admin' ? 'report' : reason,
+    known.reported && reason === 'admin' ? 'report' : reason,
   );
   return { platform: post.platform, postId: post.postId, ...result };
 }

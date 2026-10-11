@@ -1,3 +1,4 @@
+import { LIMITS } from './limits';
 import { INSTAGRAM_HOSTS, parseInstagramUrl } from './instagram';
 import { linkKey, type SourceLink } from './source';
 import { TIKTOK_HOSTS, parseTikTokUrl } from './tiktok';
@@ -52,4 +53,16 @@ export function countUnreadableLinks(text: string): number {
     unreadable.add(`${host.replace(/^(www|m)\./, '')}${path}`);
   }
   return unreadable.size;
+}
+
+/**
+ * The part of a huge paste that's read for links: the first `LIMITS.pasteChars` characters, cut back
+ * to the last whitespace so a link at the edge is dropped whole rather than read as a shorter, wrong id.
+ */
+export function readablePaste(text: string, limit: number = LIMITS.pasteChars): string {
+  if (text.length <= limit) return text;
+  // One character past the limit tells whether the last word ends right at it.
+  const head = text.slice(0, limit + 1);
+  const lastSpace = head.search(/\s\S*$/);
+  return lastSpace === -1 ? '' : head.slice(0, lastSpace);
 }

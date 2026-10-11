@@ -46,6 +46,9 @@ export async function deleteAccount(userId: string, { store, users, queue, revoc
  * Links the guest is still reading finish first, and waiting ones move to the account, so no book is
  * written under the guest afterwards. Books move one at a time, each folded as it arrives, so a retry
  * after a failure carries on where it stopped. Returns how many books were added and how many folded.
+ *
+ * The book limit is deliberately not applied here: a guest holds at most 500 books, and "never lose a
+ * book" outranks a storage limit. An account past its limit can't add more until it makes room.
  */
 export async function mergeGuestShelf(guestId: string, userId: string, deps: AccountDeps): Promise<{ added: number; folded: number }> {
   const { store, users, queue } = deps;

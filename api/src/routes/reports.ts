@@ -9,6 +9,7 @@ import {
   TakedownRequestSchema,
   type AdminPostList,
   type AdminTab,
+  type PostReach,
   type TakedownResponse,
 } from '@booktrap/shared';
 import { HttpError } from '../errors';
@@ -71,6 +72,17 @@ export function adminRoutes(
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Say which post: platform and postId.');
     return parsed.data;
   };
+
+  /** Checks the admin key, nothing else (the page's key screen). */
+  app.get('/admin/check', options, async (_request, reply) => {
+    reply.code(204);
+  });
+
+  /** How far one post reached, for its detail: what a takedown would remove. */
+  app.get<{ Querystring: { platform?: string; postId?: string } }>('/admin/reach', options, async (request): Promise<PostReach> => {
+    const { platform, postId } = postRef(request.query);
+    return store.postReach(platform, postId);
+  });
 
   app.get<{ Querystring: { tab?: string } }>('/admin/posts', options, async (request): Promise<AdminPostList> => {
     const tab = (ADMIN_TABS as readonly string[]).includes(request.query.tab ?? '') ? (request.query.tab as AdminTab) : 'open';

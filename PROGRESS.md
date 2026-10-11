@@ -300,6 +300,20 @@ Built (`9172e99`):
     - The privacy page explains reports and the content check, and how a removed post's books are handled.
 - Tests: 62 shared, 182 API, 32 web.
 
+Code review (high, over `1c4e169..HEAD`) found 10 issues; all fixed:
+- The Supabase store's daily count still counted taken-down posts (the memory store and `posts_since` didn't), so Settings and a collection's room disagreed with the caps. Fix: it counts through `posts_since`.
+- A takedown landing while a post was being read was undone (the cache row and its books came back). Fix: checked again after reading and after shelving; if it was taken down meanwhile, the takedown runs again and the item is skipped.
+- Taking down from the Auto-blocked or Dismissed tab lost the post's link and handle (they were only looked up in open reports), and left dismissed reports dismissed. Fix: `describePost` looks in any report, the cache, then the shelves; the takedown closes dismissed reports too (0010 changed before it was applied).
+- Undo could take a shelf past its book limit. Fix: the restore is refused with the shelf-full message. A guest merge is deliberately not limited ("never lose a book"; a guest holds at most 500).
+- Cutting a huge paste at exactly 20,000 characters could split a link into a shorter, wrong post id. Fix: `readablePaste` cuts at the last whitespace.
+- `blocked` was required in the job schema, so a web build ahead of its API would refuse every job. Fix: defaults to null.
+- Opening `/admin` started a guest session. Fix: it has its own root (`AdminRoot`) outside the account provider and router.
+- The link limit counted duplicates. Fix: up to 200 entries are accepted, and the 30 counts distinct links.
+- The admin list asked for every post's reach (up to 100 calls), the key screen loaded a whole tab, and a takedown read 1,000 reports. Fix: `/admin/reach` for the chosen post only, `/admin/check` for the key, and a lookup by post.
+- The verdict-to-block mapping was written four times, and the shelf-full message twice. Fix: `BLOCKED_BY_CONTENT` in the store types and `shelfFullMessage` in shared.
+
+Tests after the fixes: 65 shared, 186 API, 32 web; 0010 in PGlite, 11 checks.
+
 ## 7c: Deploy (live on 2026-10-10, then taken offline)
 
 Deployed: API on Render (`booktrap-api.onrender.com`, Singapore, next to Supabase `ap-southeast-1`), web on Cloudflare Pages (`booktrap.pages.dev`). The user suspended both the same day under the new plan (Phase 10 redeploys).

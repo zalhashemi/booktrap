@@ -5,6 +5,7 @@ import {
   TERMINAL_STATUSES,
   TagNameTakenError,
   deriveJobStatus,
+  BLOCKING_CONTENT,
   type BlockedPostRecord,
   type BookPatch,
   type CachedPost,
@@ -116,6 +117,9 @@ const toItemJson = (item: NewItem) => ({
   source_post_id: item.postId,
   kind: item.kind,
 });
+
+/** Counting a network alone: no user has this id. */
+const NO_USER = '00000000-0000-0000-0000-000000000000';
 
 /** Caps off: the functions still insert atomically, with nothing to refuse. */
 const NO_CAP = 2_147_483_647;
@@ -285,24 +289,19 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     },
 
     async countItemsSince(filter, since) {
-      if ('userId' in filter) {
-        const { count, error } = await db
-          .from('job_items')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', filter.userId)
-          .or('kind.is.null,kind.neq.collection')
-          .gte('created_at', since.toISOString());
-        if (error) throw new Error(`job_items.count failed: ${error.message}`);
-        return count ?? 0;
-      }
-      const { count, error } = await db
-        .from('job_items')
-        .select('id, jobs!inner(ip_hash)', { count: 'exact', head: true })
-        .eq('jobs.ip_hash', filter.ipHash)
-        .or('kind.is.null,kind.neq.collection')
-        .gte('created_at', since.toISOString());
-      if (error) throw new Error(`job_items.count_ip failed: ${error.message}`);
-      return count ?? 0;
+      // The same count the daily caps use (0010): collection links and taken-down posts don't count,
+      // and a network's count includes what deleted accounts read on it today.
+      const byUser = 'userId' in filter;
+      const result = check(
+        await db.rpc('posts_since', {
+          p_user_id: byUser ? filter.userId : NO_USER,
+          p_ip_hash: byUser ? null : filter.ipHash,
+          p_since: since.toISOString(),
+        }),
+        'posts_since',
+      ) as { by_user: number; by_ip: number } | { by_user: number; by_ip: number }[];
+      const row = Array.isArray(result) ? result[0] : result;
+      return (byUser ? row?.by_user : row?.by_ip) ?? 0;
     },
 
     async getCachedPost(platform, postId) {
@@ -538,6 +537,21 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       if (!error) return true;
       if (error.code === UNIQUE_VIOLATION) return false;
       throw new Error(`reports.insert failed: ${error.message}`);
+    },
+
+    async describePost(platform, postId) {
+      const report = check(
+        await db.from('reports').select('source_url, creator_handle').eq('source_platform', platform).eq('source_post_id', postId).limit(1),
+        'reports.describe',
+      ) as { source_url: string; creator_handle: string | null }[];
+      if (report[0]) return { url: report[0].source_url, creatorHandle: report[0].creator_handle, reported: true };
+      const cached = await this.getCachedPost(platform, postId);
+      if (cached) return { url: cached.post.url, creatorHandle: cached.post.creatorHandle, reported: false };
+      const source = check(
+        await db.from('book_sources').select('source_url, creator_handle').eq('source_platform', platform).eq('source_post_id', postId).limit(1),
+        'book_sources.describe',
+      ) as { source_url: string; creator_handle: string | null }[];
+      return { url: source[0]?.source_url ?? null, creatorHandle: source[0]?.creator_handle ?? null, reported: false };
     },
 
     async countReportsSince(userId, since) {
@@ -851,9 +865,6 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
 }
 
 const ID_CHUNK = 100;
-
-/** Verdicts that skip a post. */
-const BLOCKING_CONTENT: PostContent[] = ['explicit_non_book', 'graphic_violence', 'refused'];
 
 interface ReportRow {
   id: string;

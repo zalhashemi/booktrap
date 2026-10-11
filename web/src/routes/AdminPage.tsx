@@ -93,7 +93,7 @@ function KeyGate({ onKey }: { onKey: (key: string) => void }) {
     setBusy(true);
     setError(null);
     try {
-      await createAdminClient(key).posts('open');
+      await createAdminClient(key).check();
       try {
         sessionStorage.setItem(KEY_STORAGE, key);
       } catch {
@@ -247,6 +247,8 @@ function PostDetail({ post, tab, client, onBack }: { post: AdminPost; tab: Admin
   };
   const failed = (error: unknown) => toast(error instanceof ApiRequestError ? error.message : 'Couldn’t reach BookTrap. Try again.');
   const ref = { platform: post.platform, postId: post.postId };
+  // Asked for the chosen post only: what a takedown would remove right now.
+  const reachQuery = useQuery({ queryKey: ['admin', 'reach', post.platform, post.postId], queryFn: () => client.reach(ref), enabled: tab !== 'removed' });
   const takeDown = useMutation({
     mutationFn: () => client.takeDown(ref),
     onSuccess: (r) => done(`Taken down: ${r.sourcesRemoved} ${r.sourcesRemoved === 1 ? 'source' : 'sources'} removed, ${r.booksDeleted} deleted, ${r.booksKept} kept.`),
@@ -263,7 +265,7 @@ function PostDetail({ post, tab, client, onBack }: { post: AdminPost; tab: Admin
     post.reports.reduce<Record<string, number>>((tally, report) => ({ ...tally, [report.reason]: (tally[report.reason] ?? 0) + 1 }), {}),
   ) as [ReportReason, number][];
   const notes = post.reports.filter((report) => report.note);
-  const reach = post.reach;
+  const reach = reachQuery.data ?? null;
 
   return (
     <article className="grid gap-3.5 rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule)] md:px-6 md:py-5" aria-labelledby="post-who">

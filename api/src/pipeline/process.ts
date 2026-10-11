@@ -4,13 +4,13 @@ import {
   PRIVATE_COLLECTION_MESSAGE,
   bookLimitFor,
   parseSourceUrl,
+  shelfFullMessage,
   tiktokCollectionId,
-  type BlockedKind,
   type SourceLink,
   type SourcePlatform,
 } from '@booktrap/shared';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { CachedPost, JobItemRecord, LibraryStore, PostContent } from '../store/types';
+import { BLOCKED_BY_CONTENT, type CachedPost, type JobItemRecord, type LibraryStore } from '../store/types';
 import { TERMINAL_STATUSES } from '../store/types';
 import { fetchPost, type PostData } from './fetchers';
 import { listTikTokCollection } from './fetchers/tiktok-collection';
@@ -252,19 +252,12 @@ async function shelve(
   return 'added';
 }
 
-/** The verdicts that skip a post, as the job item reports them. */
-const SKIPPED: Partial<Record<PostContent, BlockedKind>> = {
-  explicit_non_book: 'explicit',
-  graphic_violence: 'graphic',
-  refused: 'refused',
-};
-
 /**
  * How many more books the reader's shelf takes (5,000, or 500 for a guest). Whether they're a guest is
  * only asked when `incoming` books could cross the guest limit; if that can't be checked, the account
  * limit applies: the limit is about storage, and never losing a book matters more than a few hundred rows.
  */
-async function bookRoom(userId: string, incoming: number, { store, isGuest, log }: PipelineDeps): Promise<{ left: number; limit: number; guest: boolean }> {
+async function bookRoom(userId: string, incoming: number, { store, isGuest, log }: PipelineDeps): Promise<{ left: number; guest: boolean }> {
   const count = await store.countBooks(userId);
   let guest = false;
   if (incoming > 0 && count + incoming > LIMITS.booksPerGuest && isGuest) {
@@ -273,16 +266,9 @@ async function bookRoom(userId: string, incoming: number, { store, isGuest, log 
       return false;
     });
   }
-  const limit = bookLimitFor(guest);
-  return { left: Math.max(0, limit - count), limit, guest };
+  return { left: Math.max(0, bookLimitFor(guest) - count), guest };
 }
 
-/** Said on an item when the shelf filled up part-way (or was already full). */
-export function shelfFullNote(skipped: number, limit: number, guest: boolean): string {
-  const books = `${skipped} ${skipped === 1 ? 'book' : 'books'}`;
-  const more = guest ? ` Save your shelf to keep up to ${LIMITS.booksPerAccount.toLocaleString('en-US')}.` : ' Delete some to make room.';
-  return `Your shelf is full (${limit.toLocaleString('en-US')} books), so ${books} from this post weren’t added.${more}`;
-}
 
 /**
  * The owner's daily cap, as the jobs route gives it: guests get DAILY_LINK_CAP_GUEST. If Supabase can't
@@ -412,14 +398,23 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     await store.updateItem(itemId, { platform: resolved.platform, postId: resolved.postId });
 
     // Taken down: never read or shelved again, and it costs nothing.
-    if (await store.isPostRemoved(resolved.platform, resolved.postId)) {
+    const skipRemoved = async () => {
       await store.updateItem(itemId, { status: 'done', booksFound: 0, error: null, blocked: 'removed' });
       log.info({ itemId, platform: resolved.platform, postId: resolved.postId }, 'item skipped: post removed');
-      return;
-    }
+    };
+    if (await store.isPostRemoved(resolved.platform, resolved.postId)) return await skipRemoved();
 
     const { post, books, content } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
-    const skipped = SKIPPED[content];
+    // A takedown can land while the post is being read (it takes a while): take it down again, which
+    // removes the cache row just written and anything shelved, so the operator's takedown holds.
+    const undoIfRemoved = async () => {
+      if (!(await store.isPostRemoved(post.platform, post.postId))) return false;
+      await store.takeDownPost({ platform: post.platform, postId: post.postId, url: post.url, creatorHandle: post.creatorHandle }, 'admin');
+      await skipRemoved();
+      return true;
+    };
+    if (await undoIfRemoved()) return;
+    const skipped = BLOCKED_BY_CONTENT[content];
     if (skipped) {
       // Nothing from it is added, even books it found (an operator can unblock a wrong verdict).
       await store.updateItem(itemId, { status: 'done', kind: post.kind, booksFound: 0, error: null, blocked: skipped });
@@ -443,7 +438,8 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
       if (outcome === 'full') full++;
     }
 
-    const note = full ? shelfFullNote(full, room.limit, room.guest) : undefined;
+    if (await undoIfRemoved()) return;
+    const note = full ? shelfFullMessage(room.guest, full) : undefined;
     await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null, ...(note && { note }) });
     log.info({ itemId, platform: post.platform, postId: post.postId, found: wanted.length, added, full, skippedBackground: books.length - wanted.length }, 'item done');
   } catch (error) {

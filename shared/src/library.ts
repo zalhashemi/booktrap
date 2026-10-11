@@ -24,7 +24,8 @@ export const JobItemSchema = z.object({
   /** A note for the reader on a finished item, e.g. that only part of a collection was read. */
   note: z.string().nullable(),
   /** Set when the post was skipped and nothing from it was added (moderation or a takedown). */
-  blocked: BlockedKindSchema.nullable(),
+  // Defaulted: a web build that ships before its API still reads the older API's jobs.
+  blocked: BlockedKindSchema.nullable().default(null),
 });
 export type JobItem = z.infer<typeof JobItemSchema>;
 
@@ -37,7 +38,7 @@ export const JobSchema = z.object({
 export type Job = z.infer<typeof JobSchema>;
 
 export const CreateJobRequestSchema = z.object({
-  urls: z.array(z.string().max(LIMITS.linkChars)).min(1).max(LIMITS.linksPerPaste),
+  urls: z.array(z.string().max(LIMITS.linkChars)).min(1).max(LIMITS.linksPerRequest),
 });
 export type CreateJobRequest = z.infer<typeof CreateJobRequestSchema>;
 

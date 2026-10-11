@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   AdminPostListSchema,
   ApiErrorSchema,
+  PostReachSchema,
   TakedownResponseSchema,
   type AdminTab,
   type PostRef,
@@ -15,7 +16,7 @@ import { API_URL, ApiRequestError, NetworkError } from './client';
  */
 export function createAdminClient(key: string, baseUrl = API_URL) {
   const root = baseUrl.replace(/\/+$/, '');
-  async function request<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> {
+  async function request<T>(path: string, schema: z.ZodType<T> | null, body?: unknown): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${root}${path}`, {
@@ -27,18 +28,22 @@ export function createAdminClient(key: string, baseUrl = API_URL) {
     } catch (error) {
       throw new NetworkError('Could not reach the BookTrap server.', { cause: error });
     }
-    const payload: unknown = await response.json().catch(() => null);
+    const payload: unknown = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
       const parsed = ApiErrorSchema.safeParse(payload);
       throw new ApiRequestError(response.status, parsed.success ? parsed.data.error.code : 'unknown', parsed.success ? parsed.data.error.message : `Request failed with status ${response.status}.`);
     }
+    if (!schema) return undefined as T;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new ApiRequestError(response.status, 'invalid_response', 'The server sent a response this page does not understand.');
     return parsed.data;
   }
 
   return {
+    /** Throws a 401 ApiRequestError when the key is wrong. */
+    check: () => request<void>('/admin/check', null),
     posts: (tab: AdminTab) => request(`/admin/posts?tab=${tab}`, AdminPostListSchema),
+    reach: (post: PostRef) => request(`/admin/reach?platform=${post.platform}&postId=${encodeURIComponent(post.postId)}`, PostReachSchema),
     takeDown: (target: TakedownRequest) => request('/admin/takedown', TakedownResponseSchema, target),
     dismiss: (post: PostRef) => request('/admin/dismiss', z.object({ dismissed: z.number() }), post),
     unblock: (post: PostRef) => request('/admin/unblock', z.object({ unblocked: z.boolean() }), post),

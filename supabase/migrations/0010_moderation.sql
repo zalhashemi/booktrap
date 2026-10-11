@@ -99,7 +99,7 @@ $$;
 
 -- Takes a post down everywhere (user decision, 2026-10-11): it goes on removed_posts, its cached
 -- reading is deleted, it stops being a source on every shelf, books seen only in it are deleted unless
--- the reader changed them (those stay, without the source), and its open reports are closed.
+-- the reader changed them (those stay, without the source), and its reports are closed.
 -- Returns {"sources_removed", "books_deleted", "books_kept"}. Safe to run twice.
 create function public.take_down_post(p_platform public.source_platform, p_post_id text, p_reason text,
                                       p_url text, p_handle text) returns jsonb
@@ -140,8 +140,9 @@ begin
   delete from public.book_sources where source_platform = p_platform and source_post_id = p_post_id;
   get diagnostics removed = row_count;
 
+  -- Dismissed reports close too: the post was taken down after all.
   update public.reports set status = 'taken_down', resolved_at = now()
-  where source_platform = p_platform and source_post_id = p_post_id and status = 'open';
+  where source_platform = p_platform and source_post_id = p_post_id and status in ('open', 'dismissed');
 
   return jsonb_build_object('sources_removed', removed + deleted, 'books_deleted', deleted, 'books_kept', kept);
 end;

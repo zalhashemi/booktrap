@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { LIMITS, bookLimitFor } from './limits';
+import { LIMITS, bookLimitFor, shelfFullMessage } from './limits';
+import { extractSourceLinks, readablePaste } from './links';
 import { BookIdsRequestSchema, CreateJobRequestSchema, MergeBooksRequestSchema, TagNameSchema, UpdateBookRequestSchema } from './library';
 import { CreateReportRequestSchema, TakedownRequestSchema } from './moderation';
 
 const many = (n: number, make: (i: number) => string = (i) => `id-${i}`) => Array.from({ length: n }, (_, i) => make(i));
 
 describe('limits in the request schemas', () => {
-  it('takes up to the links-per-paste limit, each within the link length', () => {
-    expect(CreateJobRequestSchema.safeParse({ urls: many(LIMITS.linksPerPaste) }).success).toBe(true);
-    expect(CreateJobRequestSchema.safeParse({ urls: many(LIMITS.linksPerPaste + 1) }).success).toBe(false);
+  it('bounds a submission’s entries (the 30 distinct links are counted after duplicates go), each within the link length', () => {
+    expect(CreateJobRequestSchema.safeParse({ urls: many(LIMITS.linksPerRequest) }).success).toBe(true);
+    expect(CreateJobRequestSchema.safeParse({ urls: many(LIMITS.linksPerRequest + 1) }).success).toBe(false);
     expect(CreateJobRequestSchema.safeParse({ urls: ['x'.repeat(LIMITS.linkChars + 1)] }).success).toBe(false);
   });
 
@@ -58,5 +59,30 @@ describe('report requests', () => {
     expect(TakedownRequestSchema.safeParse({ url: 'https://www.tiktok.com/@a/video/1' }).success).toBe(true);
     expect(TakedownRequestSchema.safeParse(base).success).toBe(true);
     expect(TakedownRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('readablePaste', () => {
+  const link = 'https://www.tiktok.com/@a/video/7672440936101727519';
+
+  it('keeps short pastes as they are', () => {
+    expect(readablePaste(`see ${link}`)).toBe(`see ${link}`);
+  });
+
+  it('never splits a link at the edge, so a shorter id can’t be read', () => {
+    const text = `${'x'.repeat(30)} ${link} tail`;
+    const cut = readablePaste(text, 50);
+    expect(cut).toBe('x'.repeat(30));
+    expect(extractSourceLinks(cut)).toEqual([]);
+    // A link ending exactly at the limit is kept whole.
+    expect(readablePaste(`${link} more`, link.length)).toBe(link);
+    expect(readablePaste('x'.repeat(80), 50)).toBe('');
+  });
+});
+
+describe('shelfFullMessage', () => {
+  it('tells guests to save their shelf and members to make room', () => {
+    expect(shelfFullMessage(true)).toBe('Your shelf is full (500 books). Save your shelf to keep up to 5,000.');
+    expect(shelfFullMessage(false, 1)).toBe('Your shelf is full (5,000 books), so 1 book from this post wasn’t added. Delete some to make room.');
   });
 });

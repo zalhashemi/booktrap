@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { postKey, type Book, type BookSource, type Tag } from '@booktrap/shared';
 import {
+  BLOCKING_CONTENT,
   DailyCapError,
   TERMINAL_STATUSES,
   TagNameTakenError,
@@ -11,12 +12,10 @@ import {
   type JobWithItems,
   type LibraryStore,
   type NewItem,
-  type PostContent,
   type RemovedPostRecord,
   type ReportRecord,
 } from './types';
 
-const BLOCKING_CONTENT: PostContent[] = ['explicit_non_book', 'graphic_violence', 'refused'];
 const TERMINAL_JOB: JobRecord['status'][] = ['done', 'failed'];
 
 type BookRow = Omit<Book, 'sources' | 'tags'> & { userId: string; normalizedKey: string; verified: boolean; deletedAt: string | null };
@@ -442,6 +441,14 @@ export function createMemoryLibraryStore(): LibraryStore {
       reports.push({ ...report, id: randomUUID(), userId, status: 'open', createdAt: now() });
       return true;
     },
+    async describePost(platform, postId) {
+      const report = reports.find((r) => r.platform === platform && r.postId === postId);
+      if (report) return { url: report.url, creatorHandle: report.creatorHandle, reported: true };
+      const hit = cache.get(postKey(platform, postId));
+      if (hit) return { url: hit.post.url, creatorHandle: hit.post.creatorHandle, reported: false };
+      const source = [...sources.values()].flat().find((s) => s.platform === platform && s.postId === postId);
+      return { url: source?.url ?? null, creatorHandle: source?.creatorHandle ?? null, reported: false };
+    },
     async countReportsSince(userId, since) {
       return reports.filter((r) => r.userId === userId && new Date(r.createdAt) >= since).length;
     },
@@ -513,7 +520,7 @@ export function createMemoryLibraryStore(): LibraryStore {
         if (others.length === 0) booksKept++;
         sources.set(bookId, others);
       }
-      for (const r of reports) if (r.status === 'open' && r.platform === post.platform && r.postId === post.postId) r.status = 'taken_down';
+      for (const r of reports) if (r.status !== 'taken_down' && r.platform === post.platform && r.postId === post.postId) r.status = 'taken_down';
       return { sourcesRemoved, booksDeleted, booksKept };
     },
     async unblockPost(platform, postId) {

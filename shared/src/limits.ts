@@ -7,6 +7,8 @@ export const LIMITS = {
   requestBodyBytes: 128 * 1024,
   /** Distinct links in one paste. */
   linksPerPaste: 30,
+  /** Entries in one submission before duplicates are dropped (a cheap bound; the 30 above is what counts). */
+  linksPerRequest: 200,
   /** Characters of pasted text the paste box reads links from. */
   pasteChars: 20_000,
   linkChars: 2048,
@@ -57,3 +59,14 @@ export const MEDIA_LIMITS = {
 
 /** The most live books a shelf holds: guests get fewer until they save their shelf. */
 export const bookLimitFor = (isGuest: boolean) => (isGuest ? LIMITS.booksPerGuest : LIMITS.booksPerAccount);
+
+/**
+ * Said when a shelf is at its book limit: when a paste is refused, or (with `skipped`) on an item
+ * whose post filled the shelf part-way. Guests are told saving their shelf raises the limit.
+ */
+export function shelfFullMessage(guest: boolean, skipped?: number): string {
+  const limit = bookLimitFor(guest).toLocaleString('en-US');
+  const next = guest ? `Save your shelf to keep up to ${LIMITS.booksPerAccount.toLocaleString('en-US')}.` : 'Delete some to make room.';
+  if (skipped === undefined) return `Your shelf is full (${limit} books). ${next}`;
+  return `Your shelf is full (${limit} books), so ${skipped} ${skipped === 1 ? 'book' : 'books'} from this post ${skipped === 1 ? 'wasn’t' : 'weren’t'} added. ${next}`;
+}

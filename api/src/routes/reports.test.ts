@@ -99,9 +99,12 @@ describe('reports, admin and limits', () => {
     const list = await app.inject({ method: 'GET', url: '/admin/posts?tab=open', headers: admin });
     expect(list.json()).toMatchObject({
       counts: { open: 2, blocked: 0, removed: 0, dismissed: 0 },
-      posts: [{ platform: 'tiktok', postId: '444', creatorHandle: 'maker', reach: { shelves: 2, onlyHere: 2, edited: 1 } }],
+      posts: [{ platform: 'tiktok', postId: '444', creatorHandle: 'maker' }],
     });
     expect(list.json().posts[0].reports).toHaveLength(2);
+    const reach = await app.inject({ method: 'GET', url: '/admin/reach?platform=tiktok&postId=444', headers: admin });
+    expect(reach.json()).toEqual({ shelves: 2, onlyHere: 2, edited: 1 });
+    expect((await app.inject({ method: 'GET', url: '/admin/check', headers: admin })).statusCode).toBe(204);
 
     const down = await app.inject({ method: 'POST', url: '/admin/takedown', headers: admin, payload: { platform: 'tiktok', postId: '444' } });
     expect(down.json()).toEqual({ platform: 'tiktok', postId: '444', sourcesRemoved: 2, booksDeleted: 1, booksKept: 1 });
@@ -132,7 +135,7 @@ describe('reports, admin and limits', () => {
   });
 
   it('refuses more links than a paste allows, with the limit in words', async () => {
-    const urls = Array.from({ length: LIMITS.linksPerPaste + 1 }, (_, i) => `https://www.tiktok.com/@a/video/${7000000000000000000 + i}`);
+    const urls = Array.from({ length: LIMITS.linksPerPaste + 1 }, (_, i) => `https://www.tiktok.com/@a/video/70000000000000000${String(i).padStart(2, '0')}`);
     const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls } });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.message).toBe(`You can add up to ${LIMITS.linksPerPaste} links at a time.`);
@@ -165,5 +168,36 @@ describe('reports, admin and limits', () => {
     await report({ platform: 'tiktok', postId: '777', reason: 'graphic' });
     await store.deleteBooks(userId, [id]);
     expect(await store.countReports('open')).toBe(1);
+  });
+
+  it('keeps a skipped post’s link when it’s taken down from the Auto-blocked tab, and closes dismissed reports', async () => {
+    const post = { platform: 'tiktok' as const, postId: '888', url: 'https://www.tiktok.com/@maker/video/888', kind: 'video' as const, creatorHandle: 'maker', thumbnailUrl: null };
+    await store.putCachedPost('tiktok', '888', { post, books: [], model: 'm', content: 'explicit_non_book' });
+    await app.inject({ method: 'POST', url: '/admin/takedown', headers: admin, payload: { platform: 'tiktok', postId: '888' } });
+    expect((await store.listRemovedPosts(5))[0]).toMatchObject({ postId: '888', url: post.url, creatorHandle: 'maker', reason: 'admin' });
+
+    await shelve(userId, 'Babel', '999');
+    await report({ platform: 'tiktok', postId: '999', reason: 'graphic' });
+    await app.inject({ method: 'POST', url: '/admin/dismiss', headers: admin, payload: { platform: 'tiktok', postId: '999' } });
+    await app.inject({ method: 'POST', url: '/admin/takedown', headers: admin, payload: { platform: 'tiktok', postId: '999' } });
+    expect(await store.countReports('dismissed')).toBe(0);
+    expect((await store.listRemovedPosts(5)).find((p) => p.postId === '999')).toMatchObject({ reason: 'report' });
+  });
+
+  it('counts distinct links against the paste limit', async () => {
+    const distinct = Array.from({ length: 25 }, (_, i) => `https://www.tiktok.com/@a/video/70000000000000000${String(i).padStart(2, '0')}`);
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers, payload: { urls: [...distinct, ...distinct.slice(0, 10)] } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().items).toHaveLength(25);
+  });
+
+  it('refuses an Undo that would take the shelf past its limit', async () => {
+    const guest = await sessions!.signIn({ guest: true });
+    const deleted = await insert(guest.userId, 'Deleted one');
+    await store.deleteBooks(guest.userId, [deleted]);
+    for (let i = 0; i < LIMITS.booksPerGuest; i++) await insert(guest.userId, `Filler ${i}`);
+    const res = await app.inject({ method: 'POST', url: '/v1/books/restore', headers: guest.headers, payload: { ids: [deleted] } });
+    expect(res.statusCode).toBe(409);
+    expect(await store.countBooks(guest.userId)).toBe(LIMITS.booksPerGuest);
   });
 });

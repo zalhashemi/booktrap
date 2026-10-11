@@ -77,7 +77,6 @@ export const AdminPostSchema = z.object({
   /** When it was reported first, blocked, or taken down. */
   since: z.string(),
   last: z.string(),
-  reach: PostReachSchema.nullable(),
 });
 export type AdminPost = z.infer<typeof AdminPostSchema>;
 

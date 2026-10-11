@@ -6,6 +6,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/Toaster';
 import { AccountProvider } from './account/AccountProvider';
+import { AdminRoot } from './AdminRoot';
 import { AddPage } from './routes/AddPage';
 import { PrivacyPage, TermsPage } from './routes/LegalPages';
 import { NotFoundPage } from './routes/NotFoundPage';
@@ -16,8 +17,6 @@ import './styles/index.css';
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
-  // The hidden admin page: its own small layout, loaded only when opened, linked from nowhere.
-  { path: 'admin', lazy: () => import('./routes/AdminPage').then(({ AdminPage }) => ({ Component: AdminPage })) },
   {
     element: <AppShell />,
     children: [
@@ -32,14 +31,21 @@ const router = createBrowserRouter([
   },
 ]);
 
+// The hidden admin page has its own root (see AdminRoot): no router, no reader session.
+const isAdmin = window.location.pathname.replace(/\/+$/, '') === '/admin';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <AccountProvider>
-        <ToastProvider>
-          <RouterProvider router={router} />
-        </ToastProvider>
-      </AccountProvider>
+      {isAdmin ? (
+        <AdminRoot />
+      ) : (
+        <AccountProvider>
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
+        </AccountProvider>
+      )}
     </QueryClientProvider>
   </StrictMode>,
 );

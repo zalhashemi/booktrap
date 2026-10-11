@@ -6,6 +6,7 @@ import {
   LIMITS,
   PRIVATE_COLLECTION_MESSAGE,
   bookLimitFor,
+  shelfFullMessage,
   linkKey,
   parseSourceUrl,
   type Job,
@@ -69,9 +70,6 @@ export function jobRoutes(
     async (request, reply): Promise<Job> => {
       const user = request.user!;
       const cap = capOf(request);
-      const tooMany = `You can add up to ${LIMITS.linksPerPaste} links at a time.`;
-      const raw = (request.body as { urls?: unknown } | undefined)?.urls;
-      if (Array.isArray(raw) && raw.length > LIMITS.linksPerPaste) throw new HttpError(400, ERROR_CODES.badRequest, tooMany);
       const body = CreateJobRequestSchema.safeParse(request.body);
       if (!body.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Send a list of TikTok or Instagram links.');
 
@@ -95,12 +93,14 @@ export function jobRoutes(
         seen.add(key);
         return [link!];
       });
+      // Distinct links: the same post pasted twice counts once.
+      if (unique.length > LIMITS.linksPerPaste) {
+        throw new HttpError(400, ERROR_CODES.badRequest, `You can add up to ${LIMITS.linksPerPaste} links at a time.`);
+      }
 
       // A full shelf would pay to read posts whose books can't be added.
-      const bookLimit = bookLimitFor(user.isAnonymous);
-      if ((await store.countBooks(user.id)) >= bookLimit) {
-        const more = user.isAnonymous ? ` Save your shelf to keep up to ${LIMITS.booksPerAccount.toLocaleString('en-US')}.` : ' Delete some to add more.';
-        throw new HttpError(409, ERROR_CODES.limitReached, `Your shelf is full (${bookLimit.toLocaleString('en-US')} books).${more}`);
+      if ((await store.countBooks(user.id)) >= bookLimitFor(user.isAnonymous)) {
+        throw new HttpError(409, ERROR_CODES.limitReached, shelfFullMessage(user.isAnonymous));
       }
 
       if (options.killSwitch || !options.pipelineConfigured) throw new HttpError(503, ERROR_CODES.paused, PAUSED_MESSAGE);

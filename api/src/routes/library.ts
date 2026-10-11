@@ -6,6 +6,8 @@ import {
   MEDIA_LIMITS,
   MergeBooksRequestSchema,
   TagNameSchema,
+  bookLimitFor,
+  shelfFullMessage,
   UpdateBookRequestSchema,
   type Book,
   type Tag,
@@ -163,6 +165,11 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
     const parsed = BookIdsRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Choose at least one book.');
     const ids = parsed.data.ids.filter(isUuid);
+    // The book limit holds here too: the shelf may have filled up since these were deleted.
+    const guest = request.user!.isAnonymous;
+    if ((await store.countBooks(userId)) + ids.length > bookLimitFor(guest)) {
+      throw new HttpError(409, ERROR_CODES.limitReached, shelfFullMessage(guest));
+    }
     const count = await store.restoreBooks(userId, ids);
     for (const id of ids) {
       const restored = await store.getBook(userId, id);

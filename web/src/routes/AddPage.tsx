@@ -9,6 +9,7 @@ import {
   countUnreadableLinks,
   extractSourceLinks,
   linkKey,
+  readablePaste,
   type SourceLink,
 } from '@booktrap/shared';
 import { ApiRequestError, NetworkError } from '../api/client';
@@ -42,7 +43,7 @@ export function AddPage() {
   // Links the reader took out of the preview; they stay in the text box but aren't sent.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   // Links are read from the first stretch of a huge paste only, so a pasted book never stalls typing.
-  const readable = text.length > LIMITS.pasteChars ? text.slice(0, LIMITS.pasteChars) : text;
+  const readable = useMemo(() => readablePaste(text), [text]);
   const found = useMemo(() => extractSourceLinks(readable), [readable]);
   const links = found.filter((link) => link.kind !== 'private_collection' && !removed.has(linkKey(link)));
   const privateCollections = found.filter((link) => link.kind === 'private_collection');

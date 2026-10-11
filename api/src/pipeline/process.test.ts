@@ -654,4 +654,19 @@ describe('moderation and limits in the pipeline', () => {
     expect(text).toContain('#tag29');
     expect(text).not.toContain('#tag30');
   });
+
+  it('holds a takedown that lands while the post is being read', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, {});
+    deps.extractBooks = vi.fn(async () => {
+      // The operator takes the post down mid-read.
+      await store.takeDownPost({ platform: 'tiktok', postId: '7672440936101727519', url: URL_A, creatorHandle: 'reader' }, 'request');
+      return { books: [book('Babel', 'R. F. Kuang')], content: 'books', model: 'm', costUsd: 0.06, usage: { inputTokens: 1, outputTokens: 1 } };
+    }) as never;
+    const job = await runJob(store, deps, [URL_A]);
+    expect(job.items[0]).toMatchObject({ status: 'done', blocked: 'removed', booksFound: 0 });
+    expect(await store.listBooks(USER)).toEqual([]);
+    expect(await store.getCachedPost('tiktok', '7672440936101727519')).toBeNull();
+    expect((await store.listRemovedPosts(5))[0]).toMatchObject({ reason: 'request' });
+  });
 });
