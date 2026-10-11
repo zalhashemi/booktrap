@@ -5,6 +5,10 @@ import { AccountError } from './account-context';
 /** Supabase's answers, in words the screens can show. */
 export function toAccountError(error: unknown): AccountError {
   if (error instanceof AccountError) return error;
+  // Supabase answers 500 when its mail sender refuses (its built-in one only mails the project's team).
+  if (isAuthError(error) && /error sending .*email/i.test(error.message)) {
+    return new AccountError('unknown', 'BookTrap couldn’t send an email to that address. Check it, or try again later.');
+  }
   if (isAuthRetryableFetchError(error) || error instanceof TypeError || error instanceof NetworkError) {
     return new AccountError('network', 'Couldn’t reach BookTrap. Check your connection and try again.');
   }

@@ -139,6 +139,8 @@ export function ShelfPage() {
               )}
             </p>
           )}
+          {/* Phones: the header is too narrow beside the title, so the tab sits under the count. */}
+          {isGuest && all.length > 0 && <UnsavedTab className="mt-3 inline-flex md:hidden" />}
         </div>
         {all.length > 0 && (
           <div className="flex shrink-0 gap-2 pt-1 md:pt-3">
@@ -151,7 +153,7 @@ export function ShelfPage() {
                 </Button>
               </span>
             )}
-            {isGuest && <UnsavedTab />}
+            {isGuest && <UnsavedTab className="hidden md:inline-flex" />}
             <Button type="button" variant="quiet" onClick={() => setExportScope(selecting && selected.size > 0 ? 'selected' : filtered ? 'view' : 'all')} className="min-h-11 px-4 text-[0.92rem]">
               <Export size={18} weight="bold" aria-hidden="true" />
               Export
@@ -292,8 +294,8 @@ function EmptyShelf() {
   );
 }
 
-/** A guest's shelf lives only in this browser: a lavender sticky tab says so, and opens Save your shelf. */
-function UnsavedTab() {
+/** A guest's shelf lives only in this browser: a lavender sticky tab says so, and opens Save your shelf. `className` sets its display. */
+function UnsavedTab({ className = '' }: { className?: string }) {
   const { openAuth } = useAuthSheet();
   return (
     <button
@@ -301,7 +303,7 @@ function UnsavedTab() {
       onClick={() => openAuth('save')}
       aria-label="Unsaved shelf: save it with an email"
       title="Only this browser has this shelf. Save it to keep it."
-      className="inline-flex min-h-11 rotate-2 items-center gap-1.5 rounded-t-[12px] rounded-b-[3px] bg-note px-3.5 text-[0.88rem] font-bold text-on-tab shadow-[var(--elev-soft)] transition-transform duration-200 ease-snappy hover:rotate-0 active:scale-[0.97] motion-reduce:transition-none"
+      className={`${className} min-h-11 rotate-2 items-center gap-1.5 rounded-t-[12px] rounded-b-[3px] bg-note px-3.5 text-[0.88rem] font-bold text-on-tab shadow-[var(--elev-soft)] transition-transform duration-200 ease-snappy hover:rotate-0 active:scale-[0.97] motion-reduce:transition-none`}
     >
       <CloudSlash size={18} weight="bold" aria-hidden="true" />
       Unsaved

@@ -146,14 +146,17 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
       if (!guestToken) return { merged: null, mergeFailed: false };
       for (let tries = 0; ; tries++) {
         try {
-          return { merged: await client.mergeGuest(guestToken), mergeFailed: false };
+          const merged = await client.mergeGuest(guestToken);
+          // The account's shelf may have loaded before the guest's books arrived: read it again.
+          await queryClient.invalidateQueries();
+          return { merged, mergeFailed: false };
         } catch (error) {
           if (!(error instanceof NetworkError) || tries >= 2) return { merged: null, mergeFailed: true };
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
       }
     },
-    [requireAuth, call, client],
+    [requireAuth, call, client, queryClient],
   );
 
   const logInWithPassword = useCallback(
