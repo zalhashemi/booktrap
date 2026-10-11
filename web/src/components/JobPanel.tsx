@@ -125,15 +125,23 @@ const NOTICEABLE_WAIT_S = 20;
  * When the queue is long, one line above the cards says so (user's pick, option C, with their wording):
  * the wait until the reader's next link starts, from the server's estimate.
  */
-function BusyNotice({ items }: { items: JobItem[] }) {
+/** The wait until the reader's next link starts, when it's long enough to mention; otherwise null. */
+function busyWait(items: JobItem[]): { next: number; waiting: number } | null {
   const waits = items.filter((item) => item.status === 'queued' && item.queue).map((item) => item.queue!.etaSeconds);
   if (waits.length === 0) return null;
   const next = Math.min(...waits);
-  if (next < NOTICEABLE_WAIT_S) return null;
+  return next < NOTICEABLE_WAIT_S ? null : { next, waiting: waits.length };
+}
+
+function BusyNotice({ items }: { items: JobItem[] }) {
+  const wait = busyWait(items);
+  if (!wait) return null;
+  // Outside the panel's live region: the minutes change as the queue moves, and a screen reader
+  // shouldn't hear the whole line again every minute. It hears "BookTrap is busy" once, when it appears.
   return (
-    <p className="mt-3 flex items-start gap-2.5 rounded-[16px] bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] px-3.5 py-3 text-[0.92rem] font-bold">
+    <p className="mt-3 flex items-start gap-2.5 rounded-[16px] bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] px-3.5 py-3 text-[0.92rem] font-bold" aria-live="off">
       <HourglassMedium size={20} weight="fill" className="mt-px shrink-0 text-accent-ink" aria-hidden="true" />
-      BookTrap is busy. Your {waits.length === 1 ? 'link starts' : 'links start'} in {aboutWait(next)}.
+      BookTrap is busy. Your {wait.waiting === 1 ? 'link starts' : 'links start'} in {aboutWait(wait.next)}.
     </p>
   );
 }
@@ -245,6 +253,8 @@ function CollectionProgress({ job, item, videos }: { job: Job; item: JobItem; vi
 export function JobPanel() {
   const jobs = useJobs();
   const recent = (jobs.data ?? []).slice(0, 3);
+  const allItems = (jobs.data ?? []).flatMap((job) => job.items);
+  const busy = busyWait(allItems) !== null;
   // A collection's videos are shown inside the collection's own card; skipped posts fold at the end.
   const all = recent.flatMap((job) =>
     job.items
@@ -255,7 +265,10 @@ export function JobPanel() {
   const skipped = all.filter(({ item }) => item.blocked).map(({ item }) => item);
 
   return (
-    <section aria-labelledby="in-progress" aria-live="polite">
+    <section aria-labelledby="in-progress">
+      <span className="sr-only" aria-live="polite">
+        {busy ? 'BookTrap is busy.' : ''}
+      </span>
       <h2 id="in-progress" className="font-display text-[1.35rem]">
         Recent catches
       </h2>
@@ -265,8 +278,9 @@ export function JobPanel() {
         <p className="mt-2 max-w-[34ch] text-sm text-text-muted">Links you paste show up here while BookTrap reads them.</p>
       ) : (
         <>
-        <BusyNotice items={recent.flatMap((job) => job.items)} />
-        <ul className="mt-3 space-y-2.5">
+        <BusyNotice items={allItems} />
+        {/* Each link's progress is announced as it changes. */}
+        <ul className="mt-3 space-y-2.5" aria-live="polite">
           {items.map(({ job, item, videos }) => (
             <ItemCard key={item.id} job={job} item={item} videos={videos} />
           ))}

@@ -10,12 +10,14 @@ import type { PostData } from './pipeline/fetchers';
 import type { ExtractedBook } from './pipeline/extract';
 import { framesFromFile } from './pipeline/media';
 import type { PipelineDeps } from './pipeline/process';
+import type { verifyBook } from './pipeline/verify';
 
 /**
  * Load-test mode (Phase 9; refused in production). Sessions are signed with a key the load script made,
- * so 100 readers don't need 100 Supabase sign-ins. Apify, Claude and the catalogue lookup are stubbed with
- * realistic delays and cost nothing; frames still come from a real ffmpeg run on a sample video, since
- * ffmpeg is what uses the memory. Delays are multiplied by `timeScale` so a run fits in minutes.
+ * so 100 readers don't need 100 Supabase sign-ins. Every outside service is stubbed with realistic delays
+ * and costs nothing: Apify (posts and collections), share-link lookups, Claude, and the catalogue lookup
+ * (in the pipeline and in book edits). Frames still come from a real ffmpeg run on a sample video, since
+ * ffmpeg is what uses the CPU and memory. Delays are multiplied by `timeScale` so a run fits in minutes.
  */
 export interface LoadTestOptions {
   supabaseUrl: string;
@@ -47,11 +49,19 @@ async function makeSampleVideo(): Promise<string> {
   return file;
 }
 
-export async function loadTestMode(options: LoadTestOptions): Promise<{ verifySession: SessionVerifier; stubs: Partial<PipelineDeps> }> {
+export async function loadTestMode(
+  options: LoadTestOptions,
+): Promise<{ verifySession: SessionVerifier; stubs: Partial<PipelineDeps>; verifyBook: typeof verifyBook }> {
   const jwks = JSON.parse(await readFile(options.jwksFile, 'utf8')) as JSONWebKeySet;
   const verifySession = createSessionVerifier({ supabaseUrl: options.supabaseUrl, getKey: createLocalJWKSet(jwks) });
-  const sample = await makeSampleVideo();
+  // Encoded in the background (it takes a while at 0.5 CPU), so the server listens straight away.
+  const sample = makeSampleVideo();
+  sample.catch(() => {});
   const scale = options.timeScale;
+  const verify: typeof verifyBook = async (title, author) => {
+    await delay(0.2, 0.8, scale);
+    return { verified: false, title, author, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, score: 0 };
+  };
 
   const stubs: Partial<PipelineDeps> = {
     // Apify: an actor run takes about 6-14s. The caption carries the post id so extraction can vary.
@@ -69,7 +79,7 @@ export async function loadTestMode(options: LoadTestOptions): Promise<{ verifySe
       try {
         await delay(1, 3, scale);
         const video = join(dir, 'video.mp4');
-        await copyFile(sample, video);
+        await copyFile(await sample, video);
         return { images: await framesFromFile(video, dir, SAMPLE_SECONDS), transcript: null };
       } finally {
         await rm(dir, { recursive: true, force: true });
@@ -87,10 +97,23 @@ export async function loadTestMode(options: LoadTestOptions): Promise<{ verifySe
       return { books, content: 'books', model: 'load-test', costUsd: 0, usage: { inputTokens: 0, outputTokens: 0 } };
     },
     // Google Books / Open Library: a few hundred ms, no match (nothing external is called).
-    verifyBook: async (title, author) => {
-      await delay(0.2, 0.8, scale);
-      return { verified: false, title, author, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, score: 0 };
+    verifyBook: verify,
+    // A share link: the redirect lookup takes about a second, then it's a post on the same platform.
+    resolveLink: async (link) => {
+      if (link.kind !== 'short') return link;
+      await delay(0.5, 1.5, scale);
+      const postId = `7${String(Math.floor(Math.random() * 1e18)).padStart(18, '0')}`;
+      return { ...link, kind: 'video', postId, url: `https://www.tiktok.com/@booktrap.load/video/${postId}`, handle: 'booktrap.load' };
+    },
+    // Apify's collection lister: about 20-40s, then `limit` videos (and more beyond them).
+    listCollection: async (collectionId, limit) => {
+      await delay(20, 40, scale);
+      const videos = Array.from({ length: limit }, (_, i) => {
+        const postId = `78${collectionId.slice(-8).padStart(8, '0')}${String(i).padStart(9, '0')}`;
+        return { url: `https://www.tiktok.com/@booktrap.load/video/${postId}`, postId, kind: 'video' as const };
+      });
+      return { videos, more: true, costUsd: 0 };
     },
   };
-  return { verifySession, stubs };
+  return { verifySession, stubs, verifyBook: verify };
 }

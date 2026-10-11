@@ -40,7 +40,7 @@ const verifySession: SessionVerifier = load
 let runItem: (itemId: string) => Promise<void> = async () => {};
 const queue = new JobQueue((itemId) => runItem(itemId), config.JOB_CONCURRENCY);
 
-const app = await buildApp({ config, verifySession, users, store, queue });
+const app = await buildApp({ config, verifySession, users, store, queue, verifyBook: load?.verifyBook });
 const pipelineLog = app.log.child({ component: 'pipeline' });
 
 runItem = (itemId) =>

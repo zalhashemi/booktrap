@@ -3,10 +3,13 @@
  * on the real Supabase project. Nothing is paid for: Apify, Claude and the catalogue are stubbed.
  *
  *   npx tsx --env-file=.env scripts/load/run.ts setup [readers=100]
- *       Makes the session key (api/.load/jwks.json for the API container) and throwaway accounts.
+ *       Makes the session key (api/.load/jwks.json), the API container's settings (api/.load/container.env:
+ *       the Supabase URL and key, nothing else) and throwaway accounts. Then: scripts/load/start.sh.
  *   npx tsx --env-file=.env scripts/load/run.ts run <label> [links=1] [scale=0.25] [container=booktrap-load]
  *       Every reader at once: opens the app, pastes `links` posts, polls until read, opens the shelf and
  *       changes a book. Samples the container's memory and CPU. Writes api/.load/results-<label>.json.
+ *       Timings are as measured: the stubbed waits were shortened by `scale`, ffmpeg and the database
+ *       were not, so they can't simply be divided back. cpuSecondsPerPost is what scales to real plans.
  *   npx tsx --env-file=.env scripts/load/run.ts shelf <books> <label>
  *       Times opening one shelf of <books> books (seeded on the first reader).
  *   npx tsx --env-file=.env scripts/load/run.ts storage <books>
@@ -119,7 +122,9 @@ function sampleContainer(container: string) {
   return async () => {
     stop = true;
     await loop;
-    return { memoryMiB: summary(memory), cpuPercent: summary(cpu), samples: memory.length };
+    // One sample a second, so the sum of CPU% / 100 is roughly the CPU-seconds used.
+    const cpuSeconds = cpu.reduce((sum, value) => sum + value / 100, 0);
+    return { memoryMiB: summary(memory), cpuPercent: summary(cpu), cpuSeconds: Math.round(cpuSeconds), samples: memory.length };
   };
 }
 
@@ -130,6 +135,8 @@ async function setup(readers: number) {
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
   const publicJwk = { ...(await exportJWK(publicKey)), kid: 'load-test', alg: 'ES256', use: 'sig' };
   writeFileSync(join(DIR, 'jwks.json'), JSON.stringify({ keys: [publicJwk] }));
+  // Only what the API needs to reach the database (gitignored, never printed).
+  writeFileSync(join(DIR, 'container.env'), `SUPABASE_URL=${url}\nSUPABASE_SERVICE_ROLE_KEY=${key}\n`, { mode: 0o600 });
   const users: string[] = [];
   for (let i = 0; i < readers; i++) {
     const { data, error } = await db.auth.admin.createUser({ email: `${EMAIL_PREFIX}${String(i).padStart(3, '0')}@example.com`, email_confirm: true });
@@ -207,14 +214,15 @@ async function run(label: string, links: number, scale: number, container: strin
     linksPerReader: links,
     timeScale: scale,
     wallSeconds: Math.round((performance.now() - started) / 1000),
-    // Real-time equivalents: the stubbed delays were scaled, so divide back for the reader's experience.
+    // As measured (see the header: stubbed waits were scaled, real work wasn't).
     jobSeconds: summary(jobTimes.map((ms) => ms / 1000)),
-    jobSecondsUnscaled: summary(jobTimes.map((ms) => ms / 1000 / scale)),
-    queueWaitSecondsUnscaled: summary(queueWaits.map((ms) => ms / 1000 / scale)),
+    queueWaitSeconds: summary(queueWaits.map((ms) => ms / 1000)),
     items: { done: itemsDone, failed: itemsFailed },
+    postsPerMinute: Math.round((itemsDone / ((performance.now() - started) / 60_000)) * 10) / 10,
     routesMs: routes,
     failures: Object.fromEntries(failures),
     container: container_,
+    cpuSecondsPerPost: itemsDone ? Math.round((container_.cpuSeconds / itemsDone) * 10) / 10 : null,
     tempDirsLeft: leftovers.trim(),
   };
   mkdirSync(DIR, { recursive: true });
@@ -308,24 +316,30 @@ async function storage(books: number) {
 }
 
 async function clean() {
-  let removed = 0;
+  const ours: string[] = [];
   for (let page = 1; ; page++) {
     const { data, error } = await db.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error(error.message);
-    const ours = data.users.filter((user) => user.email?.startsWith(EMAIL_PREFIX));
-    for (const user of ours) {
-      await db.rpc('delete_user_data', { p_user_id: user.id });
-      const { error: deleteError } = await db.auth.admin.deleteUser(user.id);
-      if (deleteError) console.log('could not delete a load-test user:', deleteError.message);
-      else removed++;
-    }
+    ours.push(...data.users.filter((user) => user.email?.startsWith(EMAIL_PREFIX)).map((user) => user.id));
     if (data.users.length < 1000) break;
   }
+  // The stubs cost nothing but still leave $0 spend rows: drop the load accounts' own, while they still
+  // say whose they are (deleting an account keeps its spend without the owner). Real spend stays.
+  let spend = 0;
+  for (let i = 0; i < ours.length; i += 100) {
+    const { count, error } = await db.from('spend_events').delete({ count: 'exact' }).in('user_id', ours.slice(i, i + 100)).eq('usd', 0);
+    if (error) throw new Error(error.message);
+    spend += count ?? 0;
+  }
+  let removed = 0;
+  for (const id of ours) {
+    await db.rpc('delete_user_data', { p_user_id: id });
+    const { error } = await db.auth.admin.deleteUser(id);
+    if (error) console.log('could not delete a load-test user:', error.message);
+    else removed++;
+  }
   const cache = await db.from('post_cache').delete({ count: 'exact' }).eq('model', 'load-test');
-  // The stubs cost nothing, but each read still leaves a $0 spend row: drop those (real spend is never $0).
-  const spend = await db.from('spend_events').delete({ count: 'exact' }).eq('usd', 0);
-  console.log(`deleted ${spend.count ?? 0} zero-cost spend rows`);
-  console.log(`deleted ${removed} load-test accounts and ${cache.count ?? 0} cached load-test posts`);
+  console.log(`deleted ${removed} load-test accounts, ${spend} of their $0 spend rows and ${cache.count ?? 0} cached load-test posts`);
 }
 
 const [command, a, b, c, d] = process.argv.slice(2);

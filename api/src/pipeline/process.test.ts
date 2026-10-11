@@ -583,6 +583,45 @@ describe('JobQueue', () => {
     expect(started).toEqual(['a1', 'b1', 'c1', 'a2', 'a3', 'a4']);
   });
 
+  it('doesn’t call a reader’s wait for their own earlier link busy', async () => {
+    const releases: (() => void)[] = [];
+    const queue = new JobQueue(async () => new Promise<void>((resolve) => releases.push(resolve)), 2);
+    queue.enqueue('a1', 'user-a');
+    queue.enqueue('a2', 'user-a');
+    queue.enqueue('b1', 'user-b');
+    queue.enqueue('b2', 'user-b');
+    // a1 and b1 run; a2 waits only on a1 (its own), with b1 the only other item: no busy wait.
+    expect(queue.estimates().get('a2')).toEqual({ ahead: 1, etaSeconds: 0 });
+    while (releases.length || queue['running']) {
+      releases.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await queue.idle();
+  });
+
+  it('keeps a long paste’s turn as newcomers keep arriving', async () => {
+    const started: string[] = [];
+    let release: () => void = () => {};
+    const queue = new JobQueue(async (id) => {
+      started.push(id);
+      await new Promise<void>((resolve) => (release = resolve));
+    }, 1);
+    queue.enqueue('a1', 'user-a');
+    queue.enqueue('a2', 'user-a');
+    queue.enqueue('b1', 'user-b');
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // b1 runs. A newcomer arrives now: a2 (whose reader's turn came earlier) still goes first.
+    queue.enqueue('c1', 'user-c');
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await queue.idle();
+    expect(started).toEqual(['a1', 'b1', 'a2', 'c1']);
+  });
+
   it('estimates each waiting item’s place and wait', async () => {
     const releases: (() => void)[] = [];
     const queue = new JobQueue(async () => new Promise<void>((resolve) => releases.push(resolve)), 2);
@@ -592,12 +631,12 @@ describe('JobQueue', () => {
     queue.enqueue('c1', 'user-c');
     queue.enqueue('c2', 'user-c');
     const estimates = queue.estimates();
-    // Running: a1, b1. Waiting, in turn order: c1 (never started), a2, c2.
+    // Running: a1, b1. Waiting, in turn order: c1 (arrived after a and b), a2, c2. Only other readers' items count.
     expect(estimates.has('a1')).toBe(false);
-    expect([...estimates].map(([id, e]) => [id, e.ahead])).toEqual([['c1', 2], ['a2', 3], ['c2', 4]]);
+    expect([...estimates].map(([id, e]) => [id, e.ahead])).toEqual([['c1', 2], ['a2', 2], ['c2', 3]]);
     // Waves of 2 at the default 40s, minus half the running wave.
     expect(estimates.get('c1')!.etaSeconds).toBe(20);
-    expect(estimates.get('c2')!.etaSeconds).toBe(60);
+    expect(estimates.get('c2')!.etaSeconds).toBe(20);
     while (releases.length) releases.shift()!();
     await new Promise((resolve) => setTimeout(resolve, 0));
     while (releases.length) releases.shift()!();
