@@ -105,6 +105,7 @@ function toMiB(text: string) {
 function sampleContainer(container: string) {
   const memory: number[] = [];
   const cpu: number[] = [];
+  const began = performance.now();
   let stop = false;
   const loop = (async () => {
     while (!stop) {
@@ -122,8 +123,10 @@ function sampleContainer(container: string) {
   return async () => {
     stop = true;
     await loop;
-    // One sample a second, so the sum of CPU% / 100 is roughly the CPU-seconds used.
-    const cpuSeconds = cpu.reduce((sum, value) => sum + value / 100, 0);
+    // Average CPU (100% = one core) times how long the run took. A docker stats sample takes about a
+    // second itself, so the samples aren't one a second.
+    const average = cpu.length ? cpu.reduce((sum, value) => sum + value, 0) / cpu.length / 100 : 0;
+    const cpuSeconds = average * ((performance.now() - began) / 1000);
     return { memoryMiB: summary(memory), cpuPercent: summary(cpu), cpuSeconds: Math.round(cpuSeconds), samples: memory.length };
   };
 }

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { setPriority, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -18,6 +18,9 @@ export interface ImageInput {
 }
 
 export { MEDIA_LIMITS };
+
+/** How much lower ffmpeg runs than the API (Unix niceness, 0 to 19). */
+const FFMPEG_NICENESS = 15;
 
 export interface MediaDeps {
   apifyToken: string;
@@ -116,6 +119,13 @@ function runFfmpeg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!ffmpegPath) return reject(new Error('ffmpeg binary not available on this platform'));
     const child = spawn(ffmpegPath as unknown as string, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    // Below the API's own priority: on a small plan ffmpeg can take the whole CPU, and readers opening
+    // their shelf should be answered first (Phase 9 load test: shelf loads took up to 7s otherwise).
+    try {
+      if (child.pid) setPriority(child.pid, FFMPEG_NICENESS);
+    } catch {
+      // Not allowed on this system: ffmpeg runs at normal priority.
+    }
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-20_000);

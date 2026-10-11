@@ -51,6 +51,10 @@ services:
         value: "120"
       - key: MAX_VIDEOS_PER_COLLECTION
         value: "100"
+      # Posts read at once. Phase 9: Starter (0.5 CPU, 512 MB) is CPU-bound at 2 or more and used
+      # 326 MB at 4; 3 covers the waits on Apify and Claude. Raise to 6 on Standard (1 CPU, 2 GB).
+      - key: JOB_CONCURRENCY
+        value: "3"
       - key: MONTHLY_BUDGET_USD
         value: "20"
       - key: GLOBAL_SPEND_KILL_SWITCH

@@ -3,6 +3,9 @@
 # Render Starter is 512 MB and 0.5 CPU. Needs `run.ts setup` first (api/.load/jwks.json, container.env).
 set -e
 cd "$(dirname "$0")/../.."
+# Keep the previous run's API log (errors are logged there), then replace the container.
+mkdir -p .load/logs
+docker logs booktrap-load > ".load/logs/api-$(date +%Y%m%d-%H%M%S).log" 2>&1 || true
 docker rm -f booktrap-load >/dev/null 2>&1 || true
 docker run -d --name booktrap-load \
   --memory "$1" --memory-swap "$1" --cpus "$2" -p 8787:8787 \

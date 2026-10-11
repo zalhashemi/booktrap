@@ -12,7 +12,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 6 | Design pass | Done |
 | 7 | Accounts (Supabase Auth) | Done (2026-10-11): built, code-reviewed and tested live, including the email-code flows. Real users need a verified email domain first (Phase 10) |
 | 8 | Limits, moderation, report and takedown | Done (2026-10-11): built, code-reviewed, 0010 applied, tested live |
-| 9 | Scale, storage and cost | Not started |
+| 9 | Scale, storage and cost | Done (2026-10-11): load-tested at Render's limits, storage measured, fair queue and busy notice built, cost report written |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
 
 The old "Phase 7: Hardening and deploy" became Phase 10 on 2026-10-10. Its finished work keeps the names 7a, 7b and 7c in the sections below. Section §12 of the brief follows the new order.
@@ -114,6 +114,7 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-11: **Queue estimate is option C** (user), with their wording: one line above the job cards, "BookTrap is busy. Your links start in about 4 minutes." Nothing about closing the page. Shown only when the wait is 20 seconds or more (https://claude.ai/artifact/XJwFtbRfZpmcQgmyU8bGiM). **0011 is applied** (user). The user wants a visual cost report covering monthly spend and what testing has cost.
 - 2026-10-11: **Phase 9 set-up (user):**
   - The load test runs in Docker at Render-like limits, through **Colima**. There's no Homebrew, so Lima 2.2.1, Colima 0.10.3 and the Docker 29.9.0 CLI were installed from their official releases into `~/.local` (no sudo; Lima and Colima checked against their published checksums).
   - The 100 simulated readers hit the **real Supabase project** (throwaway accounts and rows, deleted afterwards), with Apify and Claude stubbed so nothing is paid for.
@@ -269,6 +270,48 @@ Tests: 164 API, 55 shared, 32 web. The retest live: a guest's reel merged into t
 Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymous sign-ins and Email are on; Site URL and redirect `http://localhost:5180/**` are set. `{{ .Token }}` is needed in both the Magic Link and the Change Email Address templates (saving a guest's shelf sends the latter).
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
+
+## Phase 9: Scale, storage and cost (done, 2026-10-11)
+
+Built:
+- **Load-test mode** (`api/src/load-test.ts`, `LOAD_TEST=true`; refused in production):
+  - Sessions are signed by the load script's own key (`LOAD_TEST_JWKS_FILE`), so 100 readers need no Supabase sign-ins.
+  - Apify (posts and collections), share-link lookups, Claude and the catalogue (pipeline and book edits) are stubbed with realistic delays (times `LOAD_TEST_TIME_SCALE`) and cost $0.
+  - Frames still come from a real ffmpeg run on a 60-second 720p sample video, made in the background after the server starts.
+- **Harness** (`api/scripts/load/`):
+  - `Dockerfile` (the API as Render builds it), `start.sh <memory> <cpus> <concurrency> [scale]` (keeps each run's API log), and `run.ts setup | run | shelf | storage | clean`.
+  - Every reader opens the app, pastes, polls every 2s until read, opens the shelf and changes a book.
+  - It samples the container's memory and CPU, and checks that no temp folders are left behind.
+  - `clean` deletes the throwaway accounts, their $0 spend rows (by owner, before the owner goes) and the load test's cached posts.
+- **Migration 0011** `storage_report()` (applied by the user): every table's rows, size and index size, plus the whole database. Service role only. Tested in PGlite.
+- **Queue:** readers take turns. A newcomer joins the current round, so a 30-link paste doesn't hold a slot and newcomers can't starve it either.
+  - Each waiting item gets an estimate: other readers' items ahead, and about how long until it starts, from the last 20 real item times (instant ones aren't timed). Computed once per queue change.
+  - `job_items` responses carry `queue: { ahead, etaSeconds }` (defaulted to null).
+- **Busy notice** (option C, the user's wording) above the job cards, when the wait is 20s or more: "BookTrap is busy. Your links start in about 4 minutes." It's announced to screen readers once, not every minute.
+- **ffmpeg runs at lower priority** (niceness 15), so the API answers readers before frames are read.
+
+Measured (Docker in Colima on this Mac; real Supabase in Singapore; stubbed waits at 0.25×):
+- Frame reading: one 60-second 720p video takes 14s of ffmpeg at 0.5 CPU, about 10s of it decoding. Decoding only keyframes takes 0.2s but gives 8 frames instead of 30 and loses the scene-change frames (not adopted; a quality trade-off for the user). Skipping the deblocking filter saves almost nothing.
+- **Starter (0.5 CPU, 512 MB), 2 at a time, 100 readers at once:** 100/100 read, 0 errors, the last after 32 min (3.1 posts a minute). Memory peak 235 MB, CPU pinned at 0.5 throughout. About 9 CPU-seconds per video post. No temp folders left.
+  - While ffmpeg held the CPU, the API slowed: a paste took 5.3s median and 13s at worst, and opening a shelf up to 7s. Hence the lower ffmpeg priority (rerun below).
+- **Starter, 4 at a time, 40 readers:** the same 3.1 posts a minute (CPU-bound). Memory peak 326 MB, so 4 at a time fits.
+- **Standard (1 CPU, 2 GB), 2 at a time, 100 readers:** 99 read in 16.5 min (6 a minute). Memory peak 304 MB, and the CPU wasn't full, so it can take more at once.
+  - One paste out of 100 failed with a 500 after 45s. Its log was lost when the next run replaced the container (`start.sh` now keeps logs).
+- **Starter, 3 at a time, ffmpeg at lower priority, 100 readers:** 100/100 read, 0 errors, the last after 35 min (2.9 a minute). Memory peak 297 MB, about 10 CPU-seconds a post, no temp folders left.
+  - The lower priority made no measurable difference. The slow requests are the arrival burst: 100 readers opening the app in the same 10s, each request a few round trips from Bahrain to Singapore. A paste took 4.1s median, and the worst was 16s.
+  - Once running, a progress check answered in 0.45s median with ffmpeg busy. The change stays (it costs nothing).
+- **A 1,000-book shelf** opens in 0.75s and sends 1.1 MB. It's uncompressed, because the API has no response compression yet. Open item: add `@fastify/compress`, which keeps traffic inside Render's free 5 GB longer.
+- **Cleanup:** 101 throwaway accounts, 690 of their $0 spend rows and 345 load-test cached posts deleted. The real spend records (26), the 10 real cached posts and the existing guests are untouched, and the database is 16 MB.
+- **Render** reads 3 posts at a time (`JOB_CONCURRENCY` in `render.yaml`).
+- **Storage:** a 500-book shelf (1.3 sources a book, a third on shelves) added 0.83 MB, about 1.65 KB a book. A reader with 150 books is about 0.3 MB, and the database is 14 MB now.
+- **Testing cost so far:** $0.78 of paid reading since 8 October (Claude $0.52 over 11 reads, Apify $0.26). Phases 8 and 9 cost $0.
+
+**Cost report:** `BookTrap-cost-report.pdf` at the repo root (4 pages, the site's type and colours, built from the result files in `api/.load`). At 5 posts a reader a month, with Supabase Pro:
+- 100 readers: **$54 a month** ($29 on Supabase Free), of which $21 is reading.
+- 1,000 readers: **$202** ($169 reading).
+- 10,000 readers: **$1,354** ($1,300 reading; Render Standard).
+- Reading is about 84% of the bill at 1,000 readers. The $20 reading budget covers about 384 new posts a month.
+- Hosting stays inside the $10 target up to about 1,000 readers on Starter.
 
 ## Phase 8: Limits, moderation, report and takedown (done, 2026-10-11)
 
