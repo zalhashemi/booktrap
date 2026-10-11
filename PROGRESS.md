@@ -10,7 +10,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Accounts (Supabase Auth) | In progress: token verifier, migration 0009 (tested in PGlite, not run yet) and shelf backup done; screen mockups shown, waiting on the user's picks |
+| 7 | Accounts (Supabase Auth) | In progress: token verifier, migration 0009 (applied 2026-10-11), shelf backup and screen picks done; API and web wiring next |
 | 8 | Limits, moderation, report and takedown | Not started |
 | 9 | Scale, storage and cost | Not started |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
@@ -114,6 +114,10 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-11: **Account screens picked (user):** Sign up / Log in is option B: email first, then "Email me a code" or "Use a password". The Save your shelf prompt is option A, a card above the paste box. The unsaved note is option B, a lavender "Unsaved" tab on the shelf header. Settings, Account is as mocked (guest, signed in, two-step delete). **Code-only accounts are allowed** and a password is optional (Claude's recommendation, user agreed to "whatever is safest and costs less"): no password to reuse or leak for those who don't want one, and an email is sent only when someone logs in on a new browser, since sessions renew themselves. **Logging in on a browser with a guest shelf merges the guest's books into the account** (duplicates folded together, as on a re-paste), then deletes the guest user. The browser proves it owns the guest shelf by sending the guest's token. This follows "never lose a book".
+- 2026-10-11: **0009 is applied** (user ran it). Checked read-only: device tables and `delete_device` gone; books, tags and jobs empty and owned by `user_id`; 10 cached posts, 26 spend records and 6 network counts kept; `user_activity` and `inactive_guests` work. The app doesn't work against Supabase until Phase 7's wiring is done.
+- 2026-10-11: The project already signed with ES256 (the JWKS lists two ES256 keys: current and standby), so no rotation was needed.
+
 - 2026-10-11: **Accounts plumbing (Phase 7):** guests' visits are recorded in `user_activity` (the API writes at most hourly), because Supabase doesn't record a visit when a session refreshes. `inactive_guests()` reads `auth.users` as its owner (`security definer`, only `service_role` may call it), and the API deletes those users through Supabase's admin API. Deleting an account runs `delete_user_data()` first (carrying today's network counts, as 7b did), then the admin delete; the cascade from `auth.users` covers anything left. A capped submission now answers `{"capped": "user"}` instead of `"device"`.
 
 - 2026-10-10: **Phase 7 adjustments (user):** no passkeys for now (guests can't register one in Supabase, and the API is beta); tokens are verified locally with Supabase's asymmetric JWT signing keys (the project migrates to them).
@@ -194,11 +198,11 @@ Done so far (no routes or screens rewired yet):
     - `service_role` can't read `auth.users` directly
     - `anon` and `authenticated` can't execute anything
     - a second run fails and changes nothing
-  - **Not run in Supabase yet.**
+  - Applied in Supabase on 2026-10-11 (see the decisions log).
 - **Backup of the device shelves** before 0009: `api/scripts/backup-device-shelves.ts` (select-only; leaves out device secrets and hashed networks) wrote `backups/device-shelves-2026-10-11.json` (gitignored): 23 devices, 183 books, 182 sources, 1 tag, 23 jobs, 32 items. The largest shelf, the dev shelf, has 43 live books and 1 in the Undo bin. Every count matched a direct count.
-- **Mockups** of the four new screens (Sign up / Log in sheet, Save your shelf prompt, the unsaved note on the shelf header, Settings → Account), shown as options at 390 and 1280 in both themes: https://claude.ai/artifact/H1p3MeQFU9rD4FQrfB559B. Waiting on the user's picks, plus two decisions: whether logging in on a browser with a guest shelf merges those books into the account, and whether code-only accounts (no password) are allowed.
+- **Mockups** of the four new screens (Sign up / Log in sheet, Save your shelf prompt, the unsaved note on the shelf header, Settings → Account), shown as options at 390 and 1280 in both themes: https://claude.ai/artifact/H1p3MeQFU9rD4FQrfB559B. Picks and decisions recorded in the decisions log (2026-10-11).
 
-Waiting on the user: the Supabase dashboard setup (anonymous sign-ins and Email on, the Magic Link template carrying `{{ .Token }}`, JWT signing keys migrated to ES256 without revoking the legacy key, Site URL and redirect `http://localhost:5180/**`), then running 0009 with the API stopped.
+Supabase setup: the project was already on ES256 keys; 0009 is applied. The user is finishing the rest of the dashboard setup (anonymous sign-ins and Email on, `{{ .Token }}` in the Magic Link template, Site URL and redirect `http://localhost:5180/**`).
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
 
