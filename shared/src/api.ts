@@ -53,5 +53,6 @@ export const ERROR_CODES = {
   internal: 'internal_error',
   notReady: 'not_ready',
   limitReached: 'limit_reached',
+  busy: 'busy',
   paused: 'processing_paused',
 } as const;

@@ -40,6 +40,22 @@ export class JobQueue {
     for (const [itemId, owner] of this.rerun) if (owner === userId) this.rerun.delete(itemId);
   }
 
+  /**
+   * A guest's shelf is joining an account: their waiting items now belong to the account (so they run
+   * one at a time with the account's own), and this resolves once the guest has nothing running, so no
+   * book is still being written under the guest. False if something is still running after `timeoutMs`.
+   */
+  async handOver(fromUserId: string, toUserId: string, timeoutMs: number): Promise<boolean> {
+    for (const entry of this.pending) if (entry.userId === fromUserId) entry.userId = toUserId;
+    for (const [itemId, owner] of this.rerun) if (owner === fromUserId) this.rerun.set(itemId, toUserId);
+    const deadline = Date.now() + timeoutMs;
+    while (this.busyUsers.has(fromUserId)) {
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return true;
+  }
+
   /** Resolves when nothing is pending or running (tests and graceful shutdown). */
   idle(): Promise<void> {
     if (this.running === 0 && this.pending.length === 0) return Promise.resolve();

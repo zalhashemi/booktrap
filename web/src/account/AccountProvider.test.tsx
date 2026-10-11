@@ -44,6 +44,7 @@ function fakeAuth(initial: Session | null) {
       emit('SIGNED_IN', next);
       return ok(next);
     }),
+    getUser: vi.fn(async () => ({ data: { user: current?.user ?? null }, error: null })),
     signOut: vi.fn(async () => {
       emit('SIGNED_OUT', null);
       return { error: null };
@@ -157,6 +158,32 @@ describe('AccountProvider', () => {
     const { get } = setup(auth);
     await screen.findByText('guest guest-1');
     await expect(get().logInWithPassword('reader@example.com', 'nope')).rejects.toMatchObject({ code: 'bad_login' });
+  });
+
+  it('never reports an account deleted when the API only refused an expired sign-in', async () => {
+    const { auth } = fakeAuth(session('member', { email: 'reader@example.com' }));
+    const client = createApiClient('http://api.test');
+    const { ApiRequestError } = await import('../api/client');
+    vi.spyOn(client, 'deleteAccount').mockRejectedValue(new ApiRequestError(401, 'unauthorized', 'Sign-in is missing or has expired.'));
+    const { get } = setup(auth, client);
+    await screen.findByText('member member');
+    await expect(get().deleteAccount()).rejects.toMatchObject({ status: 401 });
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('treats a 401 as done when Supabase says the user is already gone', async () => {
+    const { auth } = fakeAuth(session('member', { email: 'reader@example.com' }));
+    const client = createApiClient('http://api.test');
+    const { ApiRequestError } = await import('../api/client');
+    const { AuthApiError } = await import('@supabase/supabase-js');
+    vi.spyOn(client, 'deleteAccount').mockRejectedValue(new ApiRequestError(401, 'unauthorized', 'gone'));
+    auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: new AuthApiError('User from sub claim in JWT does not exist', 403, 'user_not_found') } as never);
+    const { get } = setup(auth, client);
+    await screen.findByText('member member');
+    await act(async () => {
+      await get().deleteAccount();
+    });
+    expect(auth.signOut).toHaveBeenCalled();
   });
 
   it('opens a new guest shelf after signing out', async () => {

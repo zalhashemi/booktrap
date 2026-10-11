@@ -42,6 +42,8 @@ export interface AccountContextValue {
   signOut: () => Promise<void>;
   /** Deletes the account (or guest shelf) and everything on it, then opens a new guest shelf. */
   deleteAccount: () => Promise<void>;
+  /** Tries again to add the guest shelf whose merge failed at login (while its token lasts). */
+  retryGuestMerge: () => Promise<LoginResult>;
 }
 
 export type AccountErrorCode = 'email_taken' | 'bad_code' | 'bad_login' | 'weak_password' | 'rate_limited' | 'network' | 'unknown';

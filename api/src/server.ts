@@ -2,6 +2,7 @@ import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { ERROR_CODES } from '@booktrap/shared';
+import { createRevocations } from './auth/revocations';
 import { requireUser, type SessionVerifier } from './auth/session-auth';
 import type { Config } from './config';
 import { HttpError, errorBody } from './errors';
@@ -81,10 +82,11 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     reply.code(404).send(errorBody(ERROR_CODES.notFound, 'No such endpoint.')),
   );
 
-  const auth = requireUser(verifySession, { onSeen: (userId, at) => users.touch(userId, at) });
+  const revocations = createRevocations();
+  const auth = requireUser(verifySession, { revocations, onSeen: (userId, at) => users.touch(userId, at) });
 
   healthRoutes(app, users);
-  accountRoutes(app, { auth, verify: verifySession, store, users, queue });
+  accountRoutes(app, { auth, verify: verifySession, store, users, queue, revocations });
   jobRoutes(app, {
     auth,
     store,

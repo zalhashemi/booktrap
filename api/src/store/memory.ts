@@ -343,9 +343,13 @@ export function createMemoryLibraryStore(): LibraryStore {
         }
         tags.delete(id);
       }
-      for (const book of books.values()) if (book.userId === fromUserId) book.userId = toUserId;
       for (const job of jobs.values()) if (job.userId === fromUserId) job.userId = toUserId;
       for (const item of items.values()) if (item.userId === fromUserId) item.userId = toUserId;
+    },
+    async moveBooks(fromUserId, toUserId, bookIds) {
+      for (const book of books.values()) {
+        if (book.userId === fromUserId && (bookIds === 'all' || bookIds.includes(book.id))) book.userId = toUserId;
+      }
     },
     async purgeDeletedBooks() {
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;

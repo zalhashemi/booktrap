@@ -190,11 +190,13 @@ export interface LibraryStore {
    */
   eraseUser(userId: string): Promise<void>;
   /**
-   * A guest logged in to an existing account: moves the guest's books, shelves (tags), jobs and spend to
-   * that account. A shelf name both have becomes one shelf. Duplicate books are folded by the caller.
-   * Safe to run again after a partial failure.
+   * A guest logged in to an existing account: moves the guest's shelves (tags), jobs and spend to that
+   * account. A shelf name both have becomes one shelf. Books move separately (moveBooks), one at a time,
+   * so duplicates can be folded as they arrive. Safe to run again.
    */
   transferShelf(fromUserId: string, toUserId: string): Promise<void>;
+  /** Moves the given books (or every book left, the Undo bin included) from one user to another. */
+  moveBooks(fromUserId: string, toUserId: string, bookIds: string[] | 'all'): Promise<void>;
   /** Permanently removes books deleted more than 30 days ago. Returns how many. */
   purgeDeletedBooks(): Promise<number>;
   /**

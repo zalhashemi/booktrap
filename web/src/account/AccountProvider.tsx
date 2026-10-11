@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
+import { ERROR_CODES } from '@booktrap/shared';
 import { api as defaultApi, ApiRequestError, NetworkError, type ApiClient } from '../api/client';
 import { toAccountError } from './errors';
 import { AccountContext, AccountError, type AccountContextValue, type AccountUser, type LoginResult } from './account-context';
@@ -10,6 +11,45 @@ const GUEST_LOCK = 'booktrap-start-guest';
 const NOT_SET_UP = new AccountError('unknown', 'Sign-in isn’t set up on this copy of BookTrap.');
 
 type State = { status: 'loading'; session: null; error: null } | { status: 'ready'; session: Session; error: null } | { status: 'error'; session: null; error: Error };
+
+/** A guest shelf whose merge into `accountId` failed, kept until the guest's token expires. */
+interface PendingMerge {
+  token: string;
+  expiresAt: number;
+  accountId: string;
+}
+
+const PENDING_MERGE_KEY = 'booktrap.pending-merge';
+
+function savePendingMerge(pending: PendingMerge) {
+  try {
+    localStorage.setItem(PENDING_MERGE_KEY, JSON.stringify(pending));
+  } catch {
+    // Storage blocked: only the toast's Try again is left.
+  }
+}
+
+function clearPendingMerge() {
+  try {
+    localStorage.removeItem(PENDING_MERGE_KEY);
+  } catch {
+    // Nothing stored.
+  }
+}
+
+function loadPendingMerge(accountId: string | null): PendingMerge | null {
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_MERGE_KEY) ?? 'null') as PendingMerge | null;
+    if (!pending || pending.accountId !== accountId) return null;
+    if (pending.expiresAt <= Date.now()) {
+      clearPendingMerge();
+      return null;
+    }
+    return pending;
+  } catch {
+    return null;
+  }
+}
 
 function storageWorks(): boolean {
   try {
@@ -136,28 +176,69 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     [requireAuth, call, queryClient],
   );
 
+  /**
+   * Hands a guest shelf to the signed-in account. A "still reading a link" answer and network trouble
+   * are waited out; if it still fails, the guest's token is kept (it's valid for up to an hour) so the
+   * merge can be tried again, from the toast or on the next visit, before the guest shelf is lost.
+   */
+  const mergeGuest = useCallback(
+    async (pending: PendingMerge): Promise<LoginResult> => {
+      for (let tries = 0; ; tries++) {
+        try {
+          const merged = await client.mergeGuest(pending.token);
+          clearPendingMerge();
+          // The account's shelf may have loaded before the guest's books arrived: read it again.
+          await queryClient.invalidateQueries();
+          return { merged, mergeFailed: false };
+        } catch (error) {
+          const retryable = error instanceof NetworkError || (error instanceof ApiRequestError && error.code === ERROR_CODES.busy);
+          // Refused outright (the token expired, or it was already merged): nothing more can be done.
+          if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+            clearPendingMerge();
+            return { merged: null, mergeFailed: true };
+          }
+          if (!retryable || tries >= 3) {
+            savePendingMerge(pending);
+            return { merged: null, mergeFailed: true };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+      }
+    },
+    [client, queryClient],
+  );
+
   /** Logs in, then hands the guest shelf this browser had (if any) to the account. */
   const logIn = useCallback(
     async (signIn: (authApi: AuthClient) => Promise<{ error: unknown }>): Promise<LoginResult> => {
       const authApi = requireAuth();
       const { data: before } = await authApi.getSession();
-      const guestToken = before.session?.user.is_anonymous ? before.session.access_token : null;
-      await call(() => signIn(authApi));
-      if (!guestToken) return { merged: null, mergeFailed: false };
-      for (let tries = 0; ; tries++) {
-        try {
-          const merged = await client.mergeGuest(guestToken);
-          // The account's shelf may have loaded before the guest's books arrived: read it again.
-          await queryClient.invalidateQueries();
-          return { merged, mergeFailed: false };
-        } catch (error) {
-          if (!(error instanceof NetworkError) || tries >= 2) return { merged: null, mergeFailed: true };
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
+      let guest = before.session?.user.is_anonymous ? before.session : null;
+      // A fresh guest token is good for a full hour, so a merge that has to wait or be retried still can.
+      if (guest) {
+        const refreshed = await authApi.refreshSession().catch(() => null);
+        if (refreshed?.data.session) guest = refreshed.data.session;
       }
+      await call(() => signIn(authApi));
+      if (!guest) return { merged: null, mergeFailed: false };
+      const { data: after } = await authApi.getSession();
+      return mergeGuest({ token: guest.access_token, expiresAt: (guest.expires_at ?? 0) * 1000, accountId: after.session?.user.id ?? '' });
     },
-    [requireAuth, call, client, queryClient],
+    [requireAuth, call, mergeGuest],
   );
+
+  const retryGuestMerge = useCallback(async (): Promise<LoginResult> => {
+    const pending = loadPendingMerge(userId);
+    if (!pending) return { merged: null, mergeFailed: true };
+    return mergeGuest(pending);
+  }, [mergeGuest, userId]);
+
+  // A merge that failed last time is tried again once this account is open (while the guest token lasts).
+  const isMember = state.session ? !state.session.user.is_anonymous : false;
+  useEffect(() => {
+    if (!isMember || !loadPendingMerge(userId)) return;
+    void retryGuestMerge();
+  }, [isMember, userId, retryGuestMerge]);
 
   const logInWithPassword = useCallback(
     (email: string, password: string) => logIn((authApi) => authApi.signInWithPassword({ email, password })),
@@ -196,8 +277,11 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     try {
       await client.deleteAccount();
     } catch (error) {
-      // Already gone (a retry after an answer that never arrived): carry on as deleted.
       if (!(error instanceof ApiRequestError && error.status === 401)) throw error;
+      // A 401 may mean it's already gone (a retry after an answer that never arrived), or only that the
+      // sign-in lapsed. Only Supabase saying the user no longer exists counts as deleted.
+      const { error: lookup } = await authApi.getUser();
+      if (!(lookup && 'code' in lookup && lookup.code === 'user_not_found')) throw error;
     }
     // The user no longer exists, so the server may refuse to sign out: the local session goes anyway.
     await authApi.signOut({ scope: 'local' }).catch(() => {});
@@ -217,6 +301,7 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     setPassword,
     signOut,
     deleteAccount,
+    retryGuestMerge,
   };
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { z } from 'zod';
 import { ERROR_CODES } from '@booktrap/shared';
 import { HttpError } from '../errors';
+import type { Revocations } from './revocations';
 
 /** Seconds of clock drift allowed between Supabase and this server. */
 const CLOCK_TOLERANCE_S = 5;
@@ -66,6 +67,8 @@ const SEEN_INTERVAL_MS = 60 * 60 * 1000;
 const SEEN_MEMORY = 10_000;
 
 export interface RequireUserOptions {
+  /** Deleted users, whose tokens are refused although they haven't expired. */
+  revocations?: Revocations;
   /** Called at most hourly per user, never awaited by the request. */
   onSeen?: (userId: string, at: Date) => Promise<void>;
   now?: () => Date;
@@ -75,7 +78,7 @@ export interface RequireUserOptions {
  * preHandler that authorizes a request by its Supabase access token and attaches the user.
  * Every failure gives the same 401, so the response says nothing about why a token was refused.
  */
-export function requireUser(verify: SessionVerifier, { onSeen, now = () => new Date() }: RequireUserOptions = {}) {
+export function requireUser(verify: SessionVerifier, { onSeen, revocations, now = () => new Date() }: RequireUserOptions = {}) {
   const lastSeen = new Map<string, number>();
   const noteVisit = (request: FastifyRequest, userId: string) => {
     if (!onSeen) return;
@@ -100,6 +103,10 @@ export function requireUser(verify: SessionVerifier, { onSeen, now = () => new D
       request.user = await verify(match[1]!);
     } catch (error) {
       request.log.debug({ err: error }, 'access token refused');
+      throw unauthorized;
+    }
+    if (revocations?.isRevoked(request.user.id)) {
+      request.user = undefined;
       throw unauthorized;
     }
     noteVisit(request, request.user.id);

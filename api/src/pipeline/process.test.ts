@@ -530,6 +530,24 @@ describe('JobQueue', () => {
     expect(ran).toEqual(['a1', 'b1']);
   });
 
+  it('hands a guest’s waiting items to the account, and waits for the one running', async () => {
+    const owners: string[] = [];
+    let release!: () => void;
+    const queue = new JobQueue(async (id) => {
+      owners.push(id);
+      if (id === 'g1') await new Promise<void>((resolve) => (release = resolve));
+    }, 2);
+    queue.enqueue('g1', 'guest');
+    queue.enqueue('g2', 'guest');
+    expect(await queue.handOver('guest', 'account', 50)).toBe(false);
+    const done = queue.handOver('guest', 'account', 5000);
+    release();
+    expect(await done).toBe(true);
+    await queue.idle();
+    // g2 ran after g1 finished, as the account's.
+    expect(owners).toEqual(['g1', 'g2']);
+  });
+
   it('runs different users in parallel but one item at a time per user', async () => {
     const order: string[] = [];
     let active = 0;

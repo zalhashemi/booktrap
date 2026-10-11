@@ -10,7 +10,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Accounts (Supabase Auth) | In progress: token verifier, migration 0009 (applied 2026-10-11), shelf backup and screen picks done; API and web wiring next |
+| 7 | Accounts (Supabase Auth) | In progress: API and web wiring built and tested live (password login, guest merge, delete account); email-code flows and the code review fixes next |
 | 8 | Limits, moderation, report and takedown | Not started |
 | 9 | Scale, storage and cost | Not started |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
@@ -202,7 +202,50 @@ Done so far (no routes or screens rewired yet):
 - **Backup of the device shelves** before 0009: `api/scripts/backup-device-shelves.ts` (select-only; leaves out device secrets and hashed networks) wrote `backups/device-shelves-2026-10-11.json` (gitignored): 23 devices, 183 books, 182 sources, 1 tag, 23 jobs, 32 items. The largest shelf, the dev shelf, has 43 live books and 1 in the Undo bin. Every count matched a direct count.
 - **Mockups** of the four new screens (Sign up / Log in sheet, Save your shelf prompt, the unsaved note on the shelf header, Settings → Account), shown as options at 390 and 1280 in both themes: https://claude.ai/artifact/H1p3MeQFU9rD4FQrfB559B. Picks and decisions recorded in the decisions log (2026-10-11).
 
-Supabase setup: the project was already on ES256 keys; 0009 is applied. The user is finishing the rest of the dashboard setup (anonymous sign-ins and Email on, `{{ .Token }}` in the Magic Link template, Site URL and redirect `http://localhost:5180/**`).
+- **API wiring** (`1a560bc`):
+  - Every route uses `requireUser`, which also notes a visit at most hourly in `user_activity`.
+  - `GET /v1/me` answers `{ userId, isGuest }`. `DELETE /v1/account` deletes the user's data, then the user in Supabase Auth. `POST /v1/account/merge-guest` takes the guest's token in the body, refuses a signed-in account's token, folds duplicates with the same matching as a re-paste, merges shelves with the same name, and moves the guest's jobs so today's count follows.
+  - Caps: `DAILY_LINK_CAP_GUEST` (5) and `DAILY_LINK_CAP_PER_USER` (40, renamed from `_PER_DEVICE`). A collection expanding later looks the owner up in Supabase.
+  - The 6-hourly purge deletes guests idle for 30 days.
+  - `api/src/users/` is the Supabase Auth wrapper (`UserDirectory`), with an in-memory version for tests. `api/src/auth/test-sessions.ts` signs test tokens with a key made for each run.
+  - Device registration, device auth, secrets and `DeviceRepo` are deleted.
+- **Web wiring**:
+  - `web/src/account/` holds `AccountProvider` (supabase-js for sign-in only), `errors.ts` (Supabase errors in words) and `supabase.ts`.
+  - With no session, a guest starts under a cross-tab lock. The API client sends `Authorization: Bearer` and retries once with a refreshed token after a 401. Switching users drops the old user's cached queries.
+  - Screens (the user's picks):
+    - the sign-in sheet (`AuthSheet.tsx`, option B): email, then "Email me a code" or "Use a password", the code step with a resend timer, "Forgot password?" by code then a new password, and the Terms and Privacy line
+    - the Save your shelf card above the paste box (option A; "Not now" until another post finishes)
+    - the lavender Unsaved tab (option B; under the count on phones, beside Export from 768px)
+    - Settings, Account: guest and signed-in views, set password, sign out, today's count
+    - Your data: Download my data (JSON) and Delete account (or Delete my shelf for a guest), with a two-step confirmation
+  - A guest at the daily limit is offered "Save my shelf".
+  - Privacy and terms no longer mention device keys or backup codes.
+  - The production build requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, refuses a secret key, and adds the Supabase origin to the CSP. CI uses placeholders.
+- **Tests** before the review: 160 API, 55 shared, 31 web (account provider states, the token retry, and Supabase error messages).
+- **Live checks** (Playwright, real Supabase, cached posts, $0), using throwaway accounts made with the admin API (`booktrap-test-*@example.com`, deleted afterwards):
+  - A first visit signs in as a guest, and the API verifies its ES256 token (`isGuest: true`).
+  - A guest pasted a cached carousel (5 books): the Save card and the Unsaved tab appeared. Logging in with a password said "5 books from this browser joined", and the server shows them on the account.
+  - A second guest pasted the same carousel plus a reel, then logged in: the account went to 6 books, so the 5 duplicates folded. Both guests were deleted on the server.
+  - A wrong password gives "That email and password don't match". Delete account removed the user and their books, and the browser moved to a new guest.
+  - Seen at 390 light and 1280 dark: the sheet, the Save card, the Unsaved tab, and Settings for a guest and a signed-in user.
+  - Bugs found and fixed: the shelf stayed empty after a merge until a reload (now refetched); the Unsaved tab squeezed the phone header; the email-sending failure showed as "Couldn't reach BookTrap".
+  - Not yet checked live: the email-code steps (saving a shelf, logging in by code, forgot password). Supabase's built-in sender only emails the project's team, so these need the user's own inbox.
+
+Code review (high, over `44331e2..HEAD`) found 10 issues; all fixed:
+- A link still being read during a merge kept writing under the guest, so its books were deleted with the guest. Fix: `JobQueue.handOver` gives the account the guest's waiting items and waits up to 45s for the running one. If it's still running, the merge answers 409 `busy` and the app tries again.
+- The merge trusted the token's `is_anonymous`: a token issued before a guest saved their shelf still says "guest" for an hour, so it could have moved a real account's books and deleted the account. Fix: Supabase is asked too (`users.isGuest`).
+- A merge that failed dropped the guest's token, so those books were lost after 30 days. Fix: the guest token is refreshed before login. A failed merge is kept (until the token expires) and retried from the toast's Try again or on the next visit.
+- Delete account counted any 401 as "already deleted". Fix: only Supabase answering `user_not_found` counts.
+- A retried merge couldn't fold the books it had already moved. Fix: books move and fold one at a time. At most one book (the one moved just before a failure) can stay a second copy.
+- The guest cap differed between the route and a collection's expansion (`min()` and a failed lookup). Fix: the same cap in both, and a failed lookup falls back to the smaller cap instead of failing the collection.
+- "Not now" on the Save card compared against the last 5 jobs and was shared by all guests on a browser. Fix: per user, by shelf size.
+- A deleted user's still-valid token reached the store and failed on the foreign key with a 500. Fix: users deleted in this process are refused with a 401 for the token's lifetime (`auth/revocations.ts`).
+- A misplaced doc comment in `vite.config.ts`.
+- (Found while checking the fixes) CI's secret scan matched the bare text `sb_secret_` inside supabase-js. It now matches a key with its value.
+
+Tests: 164 API, 55 shared, 32 web. The retest live: a guest's reel merged into the account and folded into the copy already there (6 books stay 6), with the guest check going through Supabase's admin API.
+
+Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymous sign-ins and Email are on; Site URL and redirect `http://localhost:5180/**` are set. `{{ .Token }}` is needed in both the Magic Link and the Change Email Address templates (saving a guest's shelf sends the latter).
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
 

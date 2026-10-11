@@ -80,7 +80,12 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
 
   const loggedIn = ({ merged, mergeFailed }: LoginResult) => {
     onClose();
-    if (mergeFailed) toast('You’re logged in, but the books from this browser couldn’t be added to your shelf.');
+    if (mergeFailed) {
+      toast('You’re logged in, but the books from this browser couldn’t be added to your shelf yet.', {
+        duration: 20_000,
+        action: { label: 'Try again', run: () => void account.retryGuestMerge().then((result) => !result.mergeFailed && toast('The books from this browser joined your shelf.')) },
+      });
+    }
     else if (merged && merged.added + merged.folded > 0) {
       toast(`You’re logged in. ${plural(merged.added + merged.folded)} from this browser joined your shelf.`);
     } else toast('You’re logged in.');

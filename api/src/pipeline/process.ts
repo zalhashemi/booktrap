@@ -237,10 +237,19 @@ async function shelve(
   return 'added';
 }
 
-/** The owner's daily cap: guests get fewer posts than signed-in users. */
-async function capFor(userId: string, { settings, isGuest }: PipelineDeps): Promise<number> {
-  if (settings.dailyCapGuest === undefined || !isGuest) return settings.dailyCapPerUser;
-  return (await isGuest(userId)) ? Math.min(settings.dailyCapGuest, settings.dailyCapPerUser) : settings.dailyCapPerUser;
+/**
+ * The owner's daily cap, as the jobs route gives it: guests get DAILY_LINK_CAP_GUEST. If Supabase can't
+ * say whether they're a guest right now, the smaller of the two caps applies rather than failing the item.
+ */
+async function capFor(userId: string, { settings, isGuest, log }: PipelineDeps): Promise<number> {
+  const guestCap = settings.dailyCapGuest;
+  if (guestCap === undefined || !isGuest) return settings.dailyCapPerUser;
+  try {
+    return (await isGuest(userId)) ? guestCap : settings.dailyCapPerUser;
+  } catch (error) {
+    log.warn({ err: error }, 'could not check whether a collection’s owner is a guest');
+    return Math.min(guestCap, settings.dailyCapPerUser);
+  }
 }
 
 const collectionDailyLimit = () =>

@@ -36,8 +36,9 @@ jobs:
         run: |
           # Literal key prefixes, plus any JWT (legacy Supabase keys are JWTs whose
           # "service_role" claim is base64-encoded and would not match literally).
-          # The publishable key (sb_publishable_...) is meant to ship and doesn't match.
-          if grep -rEl "sb_secret_|service_role|sk-ant-|apify_api_|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\." web/dist; then
+          # The publishable key (sb_publishable_...) is meant to ship and doesn't match. supabase-js itself
+          # contains the bare text "sb_secret_" (a prefix check), so a secret key is matched with its value.
+          if grep -rEl "sb_secret_[A-Za-z0-9_-]{20,}|service_role|sk-ant-|apify_api_|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\." web/dist; then
             echo "A server-side key pattern was found in the web build." >&2
             exit 1
           fi

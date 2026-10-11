@@ -449,9 +449,18 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         }
       }
       // Jobs and their items move too, so today's posts keep counting against the account's cap.
-      for (const table of ['books', 'jobs', 'job_items', 'spend_events']) {
+      for (const table of ['jobs', 'job_items', 'spend_events']) {
         check(await db.from(table).update({ user_id: toUserId }).eq('user_id', fromUserId), `${table}.move`);
       }
+    },
+
+    async moveBooks(fromUserId, toUserId, bookIds) {
+      let query = db.from('books').update({ user_id: toUserId }).eq('user_id', fromUserId);
+      if (bookIds !== 'all') {
+        if (bookIds.length === 0) return;
+        query = query.in('id', bookIds);
+      }
+      check(await query, 'books.move');
     },
 
     async purgeDeletedBooks() {

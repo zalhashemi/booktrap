@@ -16,7 +16,7 @@ import { JobPanel } from '../components/JobPanel';
 import { ReadingRoomStrip } from '../components/LibraryBackdrop';
 import { useUser } from '../account/account-context';
 import { useAuthSheet } from '../components/auth-sheet-context';
-import { useCreateJob, useJobs } from '../library/hooks';
+import { useBooks, useCreateJob } from '../library/hooks';
 import { PlatformIcon } from '../components/PlatformIcon';
 import { describeKind, summarize } from '../library/links';
 
@@ -266,34 +266,33 @@ function LinkPreview({ links, removed, onToggle }: { links: SourceLink[]; remove
   );
 }
 
-const DISMISSED_KEY = 'booktrap.save-prompt.dismissed';
+/** "Not now" holds per guest until the shelf has more books than when it was said. */
+const dismissedKey = (userId: string) => `booktrap.save-prompt.dismissed.${userId}`;
 
-/** "Not now" holds until another post finishes: the prompt comes back when there are more books to lose. */
-function readDismissed(): number {
+function readDismissed(userId: string): number {
   try {
-    return Number(localStorage.getItem(DISMISSED_KEY) ?? -1);
+    return Number(localStorage.getItem(dismissedKey(userId)) ?? 0);
   } catch {
-    return -1;
+    return 0;
   }
 }
 
 /**
- * A guest's first books live only in this browser (and a guest shelf is deleted after 30 days without
- * a visit): once a post has found books, offer to save the shelf with an email.
+ * A guest's books live only in this browser (and a guest shelf is deleted after 30 days without a
+ * visit): once the shelf has books, offer to save it with an email.
  */
 function SaveShelfCard() {
   const user = useUser();
-  const jobs = useJobs();
+  const shelf = useBooks();
   const { openAuth } = useAuthSheet();
-  const [dismissed, setDismissed] = useState(readDismissed);
-  const items = (jobs.data ?? []).flatMap((job) => job.items).filter((item) => item.status === 'done');
-  const books = items.reduce((sum, item) => sum + item.booksFound, 0);
-  if (!user.isGuest || books === 0 || items.length <= dismissed) return null;
+  const [dismissed, setDismissed] = useState(() => readDismissed(user.id));
+  const books = shelf.data?.length ?? 0;
+  if (!user.isGuest || books === 0 || books <= dismissed) return null;
 
   const notNow = () => {
-    setDismissed(items.length);
+    setDismissed(books);
     try {
-      localStorage.setItem(DISMISSED_KEY, String(items.length));
+      localStorage.setItem(dismissedKey(user.id), String(books));
     } catch {
       // Private mode: the card may come back on the next visit, which is harmless.
     }

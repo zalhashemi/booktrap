@@ -206,6 +206,52 @@ describe('accounts', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: {} })).statusCode).toBe(400);
   });
 
+  it('refuses a guest token issued before that guest saved their shelf', async () => {
+    const { app, store, users, signIn } = await setup();
+    const reader = await signIn();
+    const former = await signIn(true);
+    await store.insertBook(former.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
+    // The token still says "guest" for up to an hour, but the user has added an email since.
+    users.upgrade(former.userId);
+    const res = await app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: { guestToken: former.token } });
+    expect(res.statusCode).toBe(403);
+    expect(await store.listBooks(former.userId)).toHaveLength(1);
+    expect(users.has(former.userId)).toBe(true);
+  });
+
+  it('refuses a deleted account’s token that hasn’t expired yet', async () => {
+    const { app, signIn } = await setup();
+    const reader = await signIn();
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: reader.headers })).statusCode).toBe(204);
+    const res = await app.inject({ method: 'GET', url: '/v1/me', headers: reader.headers });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('finishes a merge that failed half way when it is tried again, still folding duplicates', async () => {
+    const { app, store, users, signIn } = await setup();
+    const reader = await signIn();
+    const guest = await signIn(true);
+    for (const title of ['Piranesi', 'Circe', 'Babel']) {
+      await store.insertBook(reader.userId, { ...BOOK, title, normalizedKey: title.toLowerCase() });
+      await store.insertBook(guest.userId, { ...BOOK, title, normalizedKey: title.toLowerCase() });
+    }
+    const { mergeBooks } = store;
+    let calls = 0;
+    store.mergeBooks = async (...args) => {
+      if (++calls === 2) throw new Error('connection reset');
+      return mergeBooks(...args);
+    };
+    const merge = () => app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: { guestToken: guest.token } });
+    expect((await merge()).statusCode).toBe(500);
+    // The first try folded one book; the retry folds the one still waiting.
+    expect((await merge()).json()).toEqual({ added: 0, folded: 1 });
+    // The book moved just before the failure stays a second copy (one at most); nothing is lost.
+    const titles = (await store.listBooks(reader.userId)).map((book) => book.title).sort();
+    expect(titles).toHaveLength(4);
+    expect(new Set(titles)).toEqual(new Set(['Babel', 'Circe', 'Piranesi']));
+    expect(users.has(guest.userId)).toBe(false);
+  });
+
   it('deletes guests nobody has visited for 30 days, and only them', async () => {
     const store = createMemoryLibraryStore();
     const users = createMemoryUserDirectory();

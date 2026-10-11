@@ -1,6 +1,6 @@
 import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import { ERROR_CODES, MergeGuestRequestSchema, type MeResponse, type MergeGuestResponse } from '@booktrap/shared';
-import { deleteAccount, mergeGuestShelf, type AccountDeps } from '../account';
+import { deleteAccount, GuestBusyError, mergeGuestShelf, type AccountDeps } from '../account';
 import type { SessionVerifier } from '../auth/session-auth';
 import { HttpError } from '../errors';
 
@@ -38,10 +38,20 @@ export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: 
 
       const guest = await deps.verify(body.data.guestToken).catch(() => null);
       // Only a guest shelf can be merged: a signed-in account's token here would hand its books away.
-      if (!guest || !guest.isAnonymous || guest.id === user.id) {
-        throw new HttpError(403, ERROR_CODES.unauthorized, 'That guest shelf can’t be added to this account.');
+      // The token's claim isn't enough on its own: one issued before the guest saved their shelf still
+      // says "guest" for up to an hour, so Supabase is asked too.
+      const refused = new HttpError(403, ERROR_CODES.unauthorized, 'That guest shelf can’t be added to this account.');
+      if (!guest || !guest.isAnonymous || guest.id === user.id) throw refused;
+      if (!(await deps.users.isGuest(guest.id))) throw refused;
+      let result;
+      try {
+        result = await mergeGuestShelf(guest.id, user.id, deps);
+      } catch (error) {
+        if (error instanceof GuestBusyError) {
+          throw new HttpError(409, ERROR_CODES.busy, 'A link from this browser is still being read. Try again in a minute.');
+        }
+        throw error;
       }
-      const result = await mergeGuestShelf(guest.id, user.id, deps);
       request.log.info(result, 'guest shelf merged into an account');
       return result;
     },

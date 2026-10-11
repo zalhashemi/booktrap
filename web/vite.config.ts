@@ -8,7 +8,6 @@ import type { Plugin } from 'vite';
 /** Install splash and browser chrome follow the default (light) theme. */
 const INK = '#F1F7F3';
 
-/** A production bundle without a real API URL would quietly call each visitor's own localhost. */
 /** Sign-in needs the Supabase project too; a build without it couldn't open any shelf. */
 function assertSupabase(url: string | undefined, key: string | undefined) {
   if (!/^https:\/\/[^/]+/.test(url ?? '') || !key) {
@@ -28,6 +27,7 @@ function atobSafe(value: string) {
   }
 }
 
+/** A production bundle without a real API URL would quietly call each visitor's own localhost. */
 function assertApiUrl(url: string | undefined) {
   const isHttpOrigin = /^https?:\/\/[^/]+/.test(url ?? '');
   const isLocal = /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url ?? '');
