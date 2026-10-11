@@ -134,6 +134,28 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     if (before) queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === before });
   }, [userId, queryClient]);
 
+  // A guest who asked to save their shelf may confirm it from the email's link in another tab or on
+  // another device: coming back to this tab checks, so the account shows as saved without a reload.
+  const awaitingConfirmation = Boolean(state.session?.user.is_anonymous && state.session.user.new_email);
+  useEffect(() => {
+    if (!auth || !awaitingConfirmation) return;
+    const check = () => {
+      if (document.visibilityState === 'visible') void auth.refreshSession().catch(() => {});
+    };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, [auth, awaitingConfirmation]);
+
+  // Saving the shelf (here or from the email's link) raises the daily limit: read it again.
+  const isGuestNow = state.session?.user.is_anonymous;
+  useEffect(() => {
+    if (isGuestNow === false) void queryClient.invalidateQueries({ queryKey: ['usage'] });
+  }, [isGuestNow, queryClient]);
+
   const retry = useCallback(() => {
     if (!auth) return;
     setState({ status: 'loading', session: null, error: null });
@@ -167,7 +189,15 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
   const confirmSaveCode = useCallback(
     async (email: string, code: string, password?: string) => {
       const authApi = requireAuth();
-      await call(() => authApi.verifyOtp({ email, token: code, type: 'email_change' }));
+      try {
+        await call(() => authApi.verifyOtp({ email, token: code, type: 'email_change' }));
+      } catch (error) {
+        // The email's link and its code are one token: if the link was opened first (in another tab, or
+        // by a mail scanner), the code is refused although the shelf is already saved. Ask Supabase.
+        if (!(error instanceof AccountError && error.code === 'bad_code')) throw error;
+        const { data } = await authApi.refreshSession().catch(() => ({ data: { session: null } }));
+        if (!data.session || data.session.user.is_anonymous) throw error;
+      }
       if (password) await call(() => authApi.updateUser({ password }));
       // The new token says "not a guest", which raises the daily cap.
       await call(() => authApi.refreshSession());
