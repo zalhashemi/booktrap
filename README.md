@@ -37,13 +37,15 @@ If `SUPABASE_URL` is empty, the API uses **in-memory storage**, which is wiped o
 npm run check      # lint + typecheck + tests + build (what CI runs)
 ```
 
-## How device identity works
+## How accounts work
 
-There are no accounts. On first launch the browser generates a random device id (UUID v4) and a 256-bit secret, stores them in `localStorage`, and registers them with the API. The API stores only a SHA-256 hash of the secret. Every request sends both as `x-device-id` / `x-device-secret` headers, and every query is scoped to that device. A backup code (Settings) carries these credentials to another browser.
+Every visitor is a Supabase Auth user. A first visit signs in anonymously, which makes a **guest** (5 posts a day). Saving the shelf adds an email, with a password or an email code, to that same user, so the shelf stays as it is (40 posts a day). The web app uses supabase-js for sign-in only and sends the access token as `Authorization: Bearer` on every request. The API checks it locally against the project's published ES256 signing keys (`api/src/auth/session-auth.ts`), and every query is scoped to that user. The browser never reads the database: RLS is on with no policies.
+
+Logging in on a browser that has a guest shelf merges the guest's books into the account (`POST /v1/account/merge-guest`, with the guest's token in the body), then deletes the guest. Guests nobody has visited for 30 days are deleted by the API's 6-hourly purge.
 
 ## Exports
 
-All five exports are built in the browser from the shelf the app already has (`shared/src/export.ts` holds every column). The PDF is drawn with `@react-pdf/renderer`, which loads only when someone asks for a PDF. Google Books cover images can't be read by a browser (no CORS headers), so the API passes a book's own stored cover through `GET /v1/books/:id/cover`. That route is device-authenticated, fetches only from the Google Books and Open Library hosts, accepts only images, and caps them at 2 MB.
+All five exports are built in the browser from the shelf the app already has (`shared/src/export.ts` holds every column). The PDF is drawn with `@react-pdf/renderer`, which loads only when someone asks for a PDF. Google Books cover images can't be read by a browser (no CORS headers), so the API passes a book's own stored cover through `GET /v1/books/:id/cover`. That route needs the owner's sign-in, fetches only from the Google Books and Open Library hosts, accepts only images, and caps them at 2 MB.
 
 To bring the list into Goodreads, download the Goodreads CSV and upload it at goodreads.com/review/import. Fable's beta import (fable.co/goodreads-import) takes the same file.
 
@@ -55,9 +57,9 @@ All API configuration is in `api/.env.example`. The web app reads only `VITE_API
 
 The privacy policy and terms are at `/privacy` and `/terms` (`web/src/routes/LegalPages.tsx`, which also holds the operator name, contact address and the retention periods it promises). They're drafts for a lawyer to check before BookTrap charges money.
 
-Readers delete their own shelf in Settings, Your data (`DELETE /v1/devices/me`). Other requests arrive at the contact address:
+Readers delete their own account (or guest shelf) in Settings, Your data (`DELETE /v1/account`). Other requests arrive at the contact address:
 
-- **A reader asking about their data**: they send the device id from Settings (never the backup code). Find it with `select id, created_at from devices where id::text like '<first 8 chars>%';`.
+- **A reader asking about their data**: find them by email under Authentication, Users in the Supabase dashboard. Their user id owns their rows (`books.user_id` and so on).
 - **A creator asking for removal** (promised within 14 days): in the Supabase SQL Editor, for each post id (`<platform>` is `tiktok` or `instagram`):
 
   ```sql

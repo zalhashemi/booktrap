@@ -1,4 +1,3 @@
-export * from './device';
 export * from './api';
 export * from './source';
 export * from './tiktok';

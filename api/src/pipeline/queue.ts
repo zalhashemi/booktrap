@@ -1,15 +1,15 @@
 /**
- * In-process job queue. Items run `concurrency` at a time overall, but one at a time per device,
+ * In-process job queue. Items run `concurrency` at a time overall, but one at a time per user,
  * so two links from the same reader never race to insert the same book.
  * State lives in the database; on boot, unfinished items are re-enqueued (free hosting sleeps).
  */
 export class JobQueue {
-  private readonly pending: { itemId: string; deviceId: string }[] = [];
+  private readonly pending: { itemId: string; userId: string }[] = [];
   private readonly queued = new Set<string>();
   private readonly activeItems = new Set<string>();
   /** Items re-enqueued while still running (e.g. Retry pressed the instant they failed). */
   private readonly rerun = new Map<string, string>();
-  private readonly busyDevices = new Set<string>();
+  private readonly busyUsers = new Set<string>();
   private running = 0;
   private idleResolvers: (() => void)[] = [];
 
@@ -18,26 +18,26 @@ export class JobQueue {
     private readonly concurrency = 2,
   ) {}
 
-  enqueue(itemId: string, deviceId: string): void {
+  enqueue(itemId: string, userId: string): void {
     if (this.activeItems.has(itemId)) {
-      this.rerun.set(itemId, deviceId);
+      this.rerun.set(itemId, userId);
       return;
     }
     if (this.queued.has(itemId)) return;
     this.queued.add(itemId);
-    this.pending.push({ itemId, deviceId });
+    this.pending.push({ itemId, userId });
     this.pump();
   }
 
-  /** Drops a device's waiting items (its shelf was deleted). One already running finishes on its own. */
-  forgetDevice(deviceId: string): void {
+  /** Drops a user's waiting items (their account was deleted). One already running finishes on its own. */
+  forgetUser(userId: string): void {
     for (let index = this.pending.length - 1; index >= 0; index--) {
       const entry = this.pending[index]!;
-      if (entry.deviceId !== deviceId) continue;
+      if (entry.userId !== userId) continue;
       this.pending.splice(index, 1);
       this.queued.delete(entry.itemId);
     }
-    for (const [itemId, owner] of this.rerun) if (owner === deviceId) this.rerun.delete(itemId);
+    for (const [itemId, owner] of this.rerun) if (owner === userId) this.rerun.delete(itemId);
   }
 
   /** Resolves when nothing is pending or running (tests and graceful shutdown). */
@@ -54,7 +54,7 @@ export class JobQueue {
 
   private pump(): void {
     while (this.running < this.concurrency) {
-      const index = this.pending.findIndex((entry) => !this.busyDevices.has(entry.deviceId));
+      const index = this.pending.findIndex((entry) => !this.busyUsers.has(entry.userId));
       if (index === -1) break;
       const [next] = this.pending.splice(index, 1);
       this.start(next!);
@@ -64,10 +64,10 @@ export class JobQueue {
     }
   }
 
-  private start(entry: { itemId: string; deviceId: string }): void {
+  private start(entry: { itemId: string; userId: string }): void {
     this.running++;
     this.activeItems.add(entry.itemId);
-    this.busyDevices.add(entry.deviceId);
+    this.busyUsers.add(entry.userId);
     void this.run(entry.itemId)
       .catch(() => {
         // processItem records its own failures; this only guards the queue itself.
@@ -75,7 +75,7 @@ export class JobQueue {
       .finally(() => {
         this.running--;
         this.activeItems.delete(entry.itemId);
-        this.busyDevices.delete(entry.deviceId);
+        this.busyUsers.delete(entry.userId);
         this.queued.delete(entry.itemId);
         const again = this.rerun.get(entry.itemId);
         if (again) {

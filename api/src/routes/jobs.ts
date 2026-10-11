@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 import {
   CreateJobRequestSchema,
   ERROR_CODES,
@@ -11,16 +11,15 @@ import {
   type UsageResponse,
 } from '@booktrap/shared';
 import type { z } from 'zod';
-import { requireDevice } from '../auth/device-auth';
 import { HttpError } from '../errors';
 import { MAX_ATTEMPTS, monthStart, utcDayStart } from '../pipeline/process';
 import type { JobQueue } from '../pipeline/queue';
-import type { DeviceRepo } from '../repo/types';
 import { DailyCapError, type ItemKind, type JobWithItems, type LibraryStore } from '../store/types';
 
 export interface JobRouteOptions {
   maxLinksPerSubmission: number;
-  dailyCapPerDevice: number;
+  dailyCapPerUser: number;
+  dailyCapGuest: number;
   dailyCapPerIp: number;
   monthlyBudgetUsd: number;
   killSwitch: boolean;
@@ -54,17 +53,20 @@ const PAUSED_MESSAGE = 'BookTrap has paused reading new links for now. Please tr
 
 export function jobRoutes(
   app: FastifyInstance,
-  deps: { devices: DeviceRepo; store: LibraryStore; queue: JobQueue; options: JobRouteOptions },
+  deps: { auth: preHandlerAsyncHookHandler; store: LibraryStore; queue: JobQueue; options: JobRouteOptions },
 ) {
   const { store, queue, options } = deps;
-  const auth = { preHandler: requireDevice(deps.devices) };
+  const auth = { preHandler: deps.auth };
+  // Guests get a smaller daily cap than signed-in users.
+  const capOf = (request: FastifyRequest) => (request.user!.isAnonymous ? options.dailyCapGuest : options.dailyCapPerUser);
   const ipHash = (request: FastifyRequest) => createHmac('sha256', options.ipHashKey).update(request.ip).digest('hex');
 
   app.post(
     '/v1/jobs',
     { ...auth, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (request, reply): Promise<Job> => {
-      const device = request.device!;
+      const user = request.user!;
+      const cap = capOf(request);
       const body = CreateJobRequestSchema.safeParse(request.body);
       if (!body.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Send a list of TikTok or Instagram links.');
 
@@ -108,44 +110,46 @@ export function jobRoutes(
       try {
         // Counted and inserted atomically, so parallel submissions can't each slip under a cap.
         job = await store.createJob(
-          device.id,
+          user.id,
           ipHash(request),
           unique.map((link) => ({ inputUrl: link.url, platform: link.platform, postId: link.postId, kind: kindOf(link.kind) })),
-          { posts, perDevice: options.dailyCapPerDevice, perIp: options.dailyCapPerIp, since: utcDayStart() },
+          { posts, perUser: cap, perIp: options.dailyCapPerIp, since: utcDayStart() },
         );
       } catch (error) {
         if (!(error instanceof DailyCapError)) throw error;
         if (error.scope === 'ip') {
           throw new HttpError(429, ERROR_CODES.limitReached, 'This network has reached today’s limit. It resets at midnight UTC.');
         }
-        const left = Math.max(0, options.dailyCapPerDevice - error.used);
+        const left = Math.max(0, cap - error.used);
+        // A guest's way past the cap is saving the shelf: signed-in readers get more posts a day.
+        const more = user.isAnonymous ? ` Save your shelf to read up to ${options.dailyCapPerUser} a day.` : '';
         throw new HttpError(
           429,
           ERROR_CODES.limitReached,
           left === 0
-            ? `You’ve reached today’s limit of ${options.dailyCapPerDevice} posts. It resets at midnight UTC.`
-            : `You can add ${left} more ${left === 1 ? 'post' : 'posts'} today (limit ${options.dailyCapPerDevice}). It resets at midnight UTC.`,
+            ? `You’ve reached today’s limit of ${cap} posts. It resets at midnight UTC.${more}`
+            : `You can add ${left} more ${left === 1 ? 'post' : 'posts'} today (limit ${cap}). It resets at midnight UTC.${more}`,
         );
       }
-      for (const item of job.items) queue.enqueue(item.id, device.id);
+      for (const item of job.items) queue.enqueue(item.id, user.id);
       reply.code(201);
       return toJobResponse(job);
     },
   );
 
-  /** How much of today's cap this device has used (shown in Settings). */
+  /** How much of today's cap this user has used (shown in Settings). */
   app.get('/v1/usage', auth, async (request): Promise<UsageResponse> => {
-    const postsToday = await store.countItemsSince({ deviceId: request.device!.id }, utcDayStart());
-    return { postsToday, dailyLimit: options.dailyCapPerDevice };
+    const postsToday = await store.countItemsSince({ userId: request.user!.id }, utcDayStart());
+    return { postsToday, dailyLimit: capOf(request) };
   });
 
   app.get('/v1/jobs', auth, async (request): Promise<z.infer<typeof JobListResponseSchema>> => {
-    const jobs = await store.listJobs(request.device!.id, 5);
+    const jobs = await store.listJobs(request.user!.id, 5);
     return { jobs: jobs.map(toJobResponse) };
   });
 
   app.get<{ Params: { jobId: string } }>('/v1/jobs/:jobId', auth, async (request): Promise<Job> => {
-    const job = await store.getJob(request.device!.id, request.params.jobId).catch(() => null);
+    const job = await store.getJob(request.user!.id, request.params.jobId).catch(() => null);
     if (!job) throw new HttpError(404, ERROR_CODES.notFound, 'No such job.');
     return toJobResponse(job);
   });
@@ -154,8 +158,8 @@ export function jobRoutes(
     '/v1/jobs/:jobId/items/:itemId/retry',
     { ...auth, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (request): Promise<Job> => {
-      const device = request.device!;
-      const job = await store.getJob(device.id, request.params.jobId).catch(() => null);
+      const user = request.user!;
+      const job = await store.getJob(user.id, request.params.jobId).catch(() => null);
       const item = job?.items.find((candidate) => candidate.id === request.params.itemId);
       if (!job || !item) throw new HttpError(404, ERROR_CODES.notFound, 'No such link.');
       if (item.status !== 'failed') throw new HttpError(409, ERROR_CODES.badRequest, 'Only failed links can be retried.');
@@ -164,20 +168,20 @@ export function jobRoutes(
       if ((fresh?.attempts ?? 0) >= MAX_ATTEMPTS) {
         throw new HttpError(409, ERROR_CODES.limitReached, `BookTrap has already tried this link ${MAX_ATTEMPTS} times.`);
       }
-      // Retries can pay for scraping again, so a device at its daily cap can't retry either.
+      // Retries can pay for scraping again, so a reader at their daily cap can't retry either.
       const since = utcDayStart();
-      const [deviceCount, ipCount] = await Promise.all([
-        store.countItemsSince({ deviceId: device.id }, since),
+      const [userCount, ipCount] = await Promise.all([
+        store.countItemsSince({ userId: user.id }, since),
         store.countItemsSince({ ipHash: ipHash(request) }, since),
       ]);
-      if (deviceCount >= options.dailyCapPerDevice || ipCount >= options.dailyCapPerIp) {
+      if (userCount >= capOf(request) || ipCount >= options.dailyCapPerIp) {
         throw new HttpError(429, ERROR_CODES.limitReached, 'You’ve reached today’s limit. Retries reset at midnight UTC.');
       }
 
       await store.updateItem(item.id, { status: 'queued', error: null });
       await store.refreshJobStatus(job.id);
-      queue.enqueue(item.id, device.id);
-      return toJobResponse((await store.getJob(device.id, job.id))!);
+      queue.enqueue(item.id, user.id);
+      return toJobResponse((await store.getJob(user.id, job.id))!);
     },
   );
 

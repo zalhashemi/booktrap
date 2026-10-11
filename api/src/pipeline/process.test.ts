@@ -8,7 +8,7 @@ import { processItem, type PipelineDeps } from './process';
 import { JobQueue } from './queue';
 import type { Verification } from './verify';
 
-const DEVICE = '11111111-1111-4111-8111-111111111111';
+const USER = '11111111-1111-4111-8111-111111111111';
 const quietLog = { info: () => {}, warn: () => {}, error: () => {} };
 
 function post(id: string, overrides: Partial<PostData> = {}): PostData {
@@ -65,7 +65,7 @@ function makeDeps(store: LibraryStore, booksByPost: Record<string, ExtractedBook
       monthlyBudgetUsd: 20,
       killSwitch: false,
       videosPerCollection: 25,
-      dailyCapPerDevice: 40,
+      dailyCapPerUser: 40,
       dailyCapPerIp: 120,
     },
     fetchPost,
@@ -79,7 +79,7 @@ function makeDeps(store: LibraryStore, booksByPost: Record<string, ExtractedBook
 
 async function runJob(store: LibraryStore, deps: PipelineDeps, urls: string[]) {
   const job = await store.createJob(
-    DEVICE,
+    USER,
     null,
     urls.map((url) => {
       const instagram = /instagram\.com\/(?:p|reel)\/([\w-]+)/.exec(url);
@@ -89,7 +89,7 @@ async function runJob(store: LibraryStore, deps: PipelineDeps, urls: string[]) {
     }),
   );
   for (const item of job.items) await processItem(item.id, deps);
-  return (await store.getJob(DEVICE, job.id))!;
+  return (await store.getJob(USER, job.id))!;
 }
 
 const URL_A = 'https://www.tiktok.com/@reader/video/7672440936101727519';
@@ -103,7 +103,7 @@ describe('processItem', () => {
 
     expect(job.status).toBe('done');
     expect(job.items[0]).toMatchObject({ status: 'done', booksFound: 1, error: null });
-    const [shelved] = await store.listBooks(DEVICE);
+    const [shelved] = await store.listBooks(USER);
     expect(shelved).toMatchObject({ title: 'Giovanni’s Room', isNew: true });
     expect(shelved).not.toHaveProperty('unsure');
     expect(shelved!.sources[0]).toMatchObject({ platform: 'tiktok', postId: '7672440936101727519', creatorHandle: 'reader', evidence: 'caption' });
@@ -119,7 +119,7 @@ describe('processItem', () => {
         : verified('The Secret History', 'Donna Tartt'),
     );
     await runJob(store, deps, [URL_A]);
-    const books = await store.listBooks(DEVICE);
+    const books = await store.listBooks(USER);
     expect(books.map((b) => [b.title, b.author, b.coverUrl])).toEqual(
       expect.arrayContaining([
         ['The Secret History', 'Donna Tartt', null],
@@ -141,7 +141,7 @@ describe('processItem', () => {
     })) as never;
     await runJob(store, deps, [URL_B]);
 
-    const books = await store.listBooks(DEVICE);
+    const books = await store.listBooks(USER);
     expect(books).toHaveLength(1);
     expect(books[0]!.sources.map((s) => s.postId)).toEqual(['7672440936101727519', '7674670540518395169']);
   });
@@ -149,7 +149,7 @@ describe('processItem', () => {
   it('keeps no caption in the shared post cache, only what a later paste needs', async () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, { x: [book('Babel', 'R. F. Kuang')] });
-    const job = await store.createJob(DEVICE, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
+    const job = await store.createJob(USER, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
     await processItem(job.items[0]!.id, deps);
     const cached = await store.getCachedPost('tiktok', '7672440936101727519');
     expect(cached?.books).toHaveLength(1);
@@ -163,7 +163,7 @@ describe('processItem', () => {
     await runJob(store, deps, [URL_A]);
     expect(fetchPost).toHaveBeenCalledTimes(1);
     expect(extractBooks).toHaveBeenCalledTimes(1);
-    expect(await store.listBooks(DEVICE)).toHaveLength(1);
+    expect(await store.listBooks(USER)).toHaveLength(1);
   });
 
   it('leaves background-only books off the shelf unless enabled', async () => {
@@ -171,13 +171,13 @@ describe('processItem', () => {
     const books = [book('In Memoriam', 'Alice Winn'), book('Wild Dark Shore', 'Charlotte McConaghy', { prominence: 'background', evidence: 'spine' })];
     const { deps } = makeDeps(store, { x: books });
     await runJob(store, deps, [URL_A]);
-    expect((await store.listBooks(DEVICE)).map((b) => b.title)).toEqual(['In Memoriam']);
+    expect((await store.listBooks(USER)).map((b) => b.title)).toEqual(['In Memoriam']);
 
     const all = createMemoryLibraryStore();
     const withBackground = makeDeps(all, { x: books }).deps;
     withBackground.settings = { ...withBackground.settings, includeBackgroundBooks: true };
     await runJob(all, withBackground, [URL_A]);
-    expect(await all.listBooks(DEVICE)).toHaveLength(2);
+    expect(await all.listBooks(USER)).toHaveLength(2);
   });
 
   it('clears the previous batch’s "new" highlight when a later import adds books', async () => {
@@ -186,7 +186,7 @@ describe('processItem', () => {
     await runJob(store, deps, [URL_A]);
     deps.extractBooks = vi.fn(async () => ({ books: [book('Piranesi', 'Susanna Clarke')], model: 'm', costUsd: 0, usage: { inputTokens: 0, outputTokens: 0 } })) as never;
     await runJob(store, deps, [URL_B]);
-    const books = await store.listBooks(DEVICE);
+    const books = await store.listBooks(USER);
     expect(Object.fromEntries(books.map((b) => [b.title, b.isNew]))).toEqual({ Babel: false, Piranesi: true });
   });
 
@@ -203,7 +203,7 @@ describe('processItem', () => {
 
   it('refuses to spend once the monthly budget is used up', async () => {
     const store = createMemoryLibraryStore();
-    await store.recordSpend({ deviceId: null, jobItemId: null, provider: 'anthropic', usd: 25 });
+    await store.recordSpend({ userId: null, jobItemId: null, provider: 'anthropic', usd: 25 });
     const { deps, fetchPost } = makeDeps(store, { x: [book('Babel', null)] });
     const job = await runJob(store, deps, [URL_A]);
     expect(fetchPost).not.toHaveBeenCalled();
@@ -225,10 +225,10 @@ describe('collections', () => {
   async function runCollection(store: LibraryStore, deps: PipelineDeps, url = COLLECTION, ipHash: string | null = null) {
     const queued: string[] = [];
     deps.enqueue = (id) => queued.push(id);
-    const job = await store.createJob(DEVICE, ipHash, [{ inputUrl: url, platform: 'tiktok', postId: null, kind: 'collection' }]);
+    const job = await store.createJob(USER, ipHash, [{ inputUrl: url, platform: 'tiktok', postId: null, kind: 'collection' }]);
     await processItem(job.items[0]!.id, deps);
     for (const id of queued.splice(0)) await processItem(id, deps);
-    return (await store.getJob(DEVICE, job.id))!;
+    return (await store.getJob(USER, job.id))!;
   }
 
   it('expands into one item per video, reads each, and shelves their books', async () => {
@@ -260,8 +260,8 @@ describe('collections', () => {
   it('reads only what is left of today’s cap, and refuses when nothing is left', async () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, { x: [] });
-    deps.settings = { ...deps.settings, dailyCapPerDevice: 4 };
-    await store.createJob(DEVICE, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
+    deps.settings = { ...deps.settings, dailyCapPerUser: 4 };
+    await store.createJob(USER, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
     deps.listCollection = vi.fn(async (_id: string, limit: number) => listing(ids(limit), true));
     const job = await runCollection(store, deps);
     // 4 a day, 1 already used; the collection link itself doesn't count.
@@ -270,6 +270,17 @@ describe('collections', () => {
 
     const full = await runCollection(store, deps);
     expect(full.items[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/today’s limit/) });
+  });
+
+  it('reads only a guest’s smaller cap for a guest’s collection', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, { x: [] });
+    deps.settings = { ...deps.settings, dailyCapPerUser: 40, dailyCapGuest: 5 };
+    deps.isGuest = vi.fn(async () => true);
+    deps.listCollection = vi.fn(async (_id: string, limit: number) => listing(ids(limit), true));
+    await runCollection(store, deps);
+    expect(deps.isGuest).toHaveBeenCalledWith(USER);
+    expect(deps.listCollection).toHaveBeenCalledWith(expect.any(String), 5, expect.anything());
   });
 
   it('respects the per-IP cap as well', async () => {
@@ -285,7 +296,7 @@ describe('collections', () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, { x: [] });
     deps.listCollection = vi.fn(async () => listing(ids(2)));
-    const job = await store.createJob(DEVICE, null, [{ inputUrl: COLLECTION, platform: 'tiktok', postId: null, kind: 'collection' }]);
+    const job = await store.createJob(USER, null, [{ inputUrl: COLLECTION, platform: 'tiktok', postId: null, kind: 'collection' }]);
     const parent = job.items[0]!;
     await store.addChildItems(parent, ids(2).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok', postId, kind: 'video' })));
     const queued: string[] = [];
@@ -323,10 +334,10 @@ describe('collections', () => {
   it('counts the caps again as the videos are saved, so room used meanwhile is not spent twice', async () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, { x: [] });
-    deps.settings = { ...deps.settings, dailyCapPerDevice: 4 };
+    deps.settings = { ...deps.settings, dailyCapPerUser: 4 };
     deps.listCollection = vi.fn(async (_id: string, limit: number) => {
       // While the listing runs, another paste from the same reader uses 3 of the 4.
-      await store.createJob(DEVICE, null, ids(3, 100).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok' as const, postId, kind: 'video' as const })));
+      await store.createJob(USER, null, ids(3, 100).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok' as const, postId, kind: 'video' as const })));
       // The whole collection fits the listing (no "more"), yet only 1 can be saved.
       return listing(ids(limit), false);
     });
@@ -334,12 +345,12 @@ describe('collections', () => {
     expect(deps.listCollection).toHaveBeenCalledWith(expect.any(String), 4, expect.anything());
     expect(job.items.filter((item) => item.parentItemId)).toHaveLength(1);
     expect(job.items[0]!.note).toMatch(/Reading 1 videos: that’s all today’s limit allows/);
-    expect(await store.countItemsSince({ deviceId: DEVICE }, new Date(0))).toBe(4);
+    expect(await store.countItemsSince({ userId: USER }, new Date(0))).toBe(4);
   });
 
   it('adds a collection’s videos only once, even when saving is retried after it went through', async () => {
     const store = createMemoryLibraryStore();
-    const job = await store.createJob(DEVICE, null, [{ inputUrl: COLLECTION, platform: 'tiktok', postId: null, kind: 'collection' }]);
+    const job = await store.createJob(USER, null, [{ inputUrl: COLLECTION, platform: 'tiktok', postId: null, kind: 'collection' }]);
     const videos = ids(2).map((postId) => ({ inputUrl: `https://www.tiktok.com/@r/video/${postId}`, platform: 'tiktok' as const, postId, kind: 'video' as const }));
     const first = await store.addChildItems(job.items[0]!, videos);
     const again = await store.addChildItems(job.items[0]!, videos);
@@ -371,11 +382,11 @@ describe('processItem review fixes', () => {
       postId: null,
       handle: 'u',
     }));
-    const job = await store.createJob(DEVICE, null, [{ inputUrl: 'https://vm.tiktok.com/ZMabc123/', platform: 'tiktok', postId: null, kind: null }]);
+    const job = await store.createJob(USER, null, [{ inputUrl: 'https://vm.tiktok.com/ZMabc123/', platform: 'tiktok', postId: null, kind: null }]);
     await processItem(job.items[0]!.id, deps);
     expect(fetchPost).not.toHaveBeenCalled();
     expect(deps.listCollection).toHaveBeenCalledWith('7301234567890123456', 25, expect.anything());
-    expect((await store.getJob(DEVICE, job.id))!.items[0]).toMatchObject({ kind: 'collection', status: 'done' });
+    expect((await store.getJob(USER, job.id))!.items[0]).toMatchObject({ kind: 'collection', status: 'done' });
   });
 
   it('records money spent by a failed extraction against the budget', async () => {
@@ -392,11 +403,11 @@ describe('processItem review fixes', () => {
   it('stops after the attempt limit so a crash loop cannot keep paying', async () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost } = makeDeps(store, { x: [book('Babel', null)] });
-    const job = await store.createJob(DEVICE, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
+    const job = await store.createJob(USER, null, [{ inputUrl: URL_A, platform: 'tiktok', postId: '7672440936101727519', kind: 'video' }]);
     await store.updateItem(job.items[0]!.id, { attempts: 3 });
     await processItem(job.items[0]!.id, deps);
     expect(fetchPost).not.toHaveBeenCalled();
-    expect((await store.getJob(DEVICE, job.id))!.items[0]!.error).toMatch(/tried this link 3 times/);
+    expect((await store.getJob(USER, job.id))!.items[0]!.error).toMatch(/tried this link 3 times/);
   });
 });
 
@@ -410,7 +421,7 @@ describe('processItem with Instagram', () => {
     const job = await runJob(store, deps, [IG_CAROUSEL]);
     expect(fetchPost).toHaveBeenCalledWith('instagram', IG_CAROUSEL, 'DeJvdqUjLd1', expect.anything());
     expect(job.items[0]).toMatchObject({ status: 'done', platform: 'instagram', postId: 'DeJvdqUjLd1', kind: 'carousel' });
-    const [shelved] = await store.listBooks(DEVICE);
+    const [shelved] = await store.listBooks(USER);
     expect(shelved!.sources[0]).toMatchObject({ platform: 'instagram', postId: 'DeJvdqUjLd1', url: IG_CAROUSEL });
   });
 
@@ -422,7 +433,7 @@ describe('processItem with Instagram', () => {
       ['tiktok', 'done'],
       ['instagram', 'done'],
     ]);
-    const books = await store.listBooks(DEVICE);
+    const books = await store.listBooks(USER);
     expect(books).toHaveLength(1);
     expect(books[0]!.sources.map((s) => s.platform)).toEqual(['tiktok', 'instagram']);
   });
@@ -449,7 +460,7 @@ describe('processItem with Instagram', () => {
     const job = await runJob(store, deps, [URL_A]);
     expect(fetchPost).not.toHaveBeenCalled();
     expect(job.items[0]).toMatchObject({ status: 'done', booksFound: 1 });
-    const [shelved] = await store.listBooks(DEVICE);
+    const [shelved] = await store.listBooks(USER);
     expect(shelved!.sources[0]).toMatchObject({ platform: 'tiktok', postId: '7672440936101727519' });
   });
 
@@ -461,8 +472,8 @@ describe('processItem with Instagram', () => {
     });
     const job = await runJob(store, deps, [URL_A]);
     expect(job.items[0]!.status).toBe('failed');
-    expect(await store.listBooks(DEVICE)).toHaveLength(0);
-    expect(await store.dedupCandidates(DEVICE)).toHaveLength(0);
+    expect(await store.listBooks(USER)).toHaveLength(0);
+    expect(await store.dedupCandidates(USER)).toHaveLength(0);
   });
 
   it('tells the model a carousel is a carousel even when only one slide downloaded', async () => {
@@ -480,12 +491,12 @@ describe('processItem with Instagram', () => {
   it('explains that saved Instagram collections are private, without spending anything', async () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost } = makeDeps(store, {});
-    const job = await store.createJob(DEVICE, null, [
+    const job = await store.createJob(USER, null, [
       { inputUrl: 'https://www.instagram.com/reader/saved/books/17912345678901234/', platform: 'instagram', postId: null, kind: null },
     ]);
     await processItem(job.items[0]!.id, deps);
     expect(fetchPost).not.toHaveBeenCalled();
-    expect((await store.getJob(DEVICE, job.id))!.items[0]!.error).toMatch(/saved collections private/);
+    expect((await store.getJob(USER, job.id))!.items[0]!.error).toMatch(/saved collections private/);
   });
 });
 
@@ -494,32 +505,32 @@ describe('JobQueue', () => {
     let runs = 0;
     const queue: JobQueue = new JobQueue(async () => {
       runs++;
-      if (runs === 1) queue.enqueue('item', 'device');
+      if (runs === 1) queue.enqueue('item', 'user');
       await new Promise((resolve) => setTimeout(resolve, 5));
     });
-    queue.enqueue('item', 'device');
+    queue.enqueue('item', 'user');
     await new Promise((resolve) => setTimeout(resolve, 50));
     await queue.idle();
     expect(runs).toBe(2);
   });
 
-  it('drops a deleted device’s waiting items, leaving other devices’ alone', async () => {
+  it('drops a deleted account’s waiting items, leaving other users’ alone', async () => {
     const ran: string[] = [];
     let release!: () => void;
     const queue = new JobQueue(async (id) => {
       ran.push(id);
       if (id === 'a1') await new Promise<void>((resolve) => (release = resolve));
     }, 1);
-    queue.enqueue('a1', 'device-a');
-    queue.enqueue('a2', 'device-a');
-    queue.enqueue('b1', 'device-b');
-    queue.forgetDevice('device-a');
+    queue.enqueue('a1', 'user-a');
+    queue.enqueue('a2', 'user-a');
+    queue.enqueue('b1', 'user-b');
+    queue.forgetUser('user-a');
     release();
     await queue.idle();
     expect(ran).toEqual(['a1', 'b1']);
   });
 
-  it('runs different devices in parallel but one item at a time per device', async () => {
+  it('runs different users in parallel but one item at a time per user', async () => {
     const order: string[] = [];
     let active = 0;
     let maxActive = 0;
@@ -531,9 +542,9 @@ describe('JobQueue', () => {
       order.push(`end ${id}`);
       active--;
     }, 2);
-    queue.enqueue('a1', 'device-a');
-    queue.enqueue('a2', 'device-a');
-    queue.enqueue('b1', 'device-b');
+    queue.enqueue('a1', 'user-a');
+    queue.enqueue('a2', 'user-a');
+    queue.enqueue('b1', 'user-b');
     await queue.idle();
 
     expect(maxActive).toBe(2);

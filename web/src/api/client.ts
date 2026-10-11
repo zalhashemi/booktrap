@@ -7,21 +7,21 @@ import {
   TagListResponseSchema,
   TagSchema,
   type UpdateBookRequest,
-  DEVICE_ID_HEADER,
-  DEVICE_SECRET_HEADER,
   HealthResponseSchema,
   JobListResponseSchema,
   JobSchema,
   MeResponseSchema,
+  MergeGuestResponseSchema,
   UsageResponseSchema,
-  RegisterDeviceResponseSchema,
-  type DeviceCredentials,
 } from '@booktrap/shared';
 
 /**
- * The only module that talks to the BookTrap API. It never holds third-party keys:
- * the device credentials it sends are the user's own, generated on this device.
+ * The only module that talks to the BookTrap API. It never holds third-party keys: the token it
+ * sends is the reader's own Supabase session (a guest's too).
  */
+
+/** The current access token, or a freshly refreshed one after the API refused it. Null when signed out. */
+export type TokenSource = (options: { refresh: boolean }) => Promise<string | null>;
 
 /** Long enough for the free API host to wake from sleep. */
 const REQUEST_TIMEOUT_MS = 75_000;
@@ -48,38 +48,46 @@ interface RequestOptions<T> {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   schema: z.ZodType<T>;
-  credentials?: DeviceCredentials;
+  /** False for the few routes anyone may call (health). */
+  auth?: boolean;
   signal?: AbortSignal;
 }
 
 export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...args) => fetch(...args)) {
   const root = baseUrl.replace(/\/+$/, '');
+  let tokenSource: TokenSource = async () => null;
 
   /**
-   * One HTTP exchange with the device headers and a timeout. `read` runs while the timeout still
-   * applies, so a body that stalls mid-download is cut off too.
+   * One HTTP exchange with the reader's token and a timeout. `read` runs while the timeout still
+   * applies, so a body that stalls mid-download is cut off too. A 401 is tried once more with a
+   * refreshed token: the old one may have expired a moment ago.
    */
   async function send<R>(
     path: string,
-    options: { method?: RequestOptions<unknown>['method']; body?: unknown; credentials?: DeviceCredentials; signal?: AbortSignal; timeoutMs?: number },
+    options: { method?: RequestOptions<unknown>['method']; body?: unknown; auth?: boolean; signal?: AbortSignal; timeoutMs?: number },
     read: (response: Response) => Promise<R>,
   ): Promise<R> {
-    const headers: Record<string, string> = {};
-    if (options.body !== undefined) headers['content-type'] = 'application/json';
-    if (options.credentials) {
-      headers[DEVICE_ID_HEADER] = options.credentials.deviceId;
-      headers[DEVICE_SECRET_HEADER] = options.credentials.deviceSecret;
-    }
-
     const { signal, dispose } = withTimeout(options.signal, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
-    let response: Response;
-    try {
-      response = await fetchImpl(`${root}${path}`, {
+    const exchange = async (refresh: boolean) => {
+      const headers: Record<string, string> = {};
+      if (options.body !== undefined) headers['content-type'] = 'application/json';
+      const token = options.auth === false ? null : await tokenSource({ refresh });
+      if (token) headers.authorization = `Bearer ${token}`;
+      const response = await fetchImpl(`${root}${path}`, {
         method: options.method ?? 'GET',
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         signal,
       });
+      return { response, sentToken: Boolean(token) };
+    };
+    try {
+      const first = await exchange(false);
+      let response = first.response;
+      if (response.status === 401 && first.sentToken) {
+        await response.body?.cancel().catch(() => {});
+        response = (await exchange(true)).response;
+      }
       return await read(response);
     } catch (error) {
       // A caller-initiated abort (e.g. React Query cancelling) is not a connectivity problem.
@@ -113,12 +121,12 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
    * fails. `version` changes when the book's cover does, so the browser cache never serves an old one.
    * A big shelf can hit the covers' rate limit: those wait as the server asks and try again.
    */
-  async function bookCover(credentials: DeviceCredentials, bookId: string, version: string, signal?: AbortSignal): Promise<Blob | null> {
+  async function bookCover(bookId: string, version: string, signal?: AbortSignal): Promise<Blob | null> {
     const path = `/v1/books/${encodeURIComponent(bookId)}/cover?v=${encodeURIComponent(version)}`;
     for (let attempt = 0; attempt < 4; attempt++) {
       let retryAfter = 0;
       try {
-        const blob = await send(path, { credentials, signal, timeoutMs: 20_000 }, async (response) => {
+        const blob = await send(path, { signal, timeoutMs: 20_000 }, async (response) => {
           if (response.status === 429) {
             retryAfter = Math.min(30, Number(response.headers.get('retry-after')) || 2 ** (attempt + 1));
             return null;
@@ -138,49 +146,36 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
   }
 
   return {
+    /** The account provider hands the client its session. */
+    setTokenSource(source: TokenSource) {
+      tokenSource = source;
+    },
     bookCover,
-    health: (signal?: AbortSignal) => request('/health', { schema: HealthResponseSchema, signal }),
-    registerDevice: (credentials: DeviceCredentials) =>
-      request('/v1/devices', {
-        method: 'POST',
-        body: { deviceId: credentials.deviceId, deviceSecret: credentials.deviceSecret },
-        schema: RegisterDeviceResponseSchema,
-      }),
-    me: (credentials: DeviceCredentials) => request('/v1/me', { schema: MeResponseSchema, credentials }),
-    /** Deletes this device's shelf from the server for good. */
-    deleteDevice: (credentials: DeviceCredentials) =>
-      request('/v1/devices/me', { method: 'DELETE', schema: z.unknown(), credentials }),
-    usage: (credentials: DeviceCredentials, signal?: AbortSignal) => request('/v1/usage', { schema: UsageResponseSchema, credentials, signal }),
-    createJob: (credentials: DeviceCredentials, urls: string[]) =>
-      request('/v1/jobs', { method: 'POST', body: { urls }, schema: JobSchema, credentials }),
-    listJobs: (credentials: DeviceCredentials, signal?: AbortSignal) =>
-      request('/v1/jobs', { schema: JobListResponseSchema, credentials, signal }),
-    retryItem: (credentials: DeviceCredentials, jobId: string, itemId: string) =>
-      request(`/v1/jobs/${encodeURIComponent(jobId)}/items/${encodeURIComponent(itemId)}/retry`, {
-        method: 'POST',
-        schema: JobSchema,
-        credentials,
-      }),
-    listBooks: (credentials: DeviceCredentials, signal?: AbortSignal) =>
-      request('/v1/books', { schema: BookListResponseSchema, credentials, signal }),
-    updateBook: (credentials: DeviceCredentials, bookId: string, patch: UpdateBookRequest) =>
-      request(`/v1/books/${encodeURIComponent(bookId)}`, { method: 'PATCH', body: patch, schema: BookSchema, credentials }),
-    deleteBooks: (credentials: DeviceCredentials, ids: string[]) =>
-      request('/v1/books/delete', { method: 'POST', body: { ids }, schema: CountResponseSchema, credentials }),
-    restoreBooks: (credentials: DeviceCredentials, ids: string[]) =>
-      request('/v1/books/restore', { method: 'POST', body: { ids }, schema: CountResponseSchema, credentials }),
-    markAllSeen: (credentials: DeviceCredentials) =>
-      request('/v1/books/mark-seen', { method: 'POST', body: {}, schema: CountResponseSchema, credentials }),
-    mergeBooks: (credentials: DeviceCredentials, keepId: string, mergeIds: string[]) =>
-      request('/v1/books/merge', { method: 'POST', body: { keepId, mergeIds }, schema: BookSchema, credentials }),
-    listTags: (credentials: DeviceCredentials, signal?: AbortSignal) =>
-      request('/v1/tags', { schema: TagListResponseSchema, credentials, signal }),
-    createTag: (credentials: DeviceCredentials, name: string) =>
-      request('/v1/tags', { method: 'POST', body: { name }, schema: TagSchema, credentials }),
-    renameTag: (credentials: DeviceCredentials, tagId: string, name: string) =>
-      request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'PATCH', body: { name }, schema: TagSchema, credentials }),
-    deleteTag: (credentials: DeviceCredentials, tagId: string) =>
-      request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'DELETE', schema: z.unknown(), credentials }),
+    health: (signal?: AbortSignal) => request('/health', { schema: HealthResponseSchema, auth: false, signal }),
+    me: () => request('/v1/me', { schema: MeResponseSchema }),
+    /** Deletes the account (or guest shelf) and everything on it, for good. */
+    deleteAccount: () => request('/v1/account', { method: 'DELETE', schema: z.unknown() }),
+    /** After logging in: adds the guest shelf this browser had (proved by its token) to the account. */
+    mergeGuest: (guestToken: string) =>
+      request('/v1/account/merge-guest', { method: 'POST', body: { guestToken }, schema: MergeGuestResponseSchema }),
+    usage: (signal?: AbortSignal) => request('/v1/usage', { schema: UsageResponseSchema, signal }),
+    createJob: (urls: string[]) => request('/v1/jobs', { method: 'POST', body: { urls }, schema: JobSchema }),
+    listJobs: (signal?: AbortSignal) => request('/v1/jobs', { schema: JobListResponseSchema, signal }),
+    retryItem: (jobId: string, itemId: string) =>
+      request(`/v1/jobs/${encodeURIComponent(jobId)}/items/${encodeURIComponent(itemId)}/retry`, { method: 'POST', schema: JobSchema }),
+    listBooks: (signal?: AbortSignal) => request('/v1/books', { schema: BookListResponseSchema, signal }),
+    updateBook: (bookId: string, patch: UpdateBookRequest) =>
+      request(`/v1/books/${encodeURIComponent(bookId)}`, { method: 'PATCH', body: patch, schema: BookSchema }),
+    deleteBooks: (ids: string[]) => request('/v1/books/delete', { method: 'POST', body: { ids }, schema: CountResponseSchema }),
+    restoreBooks: (ids: string[]) => request('/v1/books/restore', { method: 'POST', body: { ids }, schema: CountResponseSchema }),
+    markAllSeen: () => request('/v1/books/mark-seen', { method: 'POST', body: {}, schema: CountResponseSchema }),
+    mergeBooks: (keepId: string, mergeIds: string[]) =>
+      request('/v1/books/merge', { method: 'POST', body: { keepId, mergeIds }, schema: BookSchema }),
+    listTags: (signal?: AbortSignal) => request('/v1/tags', { schema: TagListResponseSchema, signal }),
+    createTag: (name: string) => request('/v1/tags', { method: 'POST', body: { name }, schema: TagSchema }),
+    renameTag: (tagId: string, name: string) =>
+      request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'PATCH', body: { name }, schema: TagSchema }),
+    deleteTag: (tagId: string) => request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'DELETE', schema: z.unknown() }),
   };
 }
 

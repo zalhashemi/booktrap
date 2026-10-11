@@ -21,7 +21,6 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Number of reverse proxies in front of the API whose X-Forwarded-For we trust. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
-  REGISTRATIONS_PER_IP_PER_HOUR: z.coerce.number().int().positive().default(60),
 
   // Accept either the project URL or the Data API URL Supabase also shows (…/rest/v1/):
   // supabase-js wants the bare origin and appends its own paths.
@@ -43,7 +42,9 @@ const EnvSchema = z.object({
   POST_CACHE_DAYS: z.coerce.number().int().min(1).default(90),
 
   ALLOWED_ORIGIN: csv.default(['http://localhost:5180']),
-  DAILY_LINK_CAP_PER_DEVICE: z.coerce.number().int().positive().default(40),
+  /** Posts a day for a signed-in user, and for a guest (an anonymous user who hasn't added an email). */
+  DAILY_LINK_CAP_PER_USER: z.coerce.number().int().positive().default(40),
+  DAILY_LINK_CAP_GUEST: z.coerce.number().int().positive().default(5),
   DAILY_LINK_CAP_PER_IP: z.coerce.number().int().positive().default(120),
   /** Estimated Apify + Claude spend per calendar month before processing pauses for everyone. */
   MONTHLY_BUDGET_USD: z.coerce.number().positive().default(20),

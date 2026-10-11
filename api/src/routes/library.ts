@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import {
   BookIdsRequestSchema,
   ERROR_CODES,
@@ -9,16 +9,14 @@ import {
   type Tag,
 } from '@booktrap/shared';
 import { z } from 'zod';
-import { requireDevice } from '../auth/device-auth';
 import { HttpError } from '../errors';
 import { isSameBook, normalizedKey } from '../pipeline/normalize';
 import { COVER_HOSTS, safeFetch } from '../pipeline/safe-fetch';
 import { verifyBook } from '../pipeline/verify';
-import type { DeviceRepo } from '../repo/types';
 import { TagNameTakenError, type BookPatch, type LibraryStore } from '../store/types';
 
 export interface LibraryRouteDeps {
-  devices: DeviceRepo;
+  auth: preHandlerAsyncHookHandler;
   store: LibraryStore;
   googleBooksApiKey?: string;
   /** Test seams. */
@@ -55,11 +53,11 @@ function firstIssue(error: z.ZodError): string {
 
 export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
   const { store } = deps;
-  const auth = { preHandler: requireDevice(deps.devices) };
+  const auth = { preHandler: deps.auth };
   const verify = deps.verify ?? verifyBook;
 
   app.get('/v1/books', auth, async (request): Promise<{ books: Book[] }> => {
-    return { books: await store.listBooks(request.device!.id) };
+    return { books: await store.listBooks(request.user!.id) };
   });
 
   /**
@@ -67,12 +65,12 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
    * Google Books / Open Library and fills the ISBN and cover when a match is found.
    */
   app.patch<{ Params: { bookId: string } }>('/v1/books/:bookId', auth, async (request): Promise<Book> => {
-    const deviceId = request.device!.id;
+    const userId = request.user!.id;
     const parsed = UpdateBookRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, firstIssue(parsed.error));
     const body = parsed.data;
 
-    const current = isUuid(request.params.bookId) ? await store.getBook(deviceId, request.params.bookId) : null;
+    const current = isUuid(request.params.bookId) ? await store.getBook(userId, request.params.bookId) : null;
     if (!current) throw new HttpError(404, ERROR_CODES.notFound, 'That book isn’t on your shelf.');
 
     const patch: BookPatch = {
@@ -106,11 +104,11 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
     }
 
     // Fields first, tags second: a failed field update never leaves tags already changed.
-    const updated = await store.updateBook(deviceId, current.id, patch);
+    const updated = await store.updateBook(userId, current.id, patch);
     if (!updated) throw new HttpError(404, ERROR_CODES.notFound, 'That book isn’t on your shelf.');
     if (!body.tagIds) return updated;
-    await store.setBookTags(deviceId, current.id, body.tagIds.filter(isUuid));
-    return (await store.getBook(deviceId, current.id)) ?? updated;
+    await store.setBookTags(userId, current.id, body.tagIds.filter(isUuid));
+    return (await store.getBook(userId, current.id)) ?? updated;
   });
 
   /**
@@ -124,7 +122,7 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
     '/v1/books/:bookId/cover',
     { ...auth, config: { rateLimit: { max: 600, timeWindow: '1 minute' } } },
     async (request, reply) => {
-      const book = isUuid(request.params.bookId) ? await store.getBook(request.device!.id, request.params.bookId) : null;
+      const book = isUuid(request.params.bookId) ? await store.getBook(request.user!.id, request.params.bookId) : null;
       if (!book) throw new HttpError(404, ERROR_CODES.notFound, 'That book isn’t on your shelf.');
       const missing = () => new HttpError(404, ERROR_CODES.notFound, 'No cover for this book.');
       if (!book.coverUrl) throw missing();
@@ -152,7 +150,7 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
   app.post('/v1/books/delete', auth, async (request) => {
     const parsed = BookIdsRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Choose at least one book.');
-    return { count: await store.deleteBooks(request.device!.id, parsed.data.ids.filter(isUuid)) };
+    return { count: await store.deleteBooks(request.user!.id, parsed.data.ids.filter(isUuid)) };
   });
 
   /**
@@ -160,22 +158,22 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
    * again while it sat deleted) is merged into that copy instead of coming back twice.
    */
   app.post('/v1/books/restore', auth, async (request) => {
-    const deviceId = request.device!.id;
+    const userId = request.user!.id;
     const parsed = BookIdsRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Choose at least one book.');
     const ids = parsed.data.ids.filter(isUuid);
-    const count = await store.restoreBooks(deviceId, ids);
+    const count = await store.restoreBooks(userId, ids);
     for (const id of ids) {
-      const restored = await store.getBook(deviceId, id);
+      const restored = await store.getBook(userId, id);
       if (!restored) continue;
-      const twin = (await store.dedupCandidates(deviceId)).find((candidate) => candidate.id !== id && isSameBook(candidate, restored));
-      if (twin) await store.mergeBooks(deviceId, twin.id, [id]);
+      const twin = (await store.dedupCandidates(userId)).find((candidate) => candidate.id !== id && isSameBook(candidate, restored));
+      if (twin) await store.mergeBooks(userId, twin.id, [id]);
     }
     return { count };
   });
 
   app.post('/v1/books/mark-seen', auth, async (request) => {
-    return { count: await store.markAllSeen(request.device!.id) };
+    return { count: await store.markAllSeen(request.user!.id) };
   });
 
   /** Manual "Merge duplicates" for pairs the automatic matching missed (brief §7). */
@@ -183,27 +181,27 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
     const parsed = MergeBooksRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Choose at least two books to merge.');
     const { keepId, mergeIds } = parsed.data;
-    const merged = isUuid(keepId) ? await store.mergeBooks(request.device!.id, keepId, mergeIds.filter(isUuid)) : null;
+    const merged = isUuid(keepId) ? await store.mergeBooks(request.user!.id, keepId, mergeIds.filter(isUuid)) : null;
     if (!merged) throw new HttpError(404, ERROR_CODES.notFound, 'That book isn’t on your shelf.');
     return merged;
   });
 
   app.get('/v1/tags', auth, async (request): Promise<{ tags: Tag[] }> => {
-    return { tags: await store.listTags(request.device!.id) };
+    return { tags: await store.listTags(request.user!.id) };
   });
 
   app.post('/v1/tags', auth, async (request, reply): Promise<Tag> => {
     const parsed = z.object({ name: TagNameSchema }).safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, firstIssue(parsed.error));
     reply.code(201);
-    return store.createTag(request.device!.id, parsed.data.name);
+    return store.createTag(request.user!.id, parsed.data.name);
   });
 
   app.patch<{ Params: { tagId: string } }>('/v1/tags/:tagId', auth, async (request): Promise<Tag> => {
     const parsed = z.object({ name: TagNameSchema }).safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, firstIssue(parsed.error));
     try {
-      const tag = isUuid(request.params.tagId) ? await store.renameTag(request.device!.id, request.params.tagId, parsed.data.name) : null;
+      const tag = isUuid(request.params.tagId) ? await store.renameTag(request.user!.id, request.params.tagId, parsed.data.name) : null;
       if (!tag) throw new HttpError(404, ERROR_CODES.notFound, 'That shelf doesn’t exist.');
       return tag;
     } catch (error) {
@@ -213,7 +211,7 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
   });
 
   app.delete<{ Params: { tagId: string } }>('/v1/tags/:tagId', auth, async (request, reply) => {
-    const removed = isUuid(request.params.tagId) && (await store.deleteTag(request.device!.id, request.params.tagId));
+    const removed = isUuid(request.params.tagId) && (await store.deleteTag(request.user!.id, request.params.tagId));
     if (!removed) throw new HttpError(404, ERROR_CODES.notFound, 'That shelf doesn’t exist.');
     reply.code(204);
   });

@@ -40,8 +40,10 @@ services:
         value: claude-sonnet-5-5
       - key: EXTRACTION_EFFORT
         value: medium
-      - key: DAILY_LINK_CAP_PER_DEVICE
+      - key: DAILY_LINK_CAP_PER_USER
         value: "40"
+      - key: DAILY_LINK_CAP_GUEST
+        value: "5"
       - key: DAILY_LINK_CAP_PER_IP
         value: "120"
       - key: MAX_LINKS_PER_SUBMISSION

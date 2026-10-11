@@ -1,21 +1,24 @@
 import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import { DEVICE_ID_HEADER, DEVICE_SECRET_HEADER, ERROR_CODES } from '@booktrap/shared';
+import { ERROR_CODES } from '@booktrap/shared';
+import { requireUser, type SessionVerifier } from './auth/session-auth';
 import type { Config } from './config';
 import { HttpError, errorBody } from './errors';
 import type { JobQueue } from './pipeline/queue';
 import type { verifyBook } from './pipeline/verify';
-import type { DeviceRepo } from './repo/types';
 import { jobRoutes } from './routes/jobs';
 import { libraryRoutes } from './routes/library';
 import type { LibraryStore } from './store/types';
-import { deviceRoutes } from './routes/devices';
+import { accountRoutes } from './routes/account';
 import { healthRoutes } from './routes/health';
+import type { UserDirectory } from './users/types';
 
 export interface AppDeps {
   config: Config;
-  devices: DeviceRepo;
+  /** Checks Supabase access tokens (the project's JWKS in production, local keys in tests). */
+  verifySession: SessionVerifier;
+  users: UserDirectory;
   store: LibraryStore;
   queue: JobQueue;
   /** Test seam for book re-verification. */
@@ -24,12 +27,12 @@ export interface AppDeps {
   fetchImpl?: typeof fetch;
 }
 
-export async function buildApp({ config, devices, store, queue, verifyBook: verify, fetchImpl }: AppDeps) {
+export async function buildApp({ config, verifySession, users, store, queue, verifyBook: verify, fetchImpl }: AppDeps) {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'test' ? 'silent' : config.LOG_LEVEL,
-      // Belt and braces: the default serializers do not log headers, but never let a secret through.
-      redact: [`req.headers["${DEVICE_SECRET_HEADER}"]`, 'req.headers.authorization'],
+      // Belt and braces: the default serializers do not log headers, but never let a token through.
+      redact: ['req.headers.authorization'],
       // Request lines carry the method and path only: no client IP in the logs (privacy policy).
       serializers: { req: (request: { method: string; url: string }) => ({ method: request.method, url: request.url }) },
     },
@@ -42,7 +45,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
   await app.register(cors, {
     origin: config.ALLOWED_ORIGIN,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['content-type', DEVICE_ID_HEADER, DEVICE_SECRET_HEADER],
+    allowedHeaders: ['content-type', 'authorization'],
     maxAge: 600,
   });
 
@@ -54,7 +57,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       new HttpError(429, ERROR_CODES.rateLimited, `Too many requests. Try again in ${context.after}.`),
   });
 
-  // Shelves and job state are private to a device: no cache keeps them (routes that may be cached, like
+  // Shelves and job state are private to a user: no cache keeps them (routes that may be cached, like
   // covers, set their own). nosniff stops a passed-through cover from ever being read as anything but an image.
   app.addHook('onSend', async (_request, reply) => {
     reply.header('x-content-type-options', 'nosniff');
@@ -78,15 +81,18 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
     reply.code(404).send(errorBody(ERROR_CODES.notFound, 'No such endpoint.')),
   );
 
-  healthRoutes(app, devices);
-  deviceRoutes(app, devices, { registrationsPerIpPerHour: config.REGISTRATIONS_PER_IP_PER_HOUR, store, queue });
+  const auth = requireUser(verifySession, { onSeen: (userId, at) => users.touch(userId, at) });
+
+  healthRoutes(app, users);
+  accountRoutes(app, { auth, verify: verifySession, store, users, queue });
   jobRoutes(app, {
-    devices,
+    auth,
     store,
     queue,
     options: {
       maxLinksPerSubmission: config.MAX_LINKS_PER_SUBMISSION,
-      dailyCapPerDevice: config.DAILY_LINK_CAP_PER_DEVICE,
+      dailyCapPerUser: config.DAILY_LINK_CAP_PER_USER,
+      dailyCapGuest: config.DAILY_LINK_CAP_GUEST,
       dailyCapPerIp: config.DAILY_LINK_CAP_PER_IP,
       monthlyBudgetUsd: config.MONTHLY_BUDGET_USD,
       killSwitch: config.GLOBAL_SPEND_KILL_SWITCH,
@@ -94,7 +100,7 @@ export async function buildApp({ config, devices, store, queue, verifyBook: veri
       pipelineConfigured: Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
     },
   });
-  libraryRoutes(app, { devices, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
+  libraryRoutes(app, { auth, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
 
   return app;
 }

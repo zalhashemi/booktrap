@@ -1,12 +1,13 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config';
 import { JobQueue } from '../pipeline/queue';
 import type { Verification } from '../pipeline/verify';
-import { createMemoryDeviceRepo } from '../repo/memory';
+import { testSessions } from '../auth/test-sessions';
 import { buildApp } from '../server';
 import { createMemoryLibraryStore } from '../store/memory';
 import type { LibraryStore } from '../store/types';
+import { createMemoryUserDirectory } from '../users/memory';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -26,11 +27,12 @@ describe('library API', () => {
   let store: LibraryStore;
   let verify: ReturnType<typeof vi.fn>;
   let headers: Record<string, string>;
-  let deviceId: string;
+  let userId: string;
   let coverFetch: ReturnType<typeof vi.fn<typeof fetch>>;
+  let sessions: Awaited<ReturnType<typeof testSessions>> | undefined;
 
   async function shelve(title: string, author: string | null, postId: string = randomUUID()) {
-    const id = await store.insertBook(deviceId, {
+    const id = await store.insertBook(userId, {
       title,
       author,
       isbn10: null,
@@ -45,21 +47,20 @@ describe('library API', () => {
   }
 
   beforeEach(async () => {
+    sessions ??= await testSessions();
     store = createMemoryLibraryStore();
     verify = vi.fn(async (title: string, author: string | null) => unverified(title, author));
     coverFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 404 }));
     app = await buildApp({
       config: loadConfig({ NODE_ENV: 'test' }),
-      devices: createMemoryDeviceRepo(),
+      verifySession: sessions.verify,
+      users: createMemoryUserDirectory(),
       store,
       queue: new JobQueue(async () => {}),
       verifyBook: verify as never,
       fetchImpl: (...args) => coverFetch(...args),
     });
-    const creds = { deviceId: randomUUID(), deviceSecret: randomBytes(32).toString('base64url') };
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    headers = { 'x-device-id': creds.deviceId, 'x-device-secret': creds.deviceSecret };
-    deviceId = creds.deviceId;
+    ({ userId, headers } = await sessions.signIn());
   });
   afterEach(() => app.close());
 
@@ -110,7 +111,7 @@ describe('library API', () => {
 
   it('drops the old book’s ISBN and cover when a rename can’t be verified', async () => {
     const id = await shelve('Babel', 'R. F. Kuang');
-    await store.updateBook(deviceId, id, {
+    await store.updateBook(userId, id, {
       verified: true,
       isbn13: '9780063021426',
       coverUrl: 'https://covers.openlibrary.org/b/id/9-L.jpg',
@@ -146,9 +147,9 @@ describe('library API', () => {
     expect(isbn.json().error.message).toMatch(/ISBN-13/);
   });
 
-  it('cannot touch another device’s books', async () => {
-    const otherDevice = randomUUID();
-    const id = await store.insertBook(otherDevice, {
+  it('cannot touch another user’s books', async () => {
+    const otherUser = randomUUID();
+    const id = await store.insertBook(otherUser, {
       title: 'Not yours',
       author: null,
       isbn10: null,
@@ -233,7 +234,7 @@ describe('library API', () => {
     const jpeg = (bytes: number, headers: Record<string, string> = {}) =>
       new Response(new Uint8Array(bytes), { status: 200, headers: { 'content-type': 'image/jpeg', ...headers } });
 
-    async function shelveWithCover(coverUrl: string | null, owner = deviceId) {
+    async function shelveWithCover(coverUrl: string | null, owner = userId) {
       return store.insertBook(owner, {
         title: 'Babel',
         author: null,
@@ -273,7 +274,7 @@ describe('library API', () => {
       expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover?v=abc`, headers })).statusCode).toBe(200);
     });
 
-    it('never serves another device’s book', async () => {
+    it('never serves another user’s book', async () => {
       const id = await shelveWithCover('https://books.google.com/books/content?id=x', randomUUID());
       expect((await app.inject({ method: 'GET', url: `/v1/books/${id}/cover`, headers })).statusCode).toBe(404);
       expect(coverFetch).not.toHaveBeenCalled();

@@ -8,19 +8,28 @@ export const HealthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
-export const RegisterDeviceResponseSchema = z.object({
-  deviceId: z.string(),
-  created: z.boolean(),
-});
-export type RegisterDeviceResponse = z.infer<typeof RegisterDeviceResponseSchema>;
-
 export const MeResponseSchema = z.object({
-  deviceId: z.string(),
-  createdAt: z.string(),
+  userId: z.string(),
+  /** A guest: an anonymous Supabase user who hasn't added an email yet. */
+  isGuest: z.boolean(),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
-/** Today's reading for this device, against the daily cap (resets at midnight UTC). */
+/** After logging in on a browser that had a guest shelf: the guest's access token proves it owned that shelf. */
+export const MergeGuestRequestSchema = z.object({
+  guestToken: z.string().min(1).max(4096),
+});
+export type MergeGuestRequest = z.infer<typeof MergeGuestRequestSchema>;
+
+export const MergeGuestResponseSchema = z.object({
+  /** Books new to the account. */
+  added: z.number().int(),
+  /** Books the account already had, which gained the guest's sources and shelves instead. */
+  folded: z.number().int(),
+});
+export type MergeGuestResponse = z.infer<typeof MergeGuestResponseSchema>;
+
+/** Today's reading for this user, against their daily cap (resets at midnight UTC). Guests get fewer. */
 export const UsageResponseSchema = z.object({
   postsToday: z.number().int(),
   dailyLimit: z.number().int(),
@@ -39,7 +48,6 @@ export type ApiError = z.infer<typeof ApiErrorSchema>;
 export const ERROR_CODES = {
   badRequest: 'bad_request',
   unauthorized: 'unauthorized',
-  deviceExists: 'device_exists',
   rateLimited: 'rate_limited',
   notFound: 'not_found',
   internal: 'internal_error',

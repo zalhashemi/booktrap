@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowBendLeftUp, ClipboardText, LockSimple, ShieldCheck, Sparkle, X } from '@phosphor-icons/react';
-import { Link } from 'react-router';
+import { ArrowBendLeftUp, ClipboardText, CloudSlash, LockSimple, Sparkle, X } from '@phosphor-icons/react';
 import {
+  ERROR_CODES,
   FREE_VIDEOS_PER_COLLECTION,
   PLATFORM_LABELS,
   PRIVATE_COLLECTION_MESSAGE,
@@ -14,7 +14,8 @@ import { ApiRequestError, NetworkError } from '../api/client';
 import { Button } from '../components/Button';
 import { JobPanel } from '../components/JobPanel';
 import { ReadingRoomStrip } from '../components/LibraryBackdrop';
-import { backupSaved } from '../device/backupPrompt';
+import { useUser } from '../account/account-context';
+import { useAuthSheet } from '../components/auth-sheet-context';
 import { useCreateJob, useJobs } from '../library/hooks';
 import { PlatformIcon } from '../components/PlatformIcon';
 import { describeKind, summarize } from '../library/links';
@@ -44,6 +45,8 @@ export function AddPage() {
   const privateCollections = found.filter((link) => link.kind === 'private_collection');
   const unreadable = useMemo(() => countUnreadableLinks(text), [text]);
   const createJob = useCreateJob();
+  const user = useUser();
+  const { openAuth } = useAuthSheet();
 
   const changeText = (value: string) => {
     latestText.current = value;
@@ -111,6 +114,8 @@ export function AddPage() {
           TikTok or Instagram: videos, carousels, reels and collections.
           <span className="hidden md:inline"> BookTrap reads the covers, spines, captions and speech, then shelves each book for you.</span>
         </p>
+
+        <SaveShelfCard />
 
         <form
           className="mt-6 rounded-card md:mt-8 bg-surface p-4 shadow-[var(--elev-soft),inset_0_0_0_1.5px_var(--rule)] md:p-6"
@@ -200,15 +205,23 @@ export function AddPage() {
             {createJob.isPending ? 'Sending…' : links.length > 1 ? `Catch books from ${links.length} links` : 'Catch books'}
           </Button>
           {createJob.isError && (
-            <p id={errorId} role="alert" className="mt-3 text-sm text-note-ink">
-              {errorMessage(createJob.error)}
-            </p>
+            <div id={errorId} role="alert" className="mt-3 text-sm text-note-ink">
+              <p>{errorMessage(createJob.error)}</p>
+              {user.isGuest && createJob.error instanceof ApiRequestError && createJob.error.code === ERROR_CODES.limitReached && (
+                <button
+                  type="button"
+                  onClick={() => openAuth('save')}
+                  className="-my-1 inline-flex min-h-11 items-center font-bold text-accent-ink underline-offset-4 hover:underline"
+                >
+                  Save my shelf
+                </button>
+              )}
+            </div>
           )}
         </form>
       </div>
 
       <div className="lg:pt-2">
-        <BackupReminder />
         <JobPanel />
       </div>
     </div>
@@ -253,30 +266,56 @@ function LinkPreview({ links, removed, onToggle }: { links: SourceLink[]; remove
   );
 }
 
+const DISMISSED_KEY = 'booktrap.save-prompt.dismissed';
+
+/** "Not now" holds until another post finishes: the prompt comes back when there are more books to lose. */
+function readDismissed(): number {
+  try {
+    return Number(localStorage.getItem(DISMISSED_KEY) ?? -1);
+  } catch {
+    return -1;
+  }
+}
+
 /**
- * After the first import that found books (brief §3): the shelf now holds something worth keeping,
- * and a cleared browser would lose it without the backup code.
+ * A guest's first books live only in this browser (and a guest shelf is deleted after 30 days without
+ * a visit): once a post has found books, offer to save the shelf with an email.
  */
-function BackupReminder() {
+function SaveShelfCard() {
+  const user = useUser();
   const jobs = useJobs();
-  const foundBooks = (jobs.data ?? []).some((job) => job.items.some((item) => item.status === 'done' && item.booksFound > 0));
-  if (!foundBooks || backupSaved()) return null;
+  const { openAuth } = useAuthSheet();
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const items = (jobs.data ?? []).flatMap((job) => job.items).filter((item) => item.status === 'done');
+  const books = items.reduce((sum, item) => sum + item.booksFound, 0);
+  if (!user.isGuest || books === 0 || items.length <= dismissed) return null;
+
+  const notNow = () => {
+    setDismissed(items.length);
+    try {
+      localStorage.setItem(DISMISSED_KEY, String(items.length));
+    } catch {
+      // Private mode: the card may come back on the next visit, which is harmless.
+    }
+  };
+
   return (
-    <div className="mb-6 rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule-accent)]">
-      <p className="flex items-start gap-2.5 font-bold">
-        <ShieldCheck size={22} weight="fill" className="mt-0.5 shrink-0 text-accent-ink" aria-hidden="true" />
-        Save your backup code so you can never lose your list.
+    <section aria-labelledby="save-shelf-title" className="mt-6 rounded-card bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--rule-accent)] md:mt-8 md:p-5">
+      <p id="save-shelf-title" className="flex items-start gap-2.5 text-[1.05rem] font-bold">
+        <CloudSlash size={22} weight="bold" className="mt-0.5 shrink-0 text-note-ink" aria-hidden="true" />
+        Your {books === 1 ? 'book is' : `${books} books are`} only in this browser.
       </p>
-      <p className="mt-1 pl-[2.1rem] text-sm text-text-muted">
-        BookTrap has no accounts. If this browser’s data is cleared, the code is the only way back to your shelf.
+      <p className="mt-1 pl-[2.15rem] text-[0.92rem] text-text-muted">
+        Save your shelf with an email to keep it on any device. Guest shelves are deleted after 30 days without a visit.
       </p>
-      <Link
-        to="/settings#backup"
-        className="mt-3 ml-[2.1rem] inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-accent px-4 text-sm font-bold text-on-tab transition-transform duration-200 ease-snappy active:scale-[0.97]"
-      >
-        Get my backup code
-        <ArrowBendLeftUp size={16} weight="bold" className="rotate-90" aria-hidden="true" />
-      </Link>
-    </div>
+      <div className="mt-3 flex flex-wrap gap-2 pl-[2.15rem]">
+        <Button type="button" onClick={() => openAuth('save')} className="min-h-11 px-5 text-[0.92rem]">
+          Save my shelf
+        </Button>
+        <Button type="button" variant="ghost" onClick={notNow} className="min-h-11 px-4 text-[0.92rem]">
+          Not now
+        </Button>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
-import { Checks, Export, ListChecks } from '@phosphor-icons/react';
+import { Checks, CloudSlash, Export, ListChecks } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
+import { useUser } from '../account/account-context';
+import { useAuthSheet } from '../components/auth-sheet-context';
 import { BookRow } from '../components/BookRow';
 import { BookSheet } from '../components/BookSheet';
 import { Button, ButtonLink } from '../components/Button';
@@ -111,6 +113,7 @@ export function ShelfPage() {
   };
 
   const newCount = counts.new;
+  const { isGuest } = useUser();
 
   return (
     <div className={selecting ? 'pb-36 sm:pb-24' : undefined}>
@@ -148,6 +151,7 @@ export function ShelfPage() {
                 </Button>
               </span>
             )}
+            {isGuest && <UnsavedTab />}
             <Button type="button" variant="quiet" onClick={() => setExportScope(selecting && selected.size > 0 ? 'selected' : filtered ? 'view' : 'all')} className="min-h-11 px-4 text-[0.92rem]">
               <Export size={18} weight="bold" aria-hidden="true" />
               Export
@@ -285,5 +289,22 @@ function EmptyShelf() {
       </div>
       <p className="marginalia mt-4 text-[1.1rem]">your next favourite book goes here</p>
     </div>
+  );
+}
+
+/** A guest's shelf lives only in this browser: a lavender sticky tab says so, and opens Save your shelf. */
+function UnsavedTab() {
+  const { openAuth } = useAuthSheet();
+  return (
+    <button
+      type="button"
+      onClick={() => openAuth('save')}
+      aria-label="Unsaved shelf: save it with an email"
+      title="Only this browser has this shelf. Save it to keep it."
+      className="inline-flex min-h-11 rotate-2 items-center gap-1.5 rounded-t-[12px] rounded-b-[3px] bg-note px-3.5 text-[0.88rem] font-bold text-on-tab shadow-[var(--elev-soft)] transition-transform duration-200 ease-snappy hover:rotate-0 active:scale-[0.97] motion-reduce:transition-none"
+    >
+      <CloudSlash size={18} weight="bold" aria-hidden="true" />
+      Unsaved
+    </button>
   );
 }

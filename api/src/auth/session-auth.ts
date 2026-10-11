@@ -60,11 +60,35 @@ export function createSessionVerifier({ supabaseUrl, getKey }: SessionVerifierOp
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 
+/** A visit is noted at most this often per user (guests not seen for 30 days are deleted). */
+const SEEN_INTERVAL_MS = 60 * 60 * 1000;
+/** Bounds the "recently noted" memory; forgetting early only costs one extra write. */
+const SEEN_MEMORY = 10_000;
+
+export interface RequireUserOptions {
+  /** Called at most hourly per user, never awaited by the request. */
+  onSeen?: (userId: string, at: Date) => Promise<void>;
+  now?: () => Date;
+}
+
 /**
  * preHandler that authorizes a request by its Supabase access token and attaches the user.
  * Every failure gives the same 401, so the response says nothing about why a token was refused.
  */
-export function requireUser(verify: SessionVerifier) {
+export function requireUser(verify: SessionVerifier, { onSeen, now = () => new Date() }: RequireUserOptions = {}) {
+  const lastSeen = new Map<string, number>();
+  const noteVisit = (request: FastifyRequest, userId: string) => {
+    if (!onSeen) return;
+    const at = now();
+    if (at.getTime() - (lastSeen.get(userId) ?? 0) < SEEN_INTERVAL_MS) return;
+    if (lastSeen.size >= SEEN_MEMORY) lastSeen.clear();
+    lastSeen.set(userId, at.getTime());
+    onSeen(userId, at).catch((error: unknown) => {
+      lastSeen.delete(userId);
+      request.log.warn({ err: error }, 'failed to note a visit');
+    });
+  };
+
   return async function sessionAuth(request: FastifyRequest, _reply: FastifyReply) {
     const unauthorized = new HttpError(401, ERROR_CODES.unauthorized, 'Sign-in is missing or has expired.');
 
@@ -78,5 +102,6 @@ export function requireUser(verify: SessionVerifier) {
       request.log.debug({ err: error }, 'access token refused');
       throw unauthorized;
     }
+    noteVisit(request, request.user.id);
   };
 }

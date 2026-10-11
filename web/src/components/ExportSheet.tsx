@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowSquareOut, BracketsCurly, Books, CaretRight, Check, ClipboardText, FilePdf, Table, X } from '@phosphor-icons/react';
 import { toExportJson, toGenericCsv, toGoodreadsCsv, toPlainText, type Book, type PlainTextOptions } from '@booktrap/shared';
 import { api } from '../api/client';
-import { useDevice } from '../device/device-context';
+import { useAccount } from '../account/account-context';
 import { downloadFile, exportFileName } from '../library/export';
 import { Sheet } from './Sheet';
 import { useToast } from './toast-context';
@@ -52,7 +52,7 @@ export function ExportSheet({ open, onClose, ...rest }: Props) {
 }
 
 function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Omit<Props, 'open'>) {
-  const { session } = useDevice();
+  const { user } = useAccount();
   const toast = useToast();
   const [scope, setScope] = useState<ExportScope>(initialScope);
   const [textPrefs, setTextPrefs] = useState(loadTextPrefs);
@@ -88,7 +88,7 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
   };
 
   const makePdf = async () => {
-    if (!session || pdfBusy) return;
+    if (!user || pdfBusy) return;
     const controller = new AbortController();
     pdfAbort.current = controller;
     const { signal } = controller;
@@ -96,7 +96,7 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
     setPdfStep('Opening…');
     try {
       const { renderReadingListPdf } = await import('../library/pdf/renderPdf');
-      const blob = await renderReadingListPdf(books, (bookId, version) => api.bookCover(session.credentials, bookId, version, signal), {
+      const blob = await renderReadingListPdf(books, (bookId, version) => api.bookCover(bookId, version, signal), {
         signal,
         onProgress: (done, total) => setPdfStep(done < total ? `Covers ${done}/${total}` : 'Binding…'),
       });
@@ -194,7 +194,7 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
             action={pdfBusy ? pdfStep : 'Download'}
             done={done === 'pdf' ? 'Saved' : null}
             busy={pdfBusy}
-            disabled={empty || pdfBusy || !session}
+            disabled={empty || pdfBusy || !user}
             onRun={() => void makePdf()}
           />
           <div>

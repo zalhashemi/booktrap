@@ -28,12 +28,15 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          # Any real https origin satisfies the production-build guard in web/vite.config.ts.
+          # Placeholders that satisfy the production-build guards in web/vite.config.ts.
           VITE_API_URL: https://api.booktrap.invalid
+          VITE_SUPABASE_URL: https://project.supabase.invalid
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
       - name: No secrets in the web bundle
         run: |
           # Literal key prefixes, plus any JWT (legacy Supabase keys are JWTs whose
           # "service_role" claim is base64-encoded and would not match literally).
+          # The publishable key (sb_publishable_...) is meant to ship and doesn't match.
           if grep -rEl "sb_secret_|service_role|sk-ant-|apify_api_|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\." web/dist; then
             echo "A server-side key pattern was found in the web build." >&2
             exit 1

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/Toaster';
-import { DeviceProvider } from './device/DeviceProvider';
+import { AccountProvider } from './account/AccountProvider';
 import { AddPage } from './routes/AddPage';
 import { PrivacyPage, TermsPage } from './routes/LegalPages';
 import { NotFoundPage } from './routes/NotFoundPage';
@@ -33,11 +33,11 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <DeviceProvider>
+      <AccountProvider>
         <ToastProvider>
           <RouterProvider router={router} />
         </ToastProvider>
-      </DeviceProvider>
+      </AccountProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

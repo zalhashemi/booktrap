@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
-import { useDevice } from '../device/device-context';
+import { CloudCheck, CloudSlash, DownloadSimple, Eye, EyeSlash, Key, SignOut, Trash } from '@phosphor-icons/react';
+import { toExportJson } from '@booktrap/shared';
+import { AccountError, useAccount, useUser } from '../account/account-context';
+import { api, NetworkError } from '../api/client';
+import { useAuthSheet } from '../components/auth-sheet-context';
 import { Button } from '../components/Button';
-import { BackupSection, Section, ShelvesSection } from '../components/SettingsSections';
+import { Section, ShelvesSection } from '../components/SettingsSections';
 import { useToast } from '../components/toast-context';
+import { downloadFile, exportFileName } from '../library/export';
+import { useBooks } from '../library/hooks';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
-import { NetworkError } from '../api/client';
 import { useTheme, type Theme } from '../theme';
-
-const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 
 export function SettingsPage() {
   const { hash } = useLocation();
@@ -22,10 +24,9 @@ export function SettingsPage() {
   return (
     <div className="max-w-[640px]">
       <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Settings</h1>
-      <BackupSection />
+      <AccountSection />
       <ShelvesSection />
       <AppearanceSection />
-      <DeviceSection />
       <DataSection />
       <ServerSection />
     </div>
@@ -41,80 +42,204 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function DeviceSection() {
-  const { session, persisted } = useDevice();
-  const usage = useQuery({
-    queryKey: ['usage', session?.credentials.deviceId],
-    queryFn: ({ signal }) => api.usage(session!.credentials, signal),
-    enabled: Boolean(session),
-  });
-  if (!session) return null;
+/** Account first: for a guest, that the shelf isn't saved yet; signed in, the email, password and sign out. */
+function AccountSection() {
+  const user = useUser();
+  const { signOut } = useAccount();
+  const { openAuth } = useAuthSheet();
+  const toast = useToast();
+  const books = useBooks();
+  const [changing, setChanging] = useState(false);
+  const usage = useQuery({ queryKey: ['usage', user.id], queryFn: ({ signal }) => api.usage(signal) });
+  const count = books.data?.length ?? 0;
 
-  const storage = !session.durable
-    ? { text: 'Not saved. This browser is blocking storage.', tone: 'text-note-ink' }
-    : persisted
-      ? { text: 'Kept on this device', tone: 'text-success-ink' }
-      : { text: 'Saved, but the browser may clear it if space runs low', tone: 'text-text' };
+  const today = (
+    <Row label="Today">
+      {usage.data ? (
+        <span>
+          <span className="font-bold tabular-nums">
+            {usage.data.postsToday} of {usage.data.dailyLimit}
+          </span>{' '}
+          posts read. The count resets at midnight UTC.
+        </span>
+      ) : (
+        <span className="text-text-muted">{usage.isError ? 'Couldn’t check just now.' : 'Checking…'}</span>
+      )}
+    </Row>
+  );
+
+  if (user.isGuest) {
+    return (
+      <Section id="account" title="Account">
+        <p className="mt-2 inline-flex items-center gap-1.5 font-bold text-note-ink">
+          <CloudSlash size={20} weight="bold" aria-hidden="true" />
+          Guest shelf, not saved
+        </p>
+        <p className="mt-1.5 max-w-[52ch] text-text-muted">
+          {count > 0 ? `Your ${count === 1 ? 'book lives' : `${count} books live`} in this browser only.` : 'Your shelf lives in this browser only.'} A guest
+          shelf is deleted after 30 days without a visit. Saving it with an email also raises your daily limit.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={() => openAuth('save')}>
+            Save my shelf
+          </Button>
+          <Button type="button" variant="quiet" onClick={() => openAuth('login')}>
+            Log in
+          </Button>
+        </div>
+        <dl className="mt-4">{today}</dl>
+      </Section>
+    );
+  }
+
+  const onSignOut = async () => {
+    try {
+      await signOut();
+      toast('Signed out. This browser now has a new, empty guest shelf.');
+    } catch (failure) {
+      toast(failure instanceof AccountError ? failure.message : 'Couldn’t sign out just now. Try again.');
+    }
+  };
 
   return (
-    <Section title="About this device">
-      <p className="mt-2 max-w-[52ch] text-sm text-text-muted">
-        BookTrap has no accounts. Your shelf belongs to this browser, identified by a private key that never
-        leaves it except to talk to BookTrap.
+    <Section id="account" title="Account">
+      <p className="mt-2 inline-flex items-center gap-1.5 font-bold text-success-ink">
+        <CloudCheck size={20} weight="fill" aria-hidden="true" />
+        Shelf saved to your account
       </p>
-      <dl className="mt-4">
-        <Row label="Today">
-          {usage.data ? (
-            <span>
-              <span className="font-bold tabular-nums">
-                {usage.data.postsToday} of {usage.data.dailyLimit}
-              </span>{' '}
-              posts read. The count resets at midnight UTC.
-            </span>
+      <dl className="mt-3 divide-y-[1.5px] divide-rule">
+        <Row label="Email">
+          <span className="font-bold break-all">{user.email}</span>
+        </Row>
+        <Row label="Password">
+          {changing ? (
+            <PasswordForm onDone={() => setChanging(false)} />
           ) : (
-            <span className="text-text-muted">{usage.isError ? 'Couldn’t check just now.' : 'Checking…'}</span>
+            <Button type="button" variant="quiet" onClick={() => setChanging(true)} className="min-h-11 px-4 text-[0.92rem]">
+              <Key size={18} weight="bold" aria-hidden="true" />
+              Set a new password
+            </Button>
           )}
         </Row>
-        <Row label="Device">
-          <span className="font-medium tabular-nums">{session.me.deviceId.slice(0, 8)}</span>
+        <Row label="This browser">
+          <Button type="button" variant="quiet" onClick={() => void onSignOut()} className="min-h-11 px-4 text-[0.92rem]">
+            <SignOut size={18} weight="bold" aria-hidden="true" />
+            Sign out
+          </Button>
         </Row>
-        <Row label="Shelf started">{dateFormat.format(new Date(session.me.createdAt))}</Row>
-        <Row label="Storage">
-          <span className={storage.tone}>{storage.text}</span>
-        </Row>
+        {today}
       </dl>
     </Section>
   );
 }
 
-/** Privacy (the right to erasure) and the brief's "clear data": deletes the shelf from the server, not just this browser. */
+function PasswordForm({ onDone }: { onDone: () => void }) {
+  const { setPassword } = useAccount();
+  const toast = useToast();
+  const id = useId();
+  const hintId = useId();
+  const [value, setValue] = useState('');
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await setPassword(value);
+      toast('Your new password is set.');
+      onDone();
+    } catch (failure) {
+      setError(failure instanceof AccountError ? failure.message : 'Couldn’t save the password. Try again.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={(event) => void save(event)} className="max-w-[22rem] space-y-3">
+      <label htmlFor={id} className="sr-only">
+        New password
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={shown ? 'text' : 'password'}
+          required
+          minLength={8}
+          autoComplete="new-password"
+          autoFocus
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          aria-describedby={hintId}
+          className="field pr-12"
+        />
+        <button
+          type="button"
+          onClick={() => setShown((now) => !now)}
+          aria-label={shown ? 'Hide password' : 'Show password'}
+          aria-pressed={shown}
+          className="absolute top-0.5 right-1 flex size-11 items-center justify-center rounded-pill text-text-muted hover:text-text"
+        >
+          {shown ? <EyeSlash size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+        </button>
+      </div>
+      <p id={hintId} className="text-sm text-text-muted">
+        At least 8 characters.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy} className="min-h-11 px-5 text-[0.92rem]">
+          {busy ? 'Saving…' : 'Save password'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onDone} disabled={busy} className="min-h-11 px-4 text-[0.92rem]">
+          Cancel
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-note-ink">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/** Privacy (the right to erasure and to a copy) and the brief's "clear data": deletes on the server, not just this browser. */
 function DataSection() {
-  const { session, deleteShelf } = useDevice();
+  const user = useUser();
+  const { deleteAccount } = useAccount();
+  const books = useBooks();
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
+  const count = books.data?.length ?? 0;
+  const thing = user.isGuest ? 'shelf' : 'account';
 
   // Opening the confirmation moves focus to the safe choice.
   useEffect(() => {
     if (confirming) keepRef.current?.focus();
   }, [confirming]);
 
-  if (!session) return null;
+  const download = () => {
+    if (!books.data) return;
+    downloadFile(exportFileName('booktrap-my-data', 'json'), toExportJson(books.data), 'application/json');
+  };
 
   const onDelete = async () => {
     setDeleting(true);
     setError(null);
     try {
-      await deleteShelf();
-      toast('Your shelf is deleted. This is a new, empty one.');
+      await deleteAccount();
+      toast(user.isGuest ? 'Your shelf is deleted. This is a new, empty one.' : 'Your account is deleted. This browser has a new, empty guest shelf.');
     } catch (failure) {
       // A lost answer may hide a delete that went through; trying again is safe either way.
       setError(
         failure instanceof NetworkError
-          ? 'Couldn’t reach BookTrap, so your shelf may not be deleted yet. Try again in a moment.'
-          : 'Couldn’t delete your shelf just now. Nothing was removed. Try again in a moment.',
+          ? `Couldn’t reach BookTrap, so your ${thing} may not be deleted yet. Try again in a moment.`
+          : `Couldn’t delete your ${thing} just now. Nothing was removed. Try again in a moment.`,
       );
       setDeleting(false);
     }
@@ -138,26 +263,39 @@ function DataSection() {
         .
       </p>
 
-      <h3 className="mt-6 text-[0.95rem] font-bold">Delete my shelf</h3>
-      <p className="mt-0.5 max-w-[56ch] text-sm text-text-muted">
-        Removes every book, shelf, note and paste history from BookTrap&rsquo;s servers for good, and your backup code stops working.
-        To keep a copy, export your shelf first from the{' '}
-        <Link to="/shelf" className="underline">
-          Shelf
-        </Link>{' '}
-        page.
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button type="button" variant="quiet" onClick={download} disabled={!books.data}>
+          <DownloadSimple size={18} weight="bold" aria-hidden="true" />
+          Download my data
+        </Button>
+        {!confirming && (
+          <Button type="button" variant="quiet" onClick={() => setConfirming(true)} className="text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]">
+            <Trash size={18} weight="bold" aria-hidden="true" />
+            {user.isGuest ? 'Delete my shelf' : 'Delete account'}
+          </Button>
+        )}
+      </div>
+      <p className="mt-2 max-w-[56ch] text-sm text-text-muted">
+        The download is every book with its sources, shelves and notes, as JSON.
       </p>
 
-      {confirming ? (
+      {confirming && (
         <div role="group" aria-labelledby="delete-confirm" className="mt-4 rounded-[16px] bg-surface-sunk p-4 shadow-[inset_0_0_0_1.5px_var(--note)]">
-          <p id="delete-confirm" className="font-bold">
-            Delete this shelf and everything on it? This can&rsquo;t be undone.
+          <p id="delete-confirm" className="font-display text-[1.2rem] leading-snug">
+            {user.isGuest ? 'Delete this shelf' : 'Delete your account'}
+            {count > 0 ? ` and all ${count} ${count === 1 ? 'book' : 'books'}?` : '?'}
+          </p>
+          <p className="mt-1 text-sm text-text-muted">
+            {user.isGuest
+              ? 'Every book, shelf, note and paste history goes for good. This can’t be undone.'
+              : 'Your shelf, shelves and history go for good, on every device. This can’t be undone.'}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button ref={keepRef} type="button" onClick={() => setConfirming(false)} disabled={deleting}>
-              Keep my shelf
+            <Button ref={keepRef} type="button" variant="quiet" onClick={() => setConfirming(false)} disabled={deleting}>
+              {user.isGuest ? 'Keep my shelf' : 'Keep my account'}
             </Button>
-            <Button type="button" variant="quiet" onClick={() => void onDelete()} disabled={deleting} className="text-note-ink">
+            <Button type="button" variant="quiet" onClick={() => void onDelete()} disabled={deleting} className="text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]">
+              <Trash size={18} weight="bold" aria-hidden="true" />
               {deleting ? 'Deleting…' : 'Delete everything'}
             </Button>
           </div>
@@ -167,10 +305,6 @@ function DataSection() {
             </p>
           )}
         </div>
-      ) : (
-        <Button type="button" variant="quiet" onClick={() => setConfirming(true)} className="mt-4 text-note-ink">
-          Delete my shelf
-        </Button>
       )}
     </Section>
   );

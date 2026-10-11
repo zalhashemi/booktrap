@@ -1,17 +1,24 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { purgeIdleGuests } from './account';
+import { testSessions } from './auth/test-sessions';
 import { loadConfig } from './config';
-import { createMemoryDeviceRepo } from './repo/memory';
-import type { DeviceRepo } from './repo/types';
 import { JobQueue } from './pipeline/queue';
 import { buildApp } from './server';
 import { createMemoryLibraryStore } from './store/memory';
+import { createMemoryUserDirectory, type MemoryUserDirectory } from './users/memory';
+
+let sessions: Awaited<ReturnType<typeof testSessions>>;
+beforeAll(async () => {
+  sessions = await testSessions();
+});
 
 /** App with in-memory storage and a queue that never runs anything (route-level tests). */
-function testApp(env: Record<string, string>, devices: DeviceRepo = createMemoryDeviceRepo(), store = createMemoryLibraryStore()) {
+function testApp(env: Record<string, string>, store = createMemoryLibraryStore(), users: MemoryUserDirectory = createMemoryUserDirectory()) {
   return buildApp({
     config: loadConfig({ NODE_ENV: 'test', ...env }),
-    devices,
+    verifySession: sessions.verify,
+    users,
     store,
     queue: new JobQueue(async () => {}),
   });
@@ -46,21 +53,15 @@ async function listening(app: App) {
     fetch(`${base}${path}`, { ...init, headers: { ...init.headers, 'content-type': 'application/json' }, body: JSON.stringify(init.body) });
 }
 
-function newCredentials() {
-  return { deviceId: randomUUID(), deviceSecret: randomBytes(32).toString('base64url') };
-}
-
-function authHeaders(creds: { deviceId: string; deviceSecret: string }) {
-  return { 'x-device-id': creds.deviceId, 'x-device-secret': creds.deviceSecret };
-}
+const BOOK = { author: null, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, verified: false };
 
 describe('API', () => {
   let app: App;
-  let repo: DeviceRepo;
+  let users: MemoryUserDirectory;
 
   beforeEach(async () => {
-    repo = createMemoryDeviceRepo();
-    app = await testApp({}, repo);
+    users = createMemoryUserDirectory();
+    app = await testApp({}, createMemoryLibraryStore(), users);
   });
   afterEach(() => app.close());
 
@@ -70,95 +71,48 @@ describe('API', () => {
     expect(res.json()).toMatchObject({ ok: true, service: 'booktrap-api', storage: 'memory' });
   });
 
-  it('registers a device and stores only a hash of the secret', async () => {
-    const creds = newCredentials();
-    const res = await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ deviceId: creds.deviceId, created: true });
-
-    const stored = await repo.find(creds.deviceId);
-    expect(stored?.secretHash).toBeDefined();
-    expect(stored?.secretHash).not.toContain(creds.deviceSecret);
-  });
-
-  it('treats re-registration with the same secret as a no-op', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    const again = await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    expect(again.statusCode).toBe(200);
-    expect(again.json()).toEqual({ deviceId: creds.deviceId, created: false });
-  });
-
-  it('refuses to re-register an id with a different secret', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    const hijack = await app.inject({
-      method: 'POST',
-      url: '/v1/devices',
-      payload: { ...creds, deviceSecret: newCredentials().deviceSecret },
-    });
-    expect(hijack.statusCode).toBe(409);
-    expect(hijack.json().error.code).toBe('device_exists');
-  });
-
-  it('rejects malformed registration bodies', async () => {
-    const res = await app.inject({ method: 'POST', url: '/v1/devices', payload: { deviceId: 'nope', deviceSecret: 'short' } });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe('bad_request');
-  });
-
-  it('authorizes /v1/me with valid credentials', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    const res = await app.inject({ method: 'GET', url: '/v1/me', headers: authHeaders(creds) });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().deviceId).toBe(creds.deviceId);
+  it('says who is signed in, and whether they are a guest', async () => {
+    const member = await sessions.signIn();
+    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: member.headers })).json()).toEqual({ userId: member.userId, isGuest: false });
+    const guest = await sessions.signIn({ guest: true });
+    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: guest.headers })).json()).toEqual({ userId: guest.userId, isGuest: true });
   });
 
   it.each([
-    ['no headers', () => ({})],
-    ['unknown device', () => authHeaders(newCredentials())],
-    ['malformed secret', () => ({ 'x-device-id': randomUUID(), 'x-device-secret': 'x' })],
+    ['no token', () => ({})],
+    ['a device id and secret', () => ({ 'x-device-id': randomUUID(), 'x-device-secret': 'x'.repeat(43) })],
+    ['a malformed token', () => ({ authorization: 'Bearer abc' })],
   ])('returns 401 for %s', async (_label, headers) => {
     const res = await app.inject({ method: 'GET', url: '/v1/me', headers: headers() });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('unauthorized');
   });
 
-  it('deletes a device on its owner’s request, after which its credentials stop working', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    expect((await app.inject({ method: 'DELETE', url: '/v1/devices/me' })).statusCode).toBe(401);
-    const res = await app.inject({ method: 'DELETE', url: '/v1/devices/me', headers: authHeaders(creds) });
-    expect(res.statusCode).toBe(204);
-    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: authHeaders(creds) })).statusCode).toBe(401);
-    expect(await repo.find(creds.deviceId)).toBeNull();
-    // Another browser holding the same key (or a backup code) can't quietly bring it back.
-    expect((await app.inject({ method: 'POST', url: '/v1/devices', payload: creds })).statusCode).toBe(409);
+  it('notes a visit at most once an hour', async () => {
+    const guest = await sessions.signIn({ guest: true });
+    users.add(guest.userId, { guest: true, createdAt: new Date(Date.now() - 40 * 86_400_000) });
+    const longAgo = new Date(Date.now() - 30 * 86_400_000);
+    expect(await users.inactiveGuests(longAgo, 10)).toEqual([guest.userId]);
+    await app.inject({ method: 'GET', url: '/v1/me', headers: guest.headers });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(await users.inactiveGuests(longAgo, 10)).toEqual([]);
   });
 
-  it('returns 401 for a registered device with the wrong secret', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    const res = await app.inject({
-      method: 'GET',
+  it('only allows the configured CORS origin, with the Authorization header', async () => {
+    const allowed = await app.inject({
+      method: 'OPTIONS',
       url: '/v1/me',
-      headers: authHeaders({ ...creds, deviceSecret: newCredentials().deviceSecret }),
+      headers: { origin: 'http://localhost:5180', 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' },
     });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('only allows the configured CORS origin', async () => {
-    const allowed = await app.inject({ method: 'GET', url: '/health', headers: { origin: 'http://localhost:5180' } });
     expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:5180');
+    expect(allowed.headers['access-control-allow-headers']).toMatch(/authorization/);
     const denied = await app.inject({ method: 'GET', url: '/health', headers: { origin: 'https://evil.example' } });
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('keeps private responses out of caches and turns off content sniffing', async () => {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    const res = await app.inject({ method: 'GET', url: '/v1/me', headers: authHeaders(creds) });
+    const { headers } = await sessions.signIn();
+    const res = await app.inject({ method: 'GET', url: '/v1/me', headers });
     expect(res.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
   });
 
@@ -169,17 +123,116 @@ describe('API', () => {
   });
 });
 
-describe('jobs API', () => {
-  const VIDEO = 'https://www.tiktok.com/@reader/video/7672440936101727519';
-  const KEYS = { APIFY_TOKEN: 'a', ANTHROPIC_API_KEY: 'b', DAILY_LINK_CAP_PER_DEVICE: '2' };
-
-  async function registered(app: App) {
-    const creds = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: creds });
-    return authHeaders(creds);
+describe('accounts', () => {
+  async function setup() {
+    const store = createMemoryLibraryStore();
+    const users = createMemoryUserDirectory();
+    const app = await testApp({}, store, users);
+    onTestFinished(() => app.close());
+    const signIn = async (guest = false) => {
+      const session = await sessions.signIn({ guest });
+      users.add(session.userId, { guest });
+      return { ...session, token: session.headers.authorization.slice('Bearer '.length) };
+    };
+    return { app, store, users, signIn };
   }
 
-  it('requires device credentials', async () => {
+  it('deletes an account and everything in it', async () => {
+    const { app, store, users, signIn } = await setup();
+    const reader = await signIn();
+    await store.insertBook(reader.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
+    await store.createTag(reader.userId, 'Fantasy');
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: reader.headers })).statusCode).toBe(204);
+    expect(await store.listBooks(reader.userId)).toEqual([]);
+    expect(await store.listTags(reader.userId)).toEqual([]);
+    expect(users.has(reader.userId)).toBe(false);
+  });
+
+  it('merges a guest shelf into the account logged in to, folding duplicates', async () => {
+    const { app, store, users, signIn } = await setup();
+    const reader = await signIn();
+    const guest = await signIn(true);
+    const kept = await store.insertBook(reader.userId, { ...BOOK, title: 'Piranesi', author: 'Susanna Clarke', normalizedKey: 'piranesi' });
+    await store.addSource(kept, { platform: 'tiktok', postId: '1', url: 'https://www.tiktok.com/@a/video/1', creatorHandle: 'a', thumbnailUrl: null, evidence: null, confidence: null });
+    await store.createTag(reader.userId, 'Fantasy');
+
+    const twin = await store.insertBook(guest.userId, { ...BOOK, title: 'Piranesi', author: 'Susanna Clarke', normalizedKey: 'piranesi' });
+    await store.addSource(twin, { platform: 'instagram', postId: 'X', url: 'https://www.instagram.com/p/X/', creatorHandle: 'b', thumbnailUrl: null, evidence: null, confidence: null });
+    const fresh = await store.insertBook(guest.userId, { ...BOOK, title: 'Circe', author: 'Madeline Miller', normalizedKey: 'circe' });
+    const fantasy = await store.createTag(guest.userId, 'fantasy');
+    const myths = await store.createTag(guest.userId, 'Myths');
+    await store.setBookTags(guest.userId, fresh, [fantasy.id, myths.id]);
+
+    const res = await app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: { guestToken: guest.token } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ added: 1, folded: 1 });
+
+    const shelf = await store.listBooks(reader.userId);
+    expect(shelf.map((book) => book.title).sort()).toEqual(['Circe', 'Piranesi']);
+    expect(shelf.find((book) => book.title === 'Piranesi')!.sources.map((source) => source.platform).sort()).toEqual(['instagram', 'tiktok']);
+    // "fantasy" joined the account's "Fantasy"; "Myths" moved over.
+    expect((await store.listTags(reader.userId)).map((tag) => tag.name)).toEqual(['Fantasy', 'Myths']);
+    expect(shelf.find((book) => book.title === 'Circe')!.tags.map((tag) => tag.name)).toEqual(['Fantasy', 'Myths']);
+    expect(await store.listBooks(guest.userId)).toEqual([]);
+    expect(users.has(guest.userId)).toBe(false);
+  });
+
+  it('moves a guest’s posts today onto the account, so the daily cap still counts them', async () => {
+    const { app, store, signIn } = await setup();
+    const reader = await signIn();
+    const guest = await signIn(true);
+    await store.createJob(guest.userId, null, [{ inputUrl: 'u', platform: 'tiktok', postId: '1', kind: 'video' }]);
+    await app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: { guestToken: guest.token } });
+    expect(await store.countItemsSince({ userId: reader.userId }, new Date(0))).toBe(1);
+  });
+
+  it('only merges a guest shelf, and only into a signed-in account', async () => {
+    const { app, store, signIn } = await setup();
+    const reader = await signIn();
+    const other = await signIn();
+    const guest = await signIn(true);
+    await store.insertBook(other.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
+    const merge = (headers: Record<string, string>, guestToken: string) =>
+      app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers, payload: { guestToken } });
+
+    // Another account's token can't hand its books over.
+    expect((await merge(reader.headers, other.token)).statusCode).toBe(403);
+    expect(await store.listBooks(other.userId)).toHaveLength(1);
+    // A guest can't merge into a guest, a forged token is refused, and so is the account's own.
+    expect((await merge(guest.headers, guest.token)).statusCode).toBe(400);
+    expect((await merge(reader.headers, `${guest.token.slice(0, -4)}AAAA`)).statusCode).toBe(403);
+    expect((await merge(reader.headers, reader.token)).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/v1/account/merge-guest', headers: reader.headers, payload: {} })).statusCode).toBe(400);
+  });
+
+  it('deletes guests nobody has visited for 30 days, and only them', async () => {
+    const store = createMemoryLibraryStore();
+    const users = createMemoryUserDirectory();
+    const old = new Date(Date.now() - 31 * 86_400_000);
+    users.add('idle-guest', { guest: true, createdAt: old });
+    users.add('new-guest', { guest: true });
+    users.add('idle-member', { createdAt: old });
+    await store.insertBook('idle-guest', { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
+    await store.insertBook('idle-member', { ...BOOK, title: 'Circe', normalizedKey: 'circe' });
+
+    expect(await purgeIdleGuests({ store, users, queue: new JobQueue(async () => {}) })).toBe(1);
+    expect(users.has('idle-guest')).toBe(false);
+    expect(await store.listBooks('idle-guest')).toEqual([]);
+    expect(users.has('new-guest')).toBe(true);
+    expect(await store.listBooks('idle-member')).toHaveLength(1);
+  });
+});
+
+describe('jobs API', () => {
+  const VIDEO = 'https://www.tiktok.com/@reader/video/7672440936101727519';
+  const KEYS = { APIFY_TOKEN: 'a', ANTHROPIC_API_KEY: 'b', DAILY_LINK_CAP_PER_USER: '2' };
+
+  async function registered(_app: App, guest = false) {
+    return (await sessions.signIn({ guest })).headers;
+  }
+
+  it('requires a signed-in user', async () => {
     const app = await testApp(KEYS);
     const res = await app.inject({ method: 'POST', url: '/v1/jobs', payload: { urls: [VIDEO] } });
     expect(res.statusCode).toBe(401);
@@ -271,7 +324,7 @@ describe('jobs API', () => {
     await app.close();
   });
 
-  it('enforces the per-device daily cap with a clear message', async () => {
+  it('enforces the per-user daily cap with a clear message', async () => {
     const app = await testApp(KEYS);
     const headers = await registered(app);
     const urls = ['7672440936101727519', '7672440936101727520', '7672440936101727521'].map(
@@ -285,7 +338,7 @@ describe('jobs API', () => {
   });
 
   it('never lets parallel submissions slip past the daily cap together', async () => {
-    const app = await testApp(KEYS, createMemoryDeviceRepo(), slowStore());
+    const app = await testApp(KEYS, slowStore());
     const headers = await registered(app);
     const urls = ['7672440936101727519', '7672440936101727520', '7672440936101727521', '7672440936101727522', '7672440936101727523'];
     const post = await listening(app);
@@ -297,12 +350,12 @@ describe('jobs API', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/usage', headers })).json().postsToday).toBe(2);
   });
 
-  it('holds the per-network cap across devices submitting at once', async () => {
-    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_DEVICE: '10', DAILY_LINK_CAP_PER_IP: '2' }, createMemoryDeviceRepo(), slowStore());
-    const devices = await Promise.all([registered(app), registered(app), registered(app)]);
+  it('holds the per-network cap across readers submitting at once', async () => {
+    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_USER: '10', DAILY_LINK_CAP_PER_IP: '2' }, slowStore());
+    const readers = await Promise.all([registered(app), registered(app), registered(app)]);
     const post = await listening(app);
     const responses = await Promise.all(
-      devices.map((headers, index) =>
+      readers.map((headers, index) =>
         post('/v1/jobs', { method: 'POST', headers, body: { urls: [`https://www.tiktok.com/@reader/video/767244093610172752${index}`] } }),
       ),
     );
@@ -311,28 +364,40 @@ describe('jobs API', () => {
     expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/network has reached today’s limit/);
   });
 
-  it('erases a deleted shelf’s books and jobs, but its posts still count against the network’s cap', async () => {
+  it('erases a deleted account’s books and jobs, but its posts still count against the network’s cap', async () => {
     const store = createMemoryLibraryStore();
-    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_DEVICE: '10', DAILY_LINK_CAP_PER_IP: '2' }, createMemoryDeviceRepo(), store);
-    const first = newCredentials();
-    await app.inject({ method: 'POST', url: '/v1/devices', payload: first });
+    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_USER: '10', DAILY_LINK_CAP_PER_IP: '2' }, store);
+    const first = await sessions.signIn();
     const urls = ['7672440936101727519', '7672440936101727520'].map((id) => `https://www.tiktok.com/@reader/video/${id}`);
-    expect((await app.inject({ method: 'POST', url: '/v1/jobs', headers: authHeaders(first), payload: { urls } })).statusCode).toBe(201);
-    await store.insertBook(first.deviceId, { title: 'Babel', author: null, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, verified: false, normalizedKey: 'babel' });
+    expect((await app.inject({ method: 'POST', url: '/v1/jobs', headers: first.headers, payload: { urls } })).statusCode).toBe(201);
+    await store.insertBook(first.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
 
-    expect((await app.inject({ method: 'DELETE', url: '/v1/devices/me', headers: authHeaders(first) })).statusCode).toBe(204);
-    expect(await store.listBooks(first.deviceId)).toEqual([]);
-    expect(await store.listJobs(first.deviceId, 5)).toEqual([]);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: first.headers })).statusCode).toBe(204);
+    expect(await store.listBooks(first.userId)).toEqual([]);
+    expect(await store.listJobs(first.userId, 5)).toEqual([]);
 
     // Starting over on the same network doesn't buy a fresh daily allowance.
-    const second = await registered(app);
+    const second = await registered(app, true);
     const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers: second, payload: { urls: [`https://www.tiktok.com/@reader/video/7672440936101727521`] } });
     expect(res.statusCode).toBe(429);
     expect(res.json().error.message).toMatch(/network has reached today’s limit/);
     await app.close();
   });
 
-  it('never shows one device another device’s job', async () => {
+  it('gives guests the guest cap, and says that saving the shelf raises it', async () => {
+    const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_USER: '40', DAILY_LINK_CAP_GUEST: '1' });
+    const guest = await registered(app, true);
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers: guest })).json()).toEqual({ postsToday: 0, dailyLimit: 1 });
+    const urls = ['7672440936101727519', '7672440936101727520'].map((id) => `https://www.tiktok.com/@reader/video/${id}`);
+    const res = await app.inject({ method: 'POST', url: '/v1/jobs', headers: guest, payload: { urls } });
+    expect(res.statusCode).toBe(429);
+    expect(res.json().error.message).toMatch(/add 1 more post today \(limit 1\).*Save your shelf to read up to 40 a day/);
+    const member = await registered(app);
+    expect((await app.inject({ method: 'POST', url: '/v1/jobs', headers: member, payload: { urls } })).statusCode).toBe(201);
+    await app.close();
+  });
+
+  it('never shows one reader another reader’s job', async () => {
     const app = await testApp(KEYS);
     const owner = await registered(app);
     const job = (await app.inject({ method: 'POST', url: '/v1/jobs', headers: owner, payload: { urls: [VIDEO] } })).json();
@@ -344,21 +409,22 @@ describe('jobs API', () => {
 });
 
 describe('rate limiting behind a proxy', () => {
-  it('ignores client-forged X-Forwarded-For entries when counting registrations', async () => {
-    const app = await testApp({ TRUST_PROXY_HOPS: '1', REGISTRATIONS_PER_IP_PER_HOUR: '2' });
+  it('ignores client-forged X-Forwarded-For entries when counting requests', async () => {
+    const app = await testApp({ TRUST_PROXY_HOPS: '1' });
     try {
       const statuses: number[] = [];
-      for (let n = 0; n < 3; n++) {
+      for (let n = 0; n < 61; n++) {
         const res = await app.inject({
-          method: 'POST',
-          url: '/v1/devices',
+          method: 'GET',
+          url: '/health/ready',
           // The client forges the leftmost entry; the proxy appends the real address last.
           headers: { 'x-forwarded-for': `10.0.0.${n}, 203.0.113.7` },
-          payload: newCredentials(),
         });
         statuses.push(res.statusCode);
       }
-      expect(statuses).toEqual([201, 201, 429]);
+      // 60 a minute per real address, whatever the forged part says.
+      expect(statuses.filter((status) => status === 429)).toHaveLength(1);
+      expect(statuses.at(-1)).toBe(429);
     } finally {
       await app.close();
     }

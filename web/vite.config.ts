@@ -9,6 +9,25 @@ import type { Plugin } from 'vite';
 const INK = '#F1F7F3';
 
 /** A production bundle without a real API URL would quietly call each visitor's own localhost. */
+/** Sign-in needs the Supabase project too; a build without it couldn't open any shelf. */
+function assertSupabase(url: string | undefined, key: string | undefined) {
+  if (!/^https:\/\/[^/]+/.test(url ?? '') || !key) {
+    throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY must be set for production builds.');
+  }
+  // Only the publishable key may ship in the bundle: a secret key would give every visitor the whole database.
+  if (/^sb_secret_/.test(key) || /service_role/.test(atobSafe(key.split('.')[1] ?? ''))) {
+    throw new Error('VITE_SUPABASE_PUBLISHABLE_KEY is a secret key. Use the publishable key.');
+  }
+}
+
+function atobSafe(value: string) {
+  try {
+    return Buffer.from(value, 'base64url').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
 function assertApiUrl(url: string | undefined) {
   const isHttpOrigin = /^https?:\/\/[^/]+/.test(url ?? '');
   const isLocal = /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url ?? '');
@@ -22,12 +41,13 @@ function assertApiUrl(url: string | undefined) {
 
 /**
  * Cloudflare Pages response headers (`dist/_headers`), written at build time because the
- * Content-Security-Policy names the API's origin. Scripts come from this site only (plus WebAssembly
- * for the PDF engine's layout), the page talks only to itself and the API, and covers and thumbnails
- * may come from any https image host.
+ * Content-Security-Policy names the API's origin and the Supabase project (sign-in). Scripts come from
+ * this site only (plus WebAssembly for the PDF engine's layout), the page talks only to itself, the API
+ * and Supabase Auth, and covers and thumbnails may come from any https image host.
  */
-function cloudflareHeaders(apiUrl: string): Plugin {
+function cloudflareHeaders(apiUrl: string, supabaseUrl: string | undefined): Plugin {
   const api = new URL(apiUrl).origin;
+  const auth = supabaseUrl ? ` ${new URL(supabaseUrl).origin}` : '';
   const csp = [
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",
@@ -35,7 +55,7 @@ function cloudflareHeaders(apiUrl: string): Plugin {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     // data: lets the PDF engine load its WebAssembly from an inlined file (it can't reach other sites).
-    `connect-src 'self' data: ${api}`,
+    `connect-src 'self' data: ${api}${auth}`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",
@@ -64,12 +84,16 @@ function cloudflareHeaders(apiUrl: string): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  const apiUrl = loadEnv(mode, process.cwd(), 'VITE_').VITE_API_URL;
-  if (command === 'build' && mode === 'production') assertApiUrl(apiUrl);
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const apiUrl = env.VITE_API_URL;
+  if (command === 'build' && mode === 'production') {
+    assertApiUrl(apiUrl);
+    assertSupabase(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY);
+  }
 
   return {
     plugins: [
-      ...(command === 'build' && apiUrl ? [cloudflareHeaders(apiUrl)] : []),
+      ...(command === 'build' && apiUrl ? [cloudflareHeaders(apiUrl, env.VITE_SUPABASE_URL)] : []),
       react(),
       tailwindcss(),
       VitePWA({

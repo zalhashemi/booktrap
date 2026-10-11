@@ -77,11 +77,11 @@ export function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      note="no accounts, no ads"
+      note="no ads, no tracking"
       summary={
         <>
-          <li>No accounts, no email address, no tracking cookies, no ads, no analytics.</li>
-          <li>Your shelf is tied to a random key stored in this browser. We keep your shelf until you delete it.</li>
+          <li>No tracking cookies, no ads, no analytics. You can use BookTrap as a guest, without an email.</li>
+          <li>If you save your shelf, we keep your email address to sign you in. We keep your shelf until you delete it; an unsaved guest shelf goes after 30 days without a visit.</li>
           <li>To find books, we read the public posts you paste. We keep the book titles, the post link and the creator&rsquo;s public handle, never the video or images.</li>
           <li>
             You can export your shelf at any time, and <Link to="/settings#your-data" className="underline">delete it</Link> from Settings.
@@ -99,9 +99,9 @@ export function PrivacyPage() {
       <H2>What we collect, and why</H2>
       <List>
         <li>
-          <strong>A device key.</strong> On your first visit your browser makes a random id and a secret key. We store the id and a
-          one-way hash of the key, never the key itself. It isn&rsquo;t linked to your name, email or phone. It lets this browser, and
-          anyone holding your backup code, open your shelf.
+          <strong>Your sign-in.</strong> On your first visit you get a guest account: a random id, with no name, email or phone. If
+          you save your shelf, we add your email address, and your password if you choose one (stored only as a one-way hash, by
+          Supabase). We use your email only to sign you in and to send sign-in codes.
         </li>
         <li>
           <strong>Your shelf.</strong> The books you collect, with their status, shelves, notes and ISBNs, and for each book the
@@ -120,8 +120,8 @@ export function PrivacyPage() {
         </li>
       </List>
       <P>
-        In your browser we store your device key, your backup-code reminder and display choices such as the theme. These stay on your
-        device and aren&rsquo;t used for tracking.
+        In your browser we store your sign-in session and display choices such as the theme. These stay on your device and
+        aren&rsquo;t used for tracking.
       </P>
 
       <H2>Reading public posts</H2>
@@ -144,7 +144,7 @@ export function PrivacyPage() {
       <P>We use these providers to run BookTrap. Each handles only what its job needs:</P>
       <List>
         <li>
-          <strong>Supabase</strong>: the database that holds shelves.
+          <strong>Supabase</strong>: the database that holds shelves, and sign-in (including sending sign-in emails).
         </li>
         <li>
           <strong>Render</strong>: runs the BookTrap server.
@@ -179,25 +179,26 @@ export function PrivacyPage() {
 
       <H2>How long we keep it</H2>
       <List>
-        <li>Your shelf, its sources and your paste history: until you delete your shelf.</li>
+        <li>Your account, shelf, its sources and your paste history: until you delete your account.</li>
+        <li>A guest shelf that was never saved: 30 days after your last visit.</li>
         <li>Books you delete: 30 days in the Undo bin, then gone for good.</li>
         <li>Cached posts: {CACHE_DAYS} days.</li>
         <li>Network hashes: 2 days.</li>
-        <li>Usage costs: kept for accounting, without your device once your shelf is deleted.</li>
+        <li>Usage costs: kept for accounting, without your account once it&rsquo;s deleted.</li>
       </List>
 
       <H2>Your rights</H2>
       <P>
         You can see, correct, export and delete your data. Most of it you can do yourself: edit any book, export everything as CSV
-        or JSON from the Export sheet, and delete your whole shelf under{' '}
+        or JSON from the Export sheet or Settings, and delete your account and shelf under{' '}
         <Link to="/settings#your-data" className="underline">
           Settings, Your data
         </Link>
         , which removes it from our servers at once. You can also object to processing, or ask us to restrict it.
       </P>
       <P>
-        Since there are no accounts, we can only act on an emailed request for a shelf you can show is yours. Send the device id shown
-        in Settings (the first 8 characters are enough). Never send your backup code. We answer within 30 days. You can also complain
+        For anything else, email us from the address your shelf is saved with (we can&rsquo;t identify a guest shelf by email).
+        Never send your password or a sign-in code. We answer within 30 days. You can also complain
         to Bahrain&rsquo;s Personal Data Protection Authority, or, in the EU or UK, to your local data protection authority.
       </P>
 
@@ -228,7 +229,7 @@ export function TermsPage() {
           <li>BookTrap is free, has daily limits and comes as it is.</li>
           <li>Only paste links to public posts, and don&rsquo;t try to get around the limits.</li>
           <li>Books are found automatically and can be wrong, so check before you buy.</li>
-          <li>Keep your backup code safe: without it, a lost browser means a lost shelf.</li>
+          <li>Save your shelf with an email to keep it: a guest shelf lives in one browser and goes after 30 days without a visit.</li>
         </>
       }
     >
@@ -249,7 +250,7 @@ export function TermsPage() {
         <li>Don&rsquo;t use scripts or bots, overload the service, or try to get around its limits or security.</li>
         <li>Don&rsquo;t use BookTrap for anything unlawful, or to collect information about people.</li>
       </List>
-      <P>We may limit or block a device or network that breaks these rules.</P>
+      <P>We may limit or block an account or network that breaks these rules.</P>
 
       <H2>Other people&rsquo;s posts</H2>
       <P>
@@ -264,11 +265,12 @@ export function TermsPage() {
         You can edit any book. Please check before relying on it, for example before buying.
       </P>
 
-      <H2>Your shelf and backup code</H2>
+      <H2>Your shelf and account</H2>
       <P>
-        Your shelf is yours: export it whenever you like. Because there are no accounts, your backup code is the only way to reopen your
-        shelf if this browser&rsquo;s data is cleared. Keep it private, since anyone with it can see and change your shelf. We
-        can&rsquo;t recover a shelf without it.
+        Your shelf is yours: export it whenever you like. As a guest, your shelf lives in this browser only: if its data is cleared
+        before you save your shelf, or you don&rsquo;t visit for 30 days, the shelf is gone and we can&rsquo;t recover it. Once you
+        save it with an email, you can open it anywhere by logging in. Keep your email account and password safe, since anyone who
+        can sign in as you can see and change your shelf.
       </P>
 
       <H2>No guarantees</H2>

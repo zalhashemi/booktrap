@@ -23,7 +23,9 @@ export interface PipelineSettings {
   killSwitch: boolean;
   /** Videos read from one collection (the free limit; a paid tier may raise it later). */
   videosPerCollection: number;
-  dailyCapPerDevice: number;
+  dailyCapPerUser: number;
+  /** A guest's daily cap (an anonymous user who hasn't added an email). */
+  dailyCapGuest?: number;
   dailyCapPerIp: number;
 }
 
@@ -38,8 +40,10 @@ export interface PipelineDeps {
   verifyBook?: typeof verifyBook;
   resolveLink?: typeof resolveLink;
   listCollection?: typeof listTikTokCollection;
+  /** Whether the job's owner is a guest, for their daily cap when a collection expands. */
+  isGuest?: (userId: string) => Promise<boolean>;
   /** Queues the videos a collection expands into (the job queue in production). */
-  enqueue?: (itemId: string, deviceId: string) => void;
+  enqueue?: (itemId: string, userId: string) => void;
   loadMedia?: (post: PostData) => Promise<{ images: Parameters<typeof extractBooks>[0]['images']; transcript: string | null }>;
 }
 
@@ -83,14 +87,14 @@ async function loadMediaDefault(post: PostData, apifyToken: string) {
 /** Failed calls can still cost money: record it so the monthly budget stays honest. */
 async function recordFailedSpend(
   deps: PipelineDeps,
-  where: { deviceId: string; itemId: string },
+  where: { userId: string; itemId: string },
   provider: 'apify' | 'anthropic',
   error: unknown,
   detail: Record<string, unknown>,
 ): Promise<void> {
   if (error instanceof PipelineError && error.costUsd > 0) {
     await deps.store.recordSpend({
-      deviceId: where.deviceId,
+      userId: where.userId,
       jobItemId: where.itemId,
       provider,
       usd: error.costUsd,
@@ -102,7 +106,7 @@ async function recordFailedSpend(
 /** Fetch + extract, or reuse the cache so the same post is never paid for twice (brief §4). */
 async function readPost(
   itemId: string,
-  deviceId: string,
+  userId: string,
   platform: SourcePlatform,
   postUrl: string,
   postId: string,
@@ -123,11 +127,11 @@ async function readPost(
   try {
     fetched = await (deps.fetchPost ?? fetchPost)(platform, postUrl, postId, { token: settings.apifyToken });
   } catch (error) {
-    await recordFailedSpend(deps, { deviceId, itemId }, 'apify', error, { platform, postId });
+    await recordFailedSpend(deps, { userId, itemId }, 'apify', error, { platform, postId });
     throw error;
   }
   const { post, costUsd } = fetched;
-  await store.recordSpend({ deviceId, jobItemId: itemId, provider: 'apify', usd: costUsd, detail: { platform, postId } });
+  await store.recordSpend({ userId, jobItemId: itemId, provider: 'apify', usd: costUsd, detail: { platform, postId } });
   await store.updateItem(itemId, { status: 'extracting', kind: post.kind });
 
   const { images, transcript } = deps.loadMedia
@@ -140,11 +144,11 @@ async function readPost(
       { client: settings.anthropic, model: settings.model, effort: settings.effort },
     );
   } catch (error) {
-    await recordFailedSpend(deps, { deviceId, itemId }, 'anthropic', error, { platform, postId });
+    await recordFailedSpend(deps, { userId, itemId }, 'anthropic', error, { platform, postId });
     throw error;
   }
   await store.recordSpend({
-    deviceId,
+    userId,
     jobItemId: itemId,
     provider: 'anthropic',
     usd: extraction.costUsd,
@@ -172,7 +176,7 @@ async function readPost(
  * added with what was read, whether or not a catalogue match was found; a match only enriches it.
  */
 async function shelve(
-  deviceId: string,
+  userId: string,
   jobId: string,
   book: ExtractedBook,
   verification: Verification,
@@ -185,7 +189,7 @@ async function shelve(
     author: verification.author,
     isbn13: verification.isbn13,
   };
-  const existing = (await store.dedupCandidates(deviceId)).find(
+  const existing = (await store.dedupCandidates(userId)).find(
     (shelved) => isSameBook(shelved, candidate) || isSameBook(shelved, { title: book.title, author: book.author, isbn13: null }),
   );
   const source = {
@@ -210,8 +214,8 @@ async function shelve(
     return (await store.addSource(existing.id, source)) ? 'merged' : 'already';
   }
 
-  await store.clearNewForJob(jobId, deviceId);
-  const bookId = await store.insertBook(deviceId, {
+  await store.clearNewForJob(jobId, userId);
+  const bookId = await store.insertBook(userId, {
     title: verification.title,
     author: verification.author,
     isbn10: verification.isbn10,
@@ -225,12 +229,18 @@ async function shelve(
     await store.addSource(bookId, source);
   } catch (error) {
     // Never leave a book without the post it came from, not even in the Undo bin.
-    await store.removeBook(deviceId, bookId).catch((cleanup: unknown) =>
+    await store.removeBook(userId, bookId).catch((cleanup: unknown) =>
       deps.log.error({ err: cleanup, bookId }, 'could not remove a book whose source failed to save'),
     );
     throw error;
   }
   return 'added';
+}
+
+/** The owner's daily cap: guests get fewer posts than signed-in users. */
+async function capFor(userId: string, { settings, isGuest }: PipelineDeps): Promise<number> {
+  if (settings.dailyCapGuest === undefined || !isGuest) return settings.dailyCapPerUser;
+  return (await isGuest(userId)) ? Math.min(settings.dailyCapGuest, settings.dailyCapPerUser) : settings.dailyCapPerUser;
 }
 
 const collectionDailyLimit = () =>
@@ -242,7 +252,7 @@ const collectionDailyLimit = () =>
  */
 async function expandCollection(item: JobItemRecord, link: SourceLink, deps: PipelineDeps): Promise<void> {
   const { store, settings, log } = deps;
-  const queue = (child: JobItemRecord) => deps.enqueue?.(child.id, child.deviceId);
+  const queue = (child: JobItemRecord) => deps.enqueue?.(child.id, child.userId);
 
   // Resumed after a restart: the listing was already paid for, so just carry on with its videos.
   const existing = await store.childItems(item.id);
@@ -261,11 +271,12 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
 
   const since = utcDayStart((deps.now ?? (() => new Date()))());
   const ipHash = await store.jobIpHash(item.jobId);
-  const [byDevice, byIp] = await Promise.all([
-    store.countItemsSince({ deviceId: item.deviceId }, since),
+  const [byUser, byIp] = await Promise.all([
+    store.countItemsSince({ userId: item.userId }, since),
     ipHash ? store.countItemsSince({ ipHash }, since) : Promise.resolve(0),
   ]);
-  const room = Math.min(settings.dailyCapPerDevice - byDevice, ipHash ? settings.dailyCapPerIp - byIp : Infinity);
+  const userCap = await capFor(item.userId, deps);
+  const room = Math.min(userCap - byUser, ipHash ? settings.dailyCapPerIp - byIp : Infinity);
   const limit = Math.min(settings.videosPerCollection, room);
   if (limit <= 0) {
     throw collectionDailyLimit();
@@ -276,11 +287,11 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
   try {
     listing = await (deps.listCollection ?? listTikTokCollection)(collectionId, limit, { token: settings.apifyToken });
   } catch (error) {
-    await recordFailedSpend(deps, { deviceId: item.deviceId, itemId: item.id }, 'apify', error, { platform: 'tiktok', collectionId });
+    await recordFailedSpend(deps, { userId: item.userId, itemId: item.id }, 'apify', error, { platform: 'tiktok', collectionId });
     throw error;
   }
   await store.recordSpend({
-    deviceId: item.deviceId,
+    userId: item.userId,
     jobItemId: item.id,
     provider: 'apify',
     usd: listing.costUsd,
@@ -291,7 +302,7 @@ async function expandCollection(item: JobItemRecord, link: SourceLink, deps: Pip
   // (adding children is idempotent, so a retry after a lost response doesn't add them twice).
   // The caps are counted again as the videos are saved: other links may have used today's room meanwhile.
   const newItems = listing.videos.map((video) => ({ inputUrl: video.url, platform: 'tiktok' as const, postId: video.postId, kind: video.kind }));
-  const caps = { perDevice: settings.dailyCapPerDevice, perIp: settings.dailyCapPerIp, since };
+  const caps = { perUser: userCap, perIp: settings.dailyCapPerIp, since };
   let children: JobItemRecord[];
   for (let attempt = 0; ; attempt++) {
     try {
@@ -344,7 +355,7 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     if (!resolved.postId) throw new PipelineError('not_a_post', `This link doesn’t lead to a ${label} post.`);
     await store.updateItem(itemId, { platform: resolved.platform, postId: resolved.postId });
 
-    const { post, books } = await readPost(itemId, item.deviceId, resolved.platform, resolved.url, resolved.postId, deps);
+    const { post, books } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
     await store.updateItem(itemId, { status: 'verifying', kind: post.kind });
 
     const wanted = books.filter((book) => deps.settings.includeBackgroundBooks || book.prominence === 'featured');
@@ -355,7 +366,7 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
         googleBooksApiKey: deps.settings.googleBooksApiKey,
         log: (message, detail) => log.warn({ detail }, message),
       });
-      if ((await shelve(item.deviceId, item.jobId, book, verification, post, deps)) === 'added') added++;
+      if ((await shelve(item.userId, item.jobId, book, verification, post, deps)) === 'added') added++;
     }
 
     await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null });

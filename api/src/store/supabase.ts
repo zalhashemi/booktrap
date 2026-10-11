@@ -30,7 +30,7 @@ function checkOne<T>(result: { data: T | null; error: { message: string; code?: 
 
 interface JobRow {
   id: string;
-  device_id: string;
+  user_id: string;
   status: JobRecord['status'];
   cleared_new: boolean;
   created_at: string;
@@ -40,7 +40,7 @@ interface JobRow {
 interface ItemRow {
   id: string;
   job_id: string;
-  device_id: string;
+  user_id: string;
   input_url: string;
   source_platform: JobItemRecord['platform'];
   source_post_id: string | null;
@@ -83,12 +83,12 @@ interface SourceRow {
   created_at: string;
 }
 
-const ITEM_COLUMNS = 'id, job_id, device_id, input_url, source_platform, source_post_id, kind, status, error, books_found, attempts, parent_item_id, note, created_at';
+const ITEM_COLUMNS = 'id, job_id, user_id, input_url, source_platform, source_post_id, kind, status, error, books_found, attempts, parent_item_id, note, created_at';
 
 const toItem = (row: ItemRow): JobItemRecord => ({
   id: row.id,
   jobId: row.job_id,
-  deviceId: row.device_id,
+  userId: row.user_id,
   inputUrl: row.input_url,
   platform: row.source_platform,
   postId: row.source_post_id,
@@ -115,7 +115,7 @@ const NO_CAP = 2_147_483_647;
 
 const toJob = (row: JobRow): JobWithItems => ({
   id: row.id,
-  deviceId: row.device_id,
+  userId: row.user_id,
   status: row.status,
   clearedNew: row.cleared_new,
   createdAt: row.created_at,
@@ -174,24 +174,24 @@ const PATCH_COLUMNS: Record<keyof BookPatch, string> = {
 };
 
 export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
-  const jobSelect = `id, device_id, status, cleared_new, created_at, job_items (${ITEM_COLUMNS})`;
+  const jobSelect = `id, user_id, status, cleared_new, created_at, job_items (${ITEM_COLUMNS})`;
 
   return {
-    async createJob(deviceId, ipHash, items, caps) {
+    async createJob(userId, ipHash, items, caps) {
       const result = check(
         await db.rpc('create_job_capped', {
-          p_device_id: deviceId,
+          p_user_id: userId,
           p_ip_hash: ipHash,
           p_items: items.map(toItemJson),
           p_posts: caps?.posts ?? 0,
-          p_device_cap: caps?.perDevice ?? NO_CAP,
+          p_user_cap: caps?.perUser ?? NO_CAP,
           p_ip_cap: caps?.perIp ?? NO_CAP,
           p_since: (caps?.since ?? new Date()).toISOString(),
         }),
         'create_job_capped',
-      ) as { job_id?: string; capped?: 'device' | 'ip'; used?: number };
+      ) as { job_id?: string; capped?: 'user' | 'ip'; used?: number };
       if (result.capped) throw new DailyCapError(result.capped, result.used ?? 0);
-      const created = result.job_id ? await this.getJob(deviceId, result.job_id) : null;
+      const created = result.job_id ? await this.getJob(userId, result.job_id) : null;
       if (!created) throw new Error('job vanished after insert');
       return created;
     },
@@ -202,7 +202,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         await db.rpc('add_child_items_capped', {
           p_parent_id: parent.id,
           p_items: children.map(toItemJson),
-          p_device_cap: caps?.perDevice ?? NO_CAP,
+          p_user_cap: caps?.perUser ?? NO_CAP,
           p_ip_cap: caps?.perIp ?? NO_CAP,
           p_since: (caps?.since ?? new Date()).toISOString(),
         }),
@@ -224,17 +224,17 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return row?.ip_hash ?? null;
     },
 
-    async getJob(deviceId, jobId) {
+    async getJob(userId, jobId) {
       const row = check(
-        await db.from('jobs').select(jobSelect).eq('id', jobId).eq('device_id', deviceId).maybeSingle<JobRow>(),
+        await db.from('jobs').select(jobSelect).eq('id', jobId).eq('user_id', userId).maybeSingle<JobRow>(),
         'jobs.get',
       );
       return row ? toJob(row) : null;
     },
 
-    async listJobs(deviceId, limit) {
+    async listJobs(userId, limit) {
       const rows = check(
-        await db.from('jobs').select(jobSelect).eq('device_id', deviceId).order('created_at', { ascending: false }).limit(limit),
+        await db.from('jobs').select(jobSelect).eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
         'jobs.list',
       ) as JobRow[];
       return rows.map(toJob);
@@ -277,11 +277,11 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     },
 
     async countItemsSince(filter, since) {
-      if ('deviceId' in filter) {
+      if ('userId' in filter) {
         const { count, error } = await db
           .from('job_items')
           .select('id', { count: 'exact', head: true })
-          .eq('device_id', filter.deviceId)
+          .eq('user_id', filter.userId)
           .or('kind.is.null,kind.neq.collection')
           .gte('created_at', since.toISOString());
         if (error) throw new Error(`job_items.count failed: ${error.message}`);
@@ -326,10 +326,10 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
     },
 
     async recordSpend(event) {
-      const row = { device_id: event.deviceId, job_item_id: event.jobItemId, provider: event.provider, usd: event.usd, detail: event.detail ?? null };
+      const row = { user_id: event.userId, job_item_id: event.jobItemId, provider: event.provider, usd: event.usd, detail: event.detail ?? null };
       let result = await db.from('spend_events').insert(row);
       // The shelf was deleted while its post was being read: the money is still spent, so keep it without them.
-      if (result.error?.code === FOREIGN_KEY_VIOLATION) result = await db.from('spend_events').insert({ ...row, device_id: null, job_item_id: null });
+      if (result.error?.code === FOREIGN_KEY_VIOLATION) result = await db.from('spend_events').insert({ ...row, user_id: null, job_item_id: null });
       check(result, 'spend_events.insert');
     },
 
@@ -338,19 +338,19 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return Number(value ?? 0);
     },
 
-    async clearNewForJob(jobId, deviceId) {
+    async clearNewForJob(jobId, userId) {
       // Claim the job's "first save" atomically; only the claimant clears the old highlight.
       const claimed = check(
         await db.from('jobs').update({ cleared_new: true }).eq('id', jobId).eq('cleared_new', false).select('id'),
         'jobs.claim_clear_new',
       ) as { id: string }[];
       if (claimed.length === 0) return;
-      check(await db.from('books').update({ is_new: false }).eq('device_id', deviceId).eq('is_new', true), 'books.clear_new');
+      check(await db.from('books').update({ is_new: false }).eq('user_id', userId).eq('is_new', true), 'books.clear_new');
     },
 
-    async dedupCandidates(deviceId) {
+    async dedupCandidates(userId) {
       const rows = check(
-        await db.from('books').select('id, title, author, isbn10, isbn13, cover_url, published_year').eq('device_id', deviceId).is('deleted_at', null),
+        await db.from('books').select('id, title, author, isbn10, isbn13, cover_url, published_year').eq('user_id', userId).is('deleted_at', null),
         'books.candidates',
       ) as Pick<BookRow, 'id' | 'title' | 'author' | 'isbn10' | 'isbn13' | 'cover_url' | 'published_year'>[];
       return rows.map((row) => ({
@@ -364,12 +364,12 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       }));
     },
 
-    async insertBook(deviceId, book) {
+    async insertBook(userId, book) {
       const row = checkOne(
         await db
           .from('books')
           .insert({
-            device_id: deviceId,
+            user_id: userId,
             title: book.title,
             author: book.author,
             isbn10: book.isbn10,
@@ -412,12 +412,12 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       throw new Error(`book_sources.insert failed: ${error.message}`);
     },
 
-    async listBooks(deviceId) {
+    async listBooks(userId) {
       const rows = check(
         await db
           .from('books')
           .select(BOOK_SELECT)
-          .eq('device_id', deviceId)
+          .eq('user_id', userId)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(5000),
@@ -426,8 +426,32 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return rows.map(toBook);
     },
 
-    async eraseDevice(deviceId) {
-      check(await db.rpc('delete_device', { p_device_id: deviceId }), 'delete_device');
+    async eraseUser(userId) {
+      check(await db.rpc('delete_user_data', { p_user_id: userId }), 'delete_user_data');
+    },
+
+    async transferShelf(fromUserId, toUserId) {
+      // Shelves first: a name the account already has is folded into the account's shelf.
+      const [theirs, ours] = await Promise.all([this.listTags(fromUserId), this.listTags(toUserId)]);
+      for (const tag of theirs) {
+        const same = ours.find((existing) => existing.name.toLowerCase() === tag.name.toLowerCase());
+        if (same) {
+          const rows = check(await db.from('book_tags').select('book_id').eq('tag_id', tag.id), 'book_tags.list') as { book_id: string }[];
+          if (rows.length) {
+            check(
+              await db.from('book_tags').upsert(rows.map((row) => ({ book_id: row.book_id, tag_id: same.id })), { ignoreDuplicates: true }),
+              'book_tags.fold',
+            );
+          }
+          check(await db.from('tags').delete().eq('id', tag.id).eq('user_id', fromUserId), 'tags.fold');
+        } else {
+          check(await db.from('tags').update({ user_id: toUserId }).eq('id', tag.id).eq('user_id', fromUserId), 'tags.move');
+        }
+      }
+      // Jobs and their items move too, so today's posts keep counting against the account's cap.
+      for (const table of ['books', 'jobs', 'job_items', 'spend_events']) {
+        check(await db.from(table).update({ user_id: toUserId }).eq('user_id', fromUserId), `${table}.move`);
+      }
     },
 
     async purgeDeletedBooks() {
@@ -449,30 +473,30 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return { posts: posts.count ?? 0, ipHashes: (jobs.count ?? 0) + (carried.count ?? 0) };
     },
 
-    async getBook(deviceId, bookId) {
+    async getBook(userId, bookId) {
       const row = check(
-        await db.from('books').select(BOOK_SELECT).eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null).maybeSingle(),
+        await db.from('books').select(BOOK_SELECT).eq('id', bookId).eq('user_id', userId).is('deleted_at', null).maybeSingle(),
         'books.get',
       ) as unknown as BookRow | null;
       return row ? toBook(row) : null;
     },
 
-    async updateBook(deviceId, bookId, patch) {
+    async updateBook(userId, bookId, patch) {
       const row: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(patch)) {
         if (value !== undefined) row[PATCH_COLUMNS[key as keyof BookPatch]] = value;
       }
       if (Object.keys(row).length) {
-        check(await db.from('books').update(row).eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null), 'books.update');
+        check(await db.from('books').update(row).eq('id', bookId).eq('user_id', userId).is('deleted_at', null), 'books.update');
       }
-      return this.getBook(deviceId, bookId);
+      return this.getBook(userId, bookId);
     },
 
-    async removeBook(deviceId, bookId) {
-      check(await db.from('books').delete().eq('id', bookId).eq('device_id', deviceId), 'books.remove');
+    async removeBook(userId, bookId) {
+      check(await db.from('books').delete().eq('id', bookId).eq('user_id', userId), 'books.remove');
     },
 
-    async deleteBooks(deviceId, bookIds) {
+    async deleteBooks(userId, bookIds) {
       let count = 0;
       // Ids travel in the URL (PostgREST `in` filter): keep each request well under URL limits.
       for (const chunk of chunks(bookIds, ID_CHUNK)) {
@@ -480,7 +504,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
           await db
             .from('books')
             .update({ deleted_at: new Date().toISOString() })
-            .eq('device_id', deviceId)
+            .eq('user_id', userId)
             .in('id', chunk)
             .is('deleted_at', null)
             .select('id'),
@@ -491,14 +515,14 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return count;
     },
 
-    async restoreBooks(deviceId, bookIds) {
+    async restoreBooks(userId, bookIds) {
       let count = 0;
       for (const chunk of chunks(bookIds, ID_CHUNK)) {
         const rows = check(
           await db
             .from('books')
             .update({ deleted_at: null })
-            .eq('device_id', deviceId)
+            .eq('user_id', userId)
             .in('id', chunk)
             .not('deleted_at', 'is', null)
             .select('id'),
@@ -509,20 +533,20 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return count;
     },
 
-    async markAllSeen(deviceId) {
+    async markAllSeen(userId) {
       const rows = check(
-        await db.from('books').update({ is_new: false }).eq('device_id', deviceId).eq('is_new', true).is('deleted_at', null).select('id'),
+        await db.from('books').update({ is_new: false }).eq('user_id', userId).eq('is_new', true).is('deleted_at', null).select('id'),
         'books.mark_seen',
       ) as { id: string }[];
       return rows.length;
     },
 
-    async mergeBooks(deviceId, keepId, mergeIds) {
-      const keep = await this.getBook(deviceId, keepId);
+    async mergeBooks(userId, keepId, mergeIds) {
+      const keep = await this.getBook(userId, keepId);
       if (!keep) return null;
       for (const id of mergeIds) {
         if (id === keepId) continue;
-        const other = await this.getBook(deviceId, id);
+        const other = await this.getBook(userId, id);
         if (!other) continue;
         for (const source of other.sources) {
           await this.addSource(keepId, {
@@ -553,30 +577,30 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         if (other.notes) {
           check(await db.from('books').update({ notes: other.notes }).eq('id', keepId).is('notes', null), 'books.merge_notes');
         }
-        check(await db.from('books').delete().eq('id', id).eq('device_id', deviceId), 'books.merge_delete');
+        check(await db.from('books').delete().eq('id', id).eq('user_id', userId), 'books.merge_delete');
       }
-      return this.getBook(deviceId, keepId);
+      return this.getBook(userId, keepId);
     },
 
-    async listTags(deviceId) {
-      return check(await db.from('tags').select('id, name').eq('device_id', deviceId).order('name'), 'tags.list') as Tag[];
+    async listTags(userId) {
+      return check(await db.from('tags').select('id, name').eq('user_id', userId).order('name'), 'tags.list') as Tag[];
     },
 
-    async createTag(deviceId, name) {
-      const { data, error } = await db.from('tags').insert({ device_id: deviceId, name }).select('id, name').single<Tag>();
+    async createTag(userId, name) {
+      const { data, error } = await db.from('tags').insert({ user_id: userId, name }).select('id, name').single<Tag>();
       if (!error && data) return data;
       if (error?.code !== UNIQUE_VIOLATION) throw new Error(`tags.insert failed: ${error?.message}`);
-      const existing = (await this.listTags(deviceId)).find((tag) => tag.name.toLowerCase() === name.toLowerCase());
+      const existing = (await this.listTags(userId)).find((tag) => tag.name.toLowerCase() === name.toLowerCase());
       if (!existing) throw new Error('tags.insert conflicted but no tag was found');
       return existing;
     },
 
-    async renameTag(deviceId, tagId, name) {
+    async renameTag(userId, tagId, name) {
       const { data, error } = await db
         .from('tags')
         .update({ name })
         .eq('id', tagId)
-        .eq('device_id', deviceId)
+        .eq('user_id', userId)
         .select('id, name')
         .maybeSingle<Tag>();
       if (error?.code === UNIQUE_VIOLATION) throw new TagNameTakenError();
@@ -584,21 +608,21 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return data;
     },
 
-    async deleteTag(deviceId, tagId) {
-      const rows = check(await db.from('tags').delete().eq('id', tagId).eq('device_id', deviceId).select('id'), 'tags.delete') as {
+    async deleteTag(userId, tagId) {
+      const rows = check(await db.from('tags').delete().eq('id', tagId).eq('user_id', userId).select('id'), 'tags.delete') as {
         id: string;
       }[];
       return rows.length > 0;
     },
 
-    async setBookTags(deviceId, bookId, tagIds) {
+    async setBookTags(userId, bookId, tagIds) {
       const book = check(
-        await db.from('books').select('id').eq('id', bookId).eq('device_id', deviceId).is('deleted_at', null).maybeSingle(),
+        await db.from('books').select('id').eq('id', bookId).eq('user_id', userId).is('deleted_at', null).maybeSingle(),
         'books.owner',
       );
       if (!book) return;
       const owned = tagIds.length
-        ? (check(await db.from('tags').select('id').eq('device_id', deviceId).in('id', tagIds), 'tags.owned') as { id: string }[]).map(
+        ? (check(await db.from('tags').select('id').eq('user_id', userId).in('id', tagIds), 'tags.owned') as { id: string }[]).map(
             (tag) => tag.id,
           )
         : [];

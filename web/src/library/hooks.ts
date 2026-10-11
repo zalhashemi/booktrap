@@ -1,40 +1,38 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Book, DeviceCredentials, Job, Tag, UpdateBookRequest } from '@booktrap/shared';
+import type { Book, Job, Tag, UpdateBookRequest } from '@booktrap/shared';
 import { api } from '../api/client';
-import { useDevice } from '../device/device-context';
+import { useUser } from '../account/account-context';
 
 /**
- * Every library query is keyed by device: restoring a backup code switches devices, and one
- * shelf's cached books must never be shown (or written) under another's credentials.
+ * Every library query is keyed by user: logging in or out switches users, and one shelf's cached
+ * books must never be shown (or written) under another's session.
  */
 const keys = {
-  jobs: (deviceId: string) => ['jobs', deviceId] as const,
-  books: (deviceId: string) => ['books', deviceId] as const,
-  tags: (deviceId: string) => ['tags', deviceId] as const,
+  jobs: (userId: string) => ['jobs', userId] as const,
+  books: (userId: string) => ['books', userId] as const,
+  tags: (userId: string) => ['tags', userId] as const,
 };
 
 const isActive = (job: Job) => job.status === 'queued' || job.status === 'running';
 const doneCount = (jobs: Job[]) => jobs.reduce((sum, job) => sum + job.items.filter((item) => item.status === 'done').length, 0);
 
-function useCredentials(): DeviceCredentials {
-  const { session } = useDevice();
-  if (!session) throw new Error('library hooks need a ready device session');
-  return session.credentials;
+function useUserId(): string {
+  return useUser().id;
 }
 
 /** Recent jobs. Polls every 2s while anything is still being read, then stops. */
 export function useJobs() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const jobsKey = keys.jobs(credentials.deviceId);
+  const jobsKey = keys.jobs(userId);
   return useQuery({
     queryKey: jobsKey,
     queryFn: async ({ signal }) => {
       const previous = queryClient.getQueryData<Job[]>(jobsKey);
-      const { jobs } = await api.listJobs(credentials, signal);
+      const { jobs } = await api.listJobs(signal);
       // Books arrive as items finish: refresh the shelf only when another item has finished.
       if (previous === undefined || doneCount(jobs) !== doneCount(previous)) {
-        void queryClient.invalidateQueries({ queryKey: keys.books(credentials.deviceId) });
+        void queryClient.invalidateQueries({ queryKey: keys.books(userId) });
       }
       return jobs;
     },
@@ -43,11 +41,11 @@ export function useJobs() {
 }
 
 export function useCreateJob() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const jobsKey = keys.jobs(credentials.deviceId);
+  const jobsKey = keys.jobs(userId);
   return useMutation({
-    mutationFn: (urls: string[]) => api.createJob(credentials, urls),
+    mutationFn: (urls: string[]) => api.createJob(urls),
     onSuccess: (job) => {
       queryClient.setQueryData<Job[]>(jobsKey, (jobs = []) => [job, ...jobs.filter((existing) => existing.id !== job.id)]);
       void queryClient.invalidateQueries({ queryKey: jobsKey });
@@ -56,11 +54,11 @@ export function useCreateJob() {
 }
 
 export function useRetryItem() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const jobsKey = keys.jobs(credentials.deviceId);
+  const jobsKey = keys.jobs(userId);
   return useMutation({
-    mutationFn: ({ jobId, itemId }: { jobId: string; itemId: string }) => api.retryItem(credentials, jobId, itemId),
+    mutationFn: ({ jobId, itemId }: { jobId: string; itemId: string }) => api.retryItem(jobId, itemId),
     onSuccess: (job) => {
       queryClient.setQueryData<Job[]>(jobsKey, (jobs = []) => jobs.map((existing) => (existing.id === job.id ? job : existing)));
       void queryClient.invalidateQueries({ queryKey: jobsKey });
@@ -69,23 +67,23 @@ export function useRetryItem() {
 }
 
 export function useBooks() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   return useQuery({
-    queryKey: keys.books(credentials.deviceId),
-    queryFn: async ({ signal }) => (await api.listBooks(credentials, signal)).books,
+    queryKey: keys.books(userId),
+    queryFn: async ({ signal }) => (await api.listBooks(signal)).books,
   });
 }
 
 export function useTags() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   return useQuery({
-    queryKey: keys.tags(credentials.deviceId),
-    queryFn: async ({ signal }) => (await api.listTags(credentials, signal)).tags,
+    queryKey: keys.tags(userId),
+    queryFn: async ({ signal }) => (await api.listTags(signal)).tags,
   });
 }
 
-function editBooks(queryClient: QueryClient, deviceId: string, change: (books: Book[]) => Book[]) {
-  queryClient.setQueryData<Book[]>(keys.books(deviceId), (books) => (books ? change(books) : books));
+function editBooks(queryClient: QueryClient, userId: string, change: (books: Book[]) => Book[]) {
+  queryClient.setQueryData<Book[]>(keys.books(userId), (books) => (books ? change(books) : books));
 }
 
 /**
@@ -96,27 +94,26 @@ const latestEdit = new Map<string, number>();
 let editSeq = 0;
 
 export function useUpdateBook() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: UpdateBookRequest }) => api.updateBook(credentials, id, patch),
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateBookRequest }) => api.updateBook(id, patch),
     onMutate: async ({ id, patch }) => {
-      await queryClient.cancelQueries({ queryKey: keys.books(deviceId) });
+      await queryClient.cancelQueries({ queryKey: keys.books(userId) });
       // Only fields with no server-side consequences are applied early; the response is the truth.
       const early: Partial<Book> = {};
       if (patch.status) early.status = patch.status;
       if (patch.isNew === false) early.isNew = false;
       // Shelves are toggled with one tap in the book sheet, so they show at once too.
-      const before = queryClient.getQueryData<Book[]>(keys.books(deviceId))?.find((book) => book.id === id);
+      const before = queryClient.getQueryData<Book[]>(keys.books(userId))?.find((book) => book.id === id);
       if (patch.tagIds) {
         // From the shelves list, or the book's own tags for any shelf the list doesn't have yet.
-        const known = [...(queryClient.getQueryData<Tag[]>(keys.tags(deviceId)) ?? []), ...(before?.tags ?? [])];
+        const known = [...(queryClient.getQueryData<Tag[]>(keys.tags(userId)) ?? []), ...(before?.tags ?? [])];
         early.tags = patch.tagIds.map((tagId) => known.find((tag) => tag.id === tagId)).filter((tag): tag is Tag => tag !== undefined);
       }
       const seq = ++editSeq;
       latestEdit.set(id, seq);
-      editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === id ? { ...book, ...early } : book)));
+      editBooks(queryClient, userId, (books) => books.map((book) => (book.id === id ? { ...book, ...early } : book)));
       // Undo only this book's early fields, leaving any other change made meanwhile alone.
       return {
         seq,
@@ -124,7 +121,7 @@ export function useUpdateBook() {
           if (!before) return;
           const restore: Partial<Book> = {};
           for (const key of Object.keys(early) as (keyof Book)[]) Object.assign(restore, { [key]: before[key] });
-          editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === id ? { ...book, ...restore } : book)));
+          editBooks(queryClient, userId, (books) => books.map((book) => (book.id === id ? { ...book, ...restore } : book)));
         },
       };
     },
@@ -134,25 +131,24 @@ export function useUpdateBook() {
     },
     onSuccess: (updated, { id }, context) => {
       if (context && latestEdit.get(id) !== context.seq) return;
-      editBooks(queryClient, deviceId, (books) => books.map((book) => (book.id === updated.id ? updated : book)));
+      editBooks(queryClient, userId, (books) => books.map((book) => (book.id === updated.id ? updated : book)));
     },
   });
 }
 
 export function useDeleteBooks() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: (ids: string[]) => api.deleteBooks(credentials, ids),
+    mutationFn: (ids: string[]) => api.deleteBooks(ids),
     onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey: keys.books(deviceId) });
-      const removed = (queryClient.getQueryData<Book[]>(keys.books(deviceId)) ?? []).filter((book) => ids.includes(book.id));
-      editBooks(queryClient, deviceId, (books) => books.filter((book) => !ids.includes(book.id)));
+      await queryClient.cancelQueries({ queryKey: keys.books(userId) });
+      const removed = (queryClient.getQueryData<Book[]>(keys.books(userId)) ?? []).filter((book) => ids.includes(book.id));
+      editBooks(queryClient, userId, (books) => books.filter((book) => !ids.includes(book.id)));
       // Put back only these books: another delete made meanwhile stays deleted.
       return {
         rollback: () =>
-          editBooks(queryClient, deviceId, (books) =>
+          editBooks(queryClient, userId, (books) =>
             [...books, ...removed.filter((book) => !books.some((other) => other.id === book.id))].sort((a, b) =>
               b.createdAt.localeCompare(a.createdAt),
             ),
@@ -164,26 +160,25 @@ export function useDeleteBooks() {
 }
 
 export function useRestoreBooks() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => api.restoreBooks(credentials, ids),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.books(credentials.deviceId) }),
+    mutationFn: (ids: string[]) => api.restoreBooks(ids),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.books(userId) }),
   });
 }
 
 export function useMarkAllSeen() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: () => api.markAllSeen(credentials),
+    mutationFn: () => api.markAllSeen(),
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: keys.books(deviceId) });
-      const wereNew = new Set((queryClient.getQueryData<Book[]>(keys.books(deviceId)) ?? []).filter((book) => book.isNew).map((book) => book.id));
-      editBooks(queryClient, deviceId, (books) => books.map((book) => ({ ...book, isNew: false })));
+      await queryClient.cancelQueries({ queryKey: keys.books(userId) });
+      const wereNew = new Set((queryClient.getQueryData<Book[]>(keys.books(userId)) ?? []).filter((book) => book.isNew).map((book) => book.id));
+      editBooks(queryClient, userId, (books) => books.map((book) => ({ ...book, isNew: false })));
       return {
-        rollback: () => editBooks(queryClient, deviceId, (books) => books.map((book) => (wereNew.has(book.id) ? { ...book, isNew: true } : book))),
+        rollback: () => editBooks(queryClient, userId, (books) => books.map((book) => (wereNew.has(book.id) ? { ...book, isNew: true } : book))),
       };
     },
     onError: (_error, _vars, context) => context?.rollback(),
@@ -191,25 +186,24 @@ export function useMarkAllSeen() {
 }
 
 export function useMergeBooks() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: ({ keepId, mergeIds }: { keepId: string; mergeIds: string[] }) => api.mergeBooks(credentials, keepId, mergeIds),
+    mutationFn: ({ keepId, mergeIds }: { keepId: string; mergeIds: string[] }) => api.mergeBooks(keepId, mergeIds),
     onSuccess: (merged, { mergeIds }) =>
-      editBooks(queryClient, deviceId, (books) =>
+      editBooks(queryClient, userId, (books) =>
         books.filter((book) => !mergeIds.includes(book.id)).map((book) => (book.id === merged.id ? merged : book)),
       ),
   });
 }
 
 export function useCreateTag() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => api.createTag(credentials, name),
+    mutationFn: (name: string) => api.createTag(name),
     onSuccess: (tag) => {
-      queryClient.setQueryData<Tag[]>(keys.tags(credentials.deviceId), (tags = []) =>
+      queryClient.setQueryData<Tag[]>(keys.tags(userId), (tags = []) =>
         (tags.some((existing) => existing.id === tag.id) ? tags : [...tags, tag]).sort((a, b) => a.name.localeCompare(b.name)),
       );
     },
@@ -217,14 +211,13 @@ export function useCreateTag() {
 }
 
 export function useRenameTag() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => api.renameTag(credentials, id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.renameTag(id, name),
     onSuccess: (tag) => {
-      queryClient.setQueryData<Tag[]>(keys.tags(deviceId), (tags = []) => tags.map((existing) => (existing.id === tag.id ? tag : existing)));
-      editBooks(queryClient, deviceId, (books) =>
+      queryClient.setQueryData<Tag[]>(keys.tags(userId), (tags = []) => tags.map((existing) => (existing.id === tag.id ? tag : existing)));
+      editBooks(queryClient, userId, (books) =>
         books.map((book) => ({ ...book, tags: book.tags.map((existing) => (existing.id === tag.id ? tag : existing)) })),
       );
     },
@@ -232,14 +225,13 @@ export function useRenameTag() {
 }
 
 export function useDeleteTag() {
-  const credentials = useCredentials();
+  const userId = useUserId();
   const queryClient = useQueryClient();
-  const { deviceId } = credentials;
   return useMutation({
-    mutationFn: (id: string) => api.deleteTag(credentials, id),
+    mutationFn: (id: string) => api.deleteTag(id),
     onSuccess: (_result, id) => {
-      queryClient.setQueryData<Tag[]>(keys.tags(deviceId), (tags = []) => tags.filter((tag) => tag.id !== id));
-      editBooks(queryClient, deviceId, (books) => books.map((book) => ({ ...book, tags: book.tags.filter((tag) => tag.id !== id) })));
+      queryClient.setQueryData<Tag[]>(keys.tags(userId), (tags = []) => tags.filter((tag) => tag.id !== id));
+      editBooks(queryClient, userId, (books) => books.map((book) => ({ ...book, tags: book.tags.filter((tag) => tag.id !== id) })));
     },
   });
 }

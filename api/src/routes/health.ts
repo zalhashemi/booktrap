@@ -1,23 +1,23 @@
 import type { FastifyInstance } from 'fastify';
 import { ERROR_CODES, type HealthResponse } from '@booktrap/shared';
 import { errorBody } from '../errors';
-import type { DeviceRepo } from '../repo/types';
+import type { UserDirectory } from '../users/types';
 
 export const API_VERSION = '0.1.0';
 
-export function healthRoutes(app: FastifyInstance, repo: DeviceRepo) {
+export function healthRoutes(app: FastifyInstance, users: UserDirectory) {
   // Liveness: the process is up. Never touches the database.
   app.get('/health', { config: { rateLimit: false } }, async (): Promise<HealthResponse> => ({
     ok: true,
     service: 'booktrap-api',
     version: API_VERSION,
-    storage: repo.kind,
+    storage: users.kind,
   }));
 
   // Readiness: the database answers. Rate limited, since every call reaches the database.
   app.get('/health/ready', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
-      await repo.ping();
+      await users.ping();
       return { ok: true };
     } catch (error) {
       request.log.error({ err: error }, 'readiness check failed');
