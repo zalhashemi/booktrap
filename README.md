@@ -60,21 +60,15 @@ The privacy policy and terms are at `/privacy` and `/terms` (`web/src/routes/Leg
 Readers delete their own account (or guest shelf) in Settings, Your data (`DELETE /v1/account`). Other requests arrive at the contact address:
 
 - **A reader asking about their data**: find them by email under Authentication, Users in the Supabase dashboard. Their user id owns their rows (`books.user_id` and so on).
-- **A creator asking for removal** (promised within 14 days): in the Supabase SQL Editor, for each post id (`<platform>` is `tiktok` or `instagram`):
-
-  ```sql
-  delete from post_cache  where source_platform = '<platform>' and source_post_id = '<post id>';
-  delete from book_sources where source_platform = '<platform>' and source_post_id = '<post id>';
-  ```
-
-  For a whole handle, find its posts first: `select distinct source_platform, source_post_id from book_sources where creator_handle = '<handle>';` (and the same on `post_cache` with `post->>'creatorHandle'`). Books stay on readers' shelves without that source. A post can come back if someone pastes it again; if a creator asks for that not to happen, the platform's own privacy settings are the reliable answer.
+- **A creator asking for removal** (promised within 14 days): open `/admin` in the web app, enter the admin key (`ADMIN_TOKEN` in the API's environment), and paste each post's link under "Take down a link". Or from `api/`: `npx tsx --env-file=.env scripts/takedown.ts <post link>` (`--dry-run` first shows how far it reached). A taken-down post leaves every shelf and is never read again, whoever pastes it. Books seen only in it are deleted, unless a reader changed them (status, notes or shelves): those stay without the source. For a whole handle, find its posts first: `select distinct source_platform, source_post_id, source_url from book_sources where creator_handle = '<handle>';`.
+- **Reports** from readers ("Report this post" in a book's sources) wait under Open on `/admin`, grouped by post, with how many shelves each post is on. Take down or Dismiss. The Auto-blocked tab lists posts the content check skipped (explicit or graphic, not books, or that Claude declined); Unblock marks a wrong verdict as a book post, and the next paste shelves its books without reading it again.
 
 ## Deploy
 
 Three services: **Supabase** (database, already set up), **Render** (the API, `render.yaml`) and **Cloudflare Pages** (the web app). Pushing to `main` on GitHub runs CI and redeploys both.
 
-1. **Supabase**: every file in `supabase/migrations/` must have been run in order (0001 to 0008).
-2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` is generated. `region` in `render.yaml` matches the Supabase project (Singapore); a Render service can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
+1. **Supabase**: every file in `supabase/migrations/` must have been run in order (0001 to 0010).
+2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` and `ADMIN_TOKEN` (the key for `/admin`; copy it from the dashboard) are generated. `region` in `render.yaml` matches the Supabase project (Singapore); a Render service can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
 3. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this GitHub repo.
    - Build command: `npm ci && npm run build -w @booktrap/web`
    - Build output directory: `web/dist`

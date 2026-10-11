@@ -83,7 +83,7 @@ API service  (Render, Node + TypeScript recommended)
 7. Record per-link status: `queued`, `fetching`, `extracting`, `verifying`, `done`, `failed` (with a human-readable reason).
 
 ### Limits and cost control
-- Max links per submission (30) and videos per collection (25 free; `MAX_VIDEOS_PER_COLLECTION` 100 is the absolute ceiling for a future paid tier). Collection videos count against the daily caps; the collection link itself doesn't.
+- Every size and count limit lives in `shared/src/limits.ts` (Phase 8): links per paste (30), pasted text, notes, shelves, books per account (5,000; 500 for a guest), books per PDF (1,000), caption and hashtags sent to Claude, job history (30 days) and reports (20 a day). Videos per collection (25 free; `MAX_VIDEOS_PER_COLLECTION` 100 is the absolute ceiling for a future paid tier). Collection videos count against the daily caps; the collection link itself doesn't.
 - Concurrency limit on the API; retry with backoff on scraper failures.
 - Per-device daily cap on processed links, configurable by env var; Instagram and TikTok links count against the same caps and budget. Cache results by platform + post ID so the same post is never paid for twice.
 
@@ -119,6 +119,8 @@ Rules to put in the prompt:
 - Deduplicate within a single post.
 
 Store `confidence` and `evidence` with the source, for reference only. They never flag or block a book.
+
+**Content check (Phase 8):** the same output carries `content`: `books`, `not_books`, `explicit_non_book` or `graphic_violence`. Adult, romance and dark covers and talk about adult books are books. Only a post whose own imagery is explicit or gory (not a cover) is skipped: nothing from it is added, and the verdict is cached. A refusal is skipped and cached too. Readers can report a post from a book's sources, and the operator takes posts down from the hidden admin page or `api/scripts/takedown.ts`.
 
 ---
 

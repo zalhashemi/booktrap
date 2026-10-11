@@ -22,6 +22,9 @@ services:
         value: "1"
       - key: IP_HASH_KEY
         generateValue: true
+      # The hidden admin page's key: copy it from the dashboard to open /admin.
+      - key: ADMIN_TOKEN
+        generateValue: true
       # Secrets: entered in the Render dashboard, never committed.
       - key: SUPABASE_URL
         sync: false

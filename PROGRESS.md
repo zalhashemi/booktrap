@@ -11,7 +11,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
 | 7 | Accounts (Supabase Auth) | Done (2026-10-11): built, code-reviewed and tested live, including the email-code flows. Real users need a verified email domain first (Phase 10) |
-| 8 | Limits, moderation, report and takedown | Not started |
+| 8 | Limits, moderation, report and takedown | Built and unit-tested (2026-10-11); code review, migration 0010 in Supabase and the live Playwright checks to come |
 | 9 | Scale, storage and cost | Not started |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
 
@@ -264,6 +264,41 @@ Tests: 164 API, 55 shared, 32 web. The retest live: a guest's reel merged into t
 Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymous sign-ins and Email are on; Site URL and redirect `http://localhost:5180/**` are set. `{{ .Token }}` is needed in both the Magic Link and the Change Email Address templates (saving a guest's shelf sends the latter).
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
+
+## Phase 8: Limits, moderation, report and takedown (in progress, 2026-10-11)
+
+Built (`9172e99`):
+- **Limits** in `shared/src/limits.ts` (`LIMITS`, `MEDIA_LIMITS`, `bookLimitFor`), read by the API and the web app:
+  - body 128 KB (was 256 KB)
+  - 30 links per paste: was an env var the web app didn't check, so a 31-link paste reached the server and was refused there; the env var is gone and the request schema says 30
+  - 20,000 characters of pasted text are read for links
+  - title 500, author 300, notes 5,000, shelf name 60, 50 shelves per book (unchanged, now one constant each)
+  - 100 shelves per user (new; an existing name still answers)
+  - 5,000 books per account, 500 per guest (new): a paste is refused when the shelf is full, before anything is paid for; a post that fills it adds what fits, still merges repeat sightings, and says so on the item
+  - 1,000 books per PDF (new; the row says to export This view or Selected)
+  - captions cut to 5,000 characters and 30 hashtags before extraction (new; bounds a read's cost)
+  - finished jobs deleted after 30 days by the 6-hourly purge (new)
+  - 20 reports a day per reader, notes up to 500 characters
+  - media and cover sizes unchanged (moved to shared)
+- **Moderation:**
+  - The extraction's structured output has `content: books | not_books | explicit_non_book | graphic_violence`, from the same call. The prompt says adult, romance and dark covers and talk about adult books are books, and sexual content involving a possible minor is always explicit.
+  - A skipped post adds nothing, even books it found. Its verdict and books are cached in `post_cache.extracted_json`, so a re-paste is free and an unblock can shelve them without paying.
+  - A Claude refusal is now a skipped post (`refused`) and is cached, so it's never paid for twice.
+  - Job items carry `blocked: explicit | graphic | refused | removed`.
+- **Reports and takedown:**
+  - `supabase/migrations/0010_moderation.sql`:
+    - `job_items.blocked`, `reports` (one open report per reader per post; Other needs a note; kept without the reader if they delete their account), `removed_posts` (never expires)
+    - `post_reach`, `take_down_post` (removes the post everywhere; books seen only in it are deleted unless the reader changed status, notes or shelves; closes its reports; safe to run twice), `purge_old_jobs`
+    - `posts_since` leaves out removed items, so a taken-down post doesn't use up the daily limit
+    - Tested in PGlite on top of 0001-0009 as `service_role`, 10 checks, including the takedown keeping edited books, `anon`/`authenticated` refused everything, and a second run changing nothing
+  - API: `POST /v1/reports` (posts on the reader's own shelf only). `/admin/posts`, `/admin/takedown` (by post, or by link for email requests; short links are followed), `/admin/dismiss` and `/admin/unblock`, all behind `ADMIN_TOKEN` (32+ characters, compared in constant time). The routes don't exist when it's unset. `api/scripts/takedown.ts <link> [--dry-run]`.
+  - Web:
+    - The book sheet's sources have a "more" menu (Open post, Copy link, Report this post) that opens the report dialog. Esc closes the menu or the dialog, not the sheet.
+    - Skipped posts fold into "N posts skipped" at the end of the job panel, and skipped videos inside a collection's card.
+    - The paste box shows the 30-link limit before sending.
+    - `/admin` (loaded only when opened, not precached, `noindex`, the key kept in the tab only): Open, Auto-blocked, Taken down and Dismissed tabs. The list sits beside the chosen post's detail. Take down has a two-step confirmation naming what goes, and there's a "Take down a link" field for email requests.
+    - The privacy page explains reports and the content check, and how a removed post's books are handled.
+- Tests: 62 shared, 182 API, 32 web.
 
 ## 7c: Deploy (live on 2026-10-10, then taken offline)
 
