@@ -16,6 +16,8 @@ import './styles/index.css';
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
+  // The hidden admin page: its own small layout, loaded only when opened, linked from nowhere.
+  { path: 'admin', lazy: () => import('./routes/AdminPage').then(({ AdminPage }) => ({ Component: AdminPage })) },
   {
     element: <AppShell />,
     children: [

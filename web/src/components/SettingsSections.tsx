@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { PencilSimple, Trash } from '@phosphor-icons/react';
+import { LIMITS } from '@booktrap/shared';
 import { ApiRequestError } from '../api/client';
 import { useCreateTag, useDeleteTag, useRenameTag, useTags } from '../library/hooks';
 import { Button } from './Button';
@@ -59,7 +60,7 @@ export function ShelvesSection() {
           <input
             id={inputId}
             value={name}
-            maxLength={60}
+            maxLength={LIMITS.shelfNameChars}
             onChange={(event) => setName(event.target.value)}
             placeholder="Shelf name"
             className="field mt-2"
@@ -109,7 +110,7 @@ function TagRow({ id, name, onError }: { id: string; name: string; onError: (mes
             id={inputId}
             autoFocus
             value={value}
-            maxLength={60}
+            maxLength={LIMITS.shelfNameChars}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {

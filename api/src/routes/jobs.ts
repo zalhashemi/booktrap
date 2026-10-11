@@ -3,7 +3,9 @@ import type { FastifyInstance, FastifyRequest, preHandlerAsyncHookHandler } from
 import {
   CreateJobRequestSchema,
   ERROR_CODES,
+  LIMITS,
   PRIVATE_COLLECTION_MESSAGE,
+  bookLimitFor,
   linkKey,
   parseSourceUrl,
   type Job,
@@ -17,7 +19,6 @@ import type { JobQueue } from '../pipeline/queue';
 import { DailyCapError, type ItemKind, type JobWithItems, type LibraryStore } from '../store/types';
 
 export interface JobRouteOptions {
-  maxLinksPerSubmission: number;
   dailyCapPerUser: number;
   dailyCapGuest: number;
   dailyCapPerIp: number;
@@ -44,6 +45,7 @@ export function toJobResponse(job: JobWithItems): Job {
       booksFound: item.booksFound,
       parentItemId: item.parentItemId,
       note: item.note,
+      blocked: item.blocked,
     })),
   };
 }
@@ -67,6 +69,9 @@ export function jobRoutes(
     async (request, reply): Promise<Job> => {
       const user = request.user!;
       const cap = capOf(request);
+      const tooMany = `You can add up to ${LIMITS.linksPerPaste} links at a time.`;
+      const raw = (request.body as { urls?: unknown } | undefined)?.urls;
+      if (Array.isArray(raw) && raw.length > LIMITS.linksPerPaste) throw new HttpError(400, ERROR_CODES.badRequest, tooMany);
       const body = CreateJobRequestSchema.safeParse(request.body);
       if (!body.success) throw new HttpError(400, ERROR_CODES.badRequest, 'Send a list of TikTok or Instagram links.');
 
@@ -90,8 +95,12 @@ export function jobRoutes(
         seen.add(key);
         return [link!];
       });
-      if (unique.length > options.maxLinksPerSubmission) {
-        throw new HttpError(400, ERROR_CODES.badRequest, `You can add up to ${options.maxLinksPerSubmission} links at a time.`);
+
+      // A full shelf would pay to read posts whose books can't be added.
+      const bookLimit = bookLimitFor(user.isAnonymous);
+      if ((await store.countBooks(user.id)) >= bookLimit) {
+        const more = user.isAnonymous ? ` Save your shelf to keep up to ${LIMITS.booksPerAccount.toLocaleString('en-US')}.` : ' Delete some to add more.';
+        throw new HttpError(409, ERROR_CODES.limitReached, `Your shelf is full (${bookLimit.toLocaleString('en-US')} books).${more}`);
       }
 
       if (options.killSwitch || !options.pipelineConfigured) throw new HttpError(503, ERROR_CODES.paused, PAUSED_MESSAGE);

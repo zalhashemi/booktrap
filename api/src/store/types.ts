@@ -1,4 +1,4 @@
-import type { Book, BookStatus, Evidence, JobItemStatus, SourcePlatform, Tag } from '@booktrap/shared';
+import type { BlockedKind, Book, BookStatus, Evidence, JobItemStatus, PostReach, ReportReason, SourcePlatform, Tag } from '@booktrap/shared';
 import type { ExtractedBook } from '../pipeline/extract';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -27,6 +27,8 @@ export interface JobItemRecord {
   /** The collection item this video was expanded from. */
   parentItemId: string | null;
   note: string | null;
+  /** Why nothing from the post was added (moderation or a takedown); null for an ordinary item. */
+  blocked: BlockedKind | null;
   createdAt: string;
 }
 
@@ -48,10 +50,55 @@ export interface CachedPostMeta {
   thumbnailUrl: string | null;
 }
 
+/**
+ * The extraction's verdict on a post. Explicit and graphic posts (that aren't about books) are skipped,
+ * as is a post Claude declined to read (refused). Rows cached before moderation are treated as books.
+ */
+export type PostContent = 'books' | 'not_books' | 'explicit_non_book' | 'graphic_violence' | 'refused';
+
 export interface CachedPost {
   post: CachedPostMeta;
+  /** Kept even for a skipped post, so an operator's unblock can shelve them without paying again. */
   books: ExtractedBook[];
   model: string;
+  content: PostContent;
+}
+
+/** A skipped post as the admin page lists it (from the post cache). */
+export interface BlockedPostRecord {
+  post: CachedPostMeta;
+  content: PostContent;
+  fetchedAt: string;
+}
+
+export interface NewReport {
+  platform: SourcePlatform;
+  postId: string;
+  url: string;
+  creatorHandle: string | null;
+  reason: ReportReason;
+  note: string | null;
+}
+
+export interface ReportRecord extends NewReport {
+  id: string;
+  status: 'open' | 'taken_down' | 'dismissed';
+  createdAt: string;
+}
+
+export interface RemovedPostRecord {
+  platform: SourcePlatform;
+  postId: string;
+  url: string | null;
+  creatorHandle: string | null;
+  reason: 'report' | 'request' | 'admin';
+  removedAt: string;
+}
+
+export interface TakedownResult {
+  sourcesRemoved: number;
+  booksDeleted: number;
+  booksKept: number;
 }
 
 export interface NewBook {
@@ -139,7 +186,7 @@ export interface LibraryStore {
   getItem(itemId: string): Promise<JobItemRecord | null>;
   updateItem(
     itemId: string,
-    patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'platform' | 'postId' | 'kind' | 'attempts' | 'note'>>,
+    patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'platform' | 'postId' | 'kind' | 'attempts' | 'note' | 'blocked'>>,
   ): Promise<void>;
   /** Items that were queued or mid-flight when the process stopped (free hosting sleeps). */
   unfinishedItems(): Promise<JobItemRecord[]>;
@@ -163,6 +210,8 @@ export interface LibraryStore {
   /** False when this post (platform + id) is already a source of the book. */
   addSource(bookId: string, source: NewSource): Promise<boolean>;
   listBooks(userId: string): Promise<Book[]>;
+  /** Live books on the shelf (the Undo bin doesn't count), for the per-account book limit. */
+  countBooks(userId: string): Promise<number>;
 
   // Phase 3: the reader's own edits. Every method is scoped to the user; unknown ids are ignored.
   getBook(userId: string, bookId: string): Promise<Book | null>;
@@ -182,6 +231,7 @@ export interface LibraryStore {
   /** Null when the tag doesn't exist; throws TagNameTakenError when another tag has the name. */
   renameTag(userId: string, tagId: string, name: string): Promise<Tag | null>;
   deleteTag(userId: string, tagId: string): Promise<boolean>;
+  countTags(userId: string): Promise<number>;
   /** Replaces a book's tags. Tag ids that aren't this user's are ignored. */
   setBookTags(userId: string, bookId: string, tagIds: string[]): Promise<void>;
   /**
@@ -204,6 +254,42 @@ export interface LibraryStore {
    * network of jobs created before `ipHashBefore` (only today's caps need it). Returns how many of each.
    */
   expireRetention(cutoffs: { postCacheBefore: Date; ipHashBefore: Date }): Promise<{ posts: number; ipHashes: number }>;
+  /** Deletes finished jobs created before `before` (with their items). Returns how many. */
+  purgeOldJobs(before: Date): Promise<number>;
+
+  // Phase 8: moderation, reports and takedown.
+  /** A post taken down: never read or shelved again, whoever pastes it. */
+  isPostRemoved(platform: SourcePlatform, postId: string): Promise<boolean>;
+  /** The post as a source on one of the user's live books, or null when it isn't on their shelf. */
+  findOwnSource(userId: string, platform: SourcePlatform, postId: string): Promise<{ url: string; creatorHandle: string | null } | null>;
+  /** False when this reader already has an open report on the post (reporting again changes nothing). */
+  createReport(userId: string, report: NewReport): Promise<boolean>;
+  countReportsSince(userId: string, since: Date): Promise<number>;
+  listReports(status: 'open' | 'dismissed', limit: number): Promise<ReportRecord[]>;
+  countReports(status: 'open' | 'dismissed'): Promise<number>;
+  /** Closes the post's open reports without taking it down. Returns how many. */
+  dismissReports(platform: SourcePlatform, postId: string): Promise<number>;
+  listRemovedPosts(limit: number): Promise<RemovedPostRecord[]>;
+  countRemovedPosts(): Promise<number>;
+  /** Cached posts the content check skipped (explicit, graphic or refused). */
+  listBlockedPosts(limit: number): Promise<BlockedPostRecord[]>;
+  countBlockedPosts(): Promise<number>;
+  postReach(platform: SourcePlatform, postId: string): Promise<PostReach>;
+  /**
+   * Takes a post down everywhere: removed for good, its cached reading deleted, gone as a source from
+   * every shelf; books seen only in it are deleted unless the reader changed them (status, notes or
+   * shelves). Closes its open reports. Safe to run twice.
+   */
+  takeDownPost(
+    post: { platform: SourcePlatform; postId: string; url: string | null; creatorHandle: string | null },
+    reason: RemovedPostRecord['reason'],
+  ): Promise<TakedownResult>;
+  /**
+   * Undoes a block: a taken-down post can be read again (its books aren't restored), and a post the
+   * content check skipped is marked as books in the cache, so the next paste shelves it for free.
+   * False when the post was neither.
+   */
+  unblockPost(platform: SourcePlatform, postId: string): Promise<boolean>;
 }
 
 export interface BookPatch {

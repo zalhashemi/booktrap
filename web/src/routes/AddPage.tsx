@@ -1,8 +1,9 @@
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowBendLeftUp, ClipboardText, CloudSlash, LockSimple, Sparkle, X } from '@phosphor-icons/react';
+import { ArrowBendLeftUp, ClipboardText, CloudSlash, Info, LockSimple, Sparkle, X } from '@phosphor-icons/react';
 import {
   ERROR_CODES,
   FREE_VIDEOS_PER_COLLECTION,
+  LIMITS,
   PLATFORM_LABELS,
   PRIVATE_COLLECTION_MESSAGE,
   countUnreadableLinks,
@@ -40,10 +41,20 @@ export function AddPage() {
   const latestText = useRef('');
   // Links the reader took out of the preview; they stay in the text box but aren't sent.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
-  const found = useMemo(() => extractSourceLinks(text), [text]);
+  // Links are read from the first stretch of a huge paste only, so a pasted book never stalls typing.
+  const readable = text.length > LIMITS.pasteChars ? text.slice(0, LIMITS.pasteChars) : text;
+  const found = useMemo(() => extractSourceLinks(readable), [readable]);
   const links = found.filter((link) => link.kind !== 'private_collection' && !removed.has(linkKey(link)));
   const privateCollections = found.filter((link) => link.kind === 'private_collection');
-  const unreadable = useMemo(() => countUnreadableLinks(text), [text]);
+  const unreadable = useMemo(() => countUnreadableLinks(readable), [readable]);
+  // Said here, before sending: the server refuses more than a paste's worth.
+  const over = links.length - LIMITS.linksPerPaste;
+  const limitNote =
+    over > 0
+      ? `${links.length} links found. BookTrap reads up to ${LIMITS.linksPerPaste} at a time: set ${over} aside, or send the rest in a second paste.`
+      : text.length > LIMITS.pasteChars
+        ? `That’s a lot of text: BookTrap reads links from the first ${LIMITS.pasteChars.toLocaleString('en-US')} characters.`
+        : null;
   const createJob = useCreateJob();
   const user = useUser();
   const { openAuth } = useAuthSheet();
@@ -163,14 +174,21 @@ export function AddPage() {
               </div>
             )}
           </div>
-          <p
-            id={helpId}
-            className={`mt-2.5 flex min-h-6 items-center gap-1.5 text-sm ${links.length ? 'font-bold text-success-ink' : 'text-text-muted'}`}
-            aria-live="polite"
-          >
-            {links.length > 0 && <Sparkle size={16} weight="fill" aria-hidden="true" />}
-            {pasteNote ?? status ?? 'BookTrap picks the links out of anything you paste.'}
-          </p>
+          {limitNote && !pasteNote ? (
+            <p id={helpId} className="mt-2.5 flex min-h-6 items-start gap-1.5 text-sm font-bold text-note-ink" aria-live="polite">
+              <Info size={16} weight="fill" className="mt-0.5 shrink-0" aria-hidden="true" />
+              {limitNote}
+            </p>
+          ) : (
+            <p
+              id={helpId}
+              className={`mt-2.5 flex min-h-6 items-center gap-1.5 text-sm ${links.length ? 'font-bold text-success-ink' : 'text-text-muted'}`}
+              aria-live="polite"
+            >
+              {links.length > 0 && <Sparkle size={16} weight="fill" aria-hidden="true" />}
+              {pasteNote ?? status ?? 'BookTrap picks the links out of anything you paste.'}
+            </p>
+          )}
 
           {found.length > 0 && (
             <LinkPreview
@@ -201,7 +219,7 @@ export function AddPage() {
             </p>
           )}
 
-          <Button type="submit" disabled={links.length === 0 || createJob.isPending} className="mt-4 h-14 w-full text-[1.05rem]">
+          <Button type="submit" disabled={links.length === 0 || over > 0 || createJob.isPending} className="mt-4 h-14 w-full text-[1.05rem]">
             {createJob.isPending ? 'Sending…' : links.length > 1 ? `Catch books from ${links.length} links` : 'Catch books'}
           </Button>
           {createJob.isError && (

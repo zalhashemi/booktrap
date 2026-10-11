@@ -7,7 +7,7 @@ describe('memory store retention', () => {
   it('expires old cached posts and hashed networks, and keeps recent ones', async () => {
     const store = createMemoryLibraryStore();
     const post = { platform: 'tiktok' as const, postId: '1', url: 'u', kind: 'video' as const, creatorHandle: null, thumbnailUrl: null };
-    await store.putCachedPost('tiktok', '1', { post, books: [], model: 'm' });
+    await store.putCachedPost('tiktok', '1', { post, books: [], model: 'm', content: 'books' });
     await store.createJob(USER, 'ip-hash', [{ inputUrl: 'u', platform: 'tiktok', postId: '1', kind: 'video' }]);
 
     const past = new Date(Date.now() - 60_000);

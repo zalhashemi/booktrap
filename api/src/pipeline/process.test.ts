@@ -50,7 +50,7 @@ function makeDeps(store: LibraryStore, booksByPost: Record<string, ExtractedBook
   }));
   const extractBooks = vi.fn(async (input: { caption: string }) => {
     const id = Object.keys(booksByPost).find((key) => input.caption.includes(key)) ?? Object.keys(booksByPost)[0]!;
-    return { books: booksByPost[id]!, model: 'claude-opus-5-5', costUsd: 0.08, usage: { inputTokens: 1, outputTokens: 1 } };
+    return { books: booksByPost[id]!, content: 'books', model: 'claude-opus-5-5', costUsd: 0.08, usage: { inputTokens: 1, outputTokens: 1 } };
   });
   const verifyBook = vi.fn(async (title: string, author: string | null) => verified(title, author));
   const deps: PipelineDeps = {
@@ -445,6 +445,7 @@ describe('processItem with Instagram', () => {
       post: { platform: 'tiktok', postId: 'DeJvdqUjLd1', url: 'u', kind: 'video', creatorHandle: null, thumbnailUrl: null },
       books: [],
       model: 'm',
+      content: 'books',
     });
     await runJob(store, deps, [IG_CAROUSEL]);
     expect(fetchPost).toHaveBeenCalledTimes(1);
@@ -456,7 +457,7 @@ describe('processItem with Instagram', () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost } = makeDeps(store, {});
     const legacy = { postId: '7672440936101727519', url: URL_A, kind: 'video', caption: '', creatorHandle: 'reader', thumbnailUrl: null };
-    await store.putCachedPost('tiktok', '7672440936101727519', { post: legacy as never, books: [book('Babel', 'R. F. Kuang')], model: 'm' });
+    await store.putCachedPost('tiktok', '7672440936101727519', { post: legacy as never, books: [book('Babel', 'R. F. Kuang')], model: 'm', content: 'books' });
     const job = await runJob(store, deps, [URL_A]);
     expect(fetchPost).not.toHaveBeenCalled();
     expect(job.items[0]).toMatchObject({ status: 'done', booksFound: 1 });
@@ -567,5 +568,90 @@ describe('JobQueue', () => {
 
     expect(maxActive).toBe(2);
     expect(order.indexOf('end a1')).toBeLessThan(order.indexOf('start a2'));
+  });
+});
+
+describe('moderation and limits in the pipeline', () => {
+  const extractAs = (content: string, books: ExtractedBook[] = []) =>
+    vi.fn(async () => ({ books, content, model: 'm', costUsd: 0.06, usage: { inputTokens: 1, outputTokens: 1 } })) as never;
+
+  it('skips an explicit post: nothing added, cached as skipped, so a re-paste is free', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps, fetchPost } = makeDeps(store, {}, { extractBooks: extractAs('explicit_non_book', [book('Babel', 'R. F. Kuang')]) });
+    const job = await runJob(store, deps, [URL_A]);
+    expect(job.items[0]).toMatchObject({ status: 'done', booksFound: 0, blocked: 'explicit', error: null });
+    expect(await store.listBooks(USER)).toEqual([]);
+    // The verdict is cached with the books it found, so an unblock can shelve them without paying.
+    expect(await store.getCachedPost('tiktok', '7672440936101727519')).toMatchObject({ content: 'explicit_non_book', books: [{ title: 'Babel' }] });
+
+    const again = await runJob(store, deps, [URL_A]);
+    expect(fetchPost).toHaveBeenCalledTimes(1);
+    expect(again.items[0]).toMatchObject({ blocked: 'explicit' });
+  });
+
+  it('skips graphic posts and posts Claude declined, and records what they cost', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, {}, { extractBooks: extractAs('graphic_violence') });
+    expect((await runJob(store, deps, [URL_A])).items[0]).toMatchObject({ blocked: 'graphic' });
+    deps.extractBooks = extractAs('refused');
+    expect((await runJob(store, deps, [URL_B])).items[0]).toMatchObject({ status: 'done', blocked: 'refused', booksFound: 0 });
+    expect(await store.spendSince(new Date(0))).toBeCloseTo(0.13);
+  });
+
+  it('treats ordinary posts with no books as "no books found", not skipped', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, {}, { extractBooks: extractAs('not_books') });
+    expect((await runJob(store, deps, [URL_A])).items[0]).toMatchObject({ status: 'done', booksFound: 0, blocked: null });
+  });
+
+  it('never reads a taken-down post, and it stops counting against the daily cap', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps, fetchPost } = makeDeps(store, { x: [book('Babel', null)] });
+    await store.takeDownPost({ platform: 'tiktok', postId: '7672440936101727519', url: URL_A, creatorHandle: 'reader' }, 'request');
+    const job = await runJob(store, deps, [URL_A]);
+    expect(job.items[0]).toMatchObject({ status: 'done', blocked: 'removed', booksFound: 0 });
+    expect(fetchPost).not.toHaveBeenCalled();
+    expect(await store.countItemsSince({ userId: USER }, new Date(0))).toBe(0);
+  });
+
+  it('shelves an unblocked post from the cache without paying again', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps, fetchPost } = makeDeps(store, {}, { extractBooks: extractAs('explicit_non_book', [book('Babel', 'R. F. Kuang')]) });
+    await runJob(store, deps, [URL_A]);
+    expect(await store.unblockPost('tiktok', '7672440936101727519')).toBe(true);
+    const job = await runJob(store, deps, [URL_A]);
+    expect(job.items[0]).toMatchObject({ blocked: null, booksFound: 1 });
+    expect((await store.listBooks(USER)).map((b) => b.title)).toEqual(['Babel']);
+    expect(fetchPost).toHaveBeenCalledTimes(1);
+    expect(await store.unblockPost('tiktok', 'never-seen')).toBe(false);
+  });
+
+  it('stops adding books at a guest’s limit, still merges repeats, and says so', async () => {
+    const store = createMemoryLibraryStore();
+    for (let i = 0; i < 499; i++) {
+      await store.insertBook(USER, { title: `Filler ${i}`, author: null, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, verified: false, normalizedKey: `filler ${i}` });
+    }
+    const isGuest = vi.fn(async () => true);
+    const { deps } = makeDeps(store, { x: [book('Filler 3', null), book('Babel', null), book('Circe', null), book('Piranesi', null)] }, { isGuest });
+    const job = await runJob(store, deps, [URL_A]);
+    expect(await store.countBooks(USER)).toBe(500);
+    expect(job.items[0]!.note).toBe('Your shelf is full (500 books), so 2 books from this post weren’t added. Save your shelf to keep up to 5,000.');
+    // The repeat sighting still became a source of the book already there.
+    const filler = (await store.listBooks(USER)).find((b) => b.title === 'Filler 3')!;
+    expect(filler.sources).toHaveLength(1);
+    expect(isGuest).toHaveBeenCalledWith(USER);
+  });
+
+  it('cuts long captions and hashtag lists before they reach Claude', async () => {
+    const { extractBooks: realExtract } = await import('./extract');
+    const parse = vi.fn(async () => ({ stop_reason: 'end_turn', model: 'm', usage: { input_tokens: 1, output_tokens: 1 }, parsed_output: { content: 'books', books: [] } }));
+    await realExtract(
+      { platform: 'tiktok', kind: 'video', caption: 'x'.repeat(9000), hashtags: Array.from({ length: 50 }, (_, i) => `tag${i}`), transcript: null, images: [] },
+      { client: { beta: { messages: { parse } } } as never, model: 'm', effort: 'medium' },
+    );
+    const text = (parse.mock.calls[0] as unknown as [{ messages: { content: { text?: string }[] }[] }])[0].messages[0]!.content[0]!.text!;
+    expect(text).toContain(`Caption: ${'x'.repeat(5000)}\n`);
+    expect(text).toContain('#tag29');
+    expect(text).not.toContain('#tag30');
   });
 });

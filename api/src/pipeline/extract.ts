@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
-import { EVIDENCE_KINDS, PLATFORM_LABELS, type SourcePlatform } from '@booktrap/shared';
+import { EVIDENCE_KINDS, LIMITS, PLATFORM_LABELS, type SourcePlatform } from '@booktrap/shared';
+import type { PostContent } from '../store/types';
 import { PipelineError } from './errors';
 import type { ImageInput } from './media';
 import { claudeCostUsd } from './pricing';
@@ -21,7 +22,14 @@ export const ExtractedBookSchema = z.object({
 });
 export type ExtractedBook = z.infer<typeof ExtractedBookSchema>;
 
-const ExtractionSchema = z.object({ books: z.array(ExtractedBookSchema) });
+const ExtractionSchema = z.object({
+  content: z
+    .enum(['books', 'not_books', 'explicit_non_book', 'graphic_violence'])
+    .describe(
+      'books: the post shows or talks about books (including adult, romance or dark book covers and talk about adult books). not_books: an ordinary post with no books. explicit_non_book: the post itself (not a book cover) shows sexual content or nudity. graphic_violence: the post itself (not a book cover) shows real gore or serious injury.',
+    ),
+  books: z.array(ExtractedBookSchema),
+});
 
 export const EXTRACTION_SYSTEM_PROMPT = `You catalogue the books in a single TikTok or Instagram post (a video, a reel, a photo or a photo carousel) so a reader can add them to their want-to-read list.
 
@@ -35,7 +43,14 @@ Rules:
 - Each book appears once, even if it shows up in many frames or is both shown and mentioned. Use the strongest evidence.
 - Mark each book's prominence. A reader wants the books the creator is presenting, not the decor behind them, but keep background books you can read so the reader can choose.
 - When the caption or speech names a book that also appears on screen, prefer the spelling from the cover or caption over the transcript, which often mishears names.
-- Confidence: 0.9 or more only when title and author are clearly legible or explicitly stated. Use 0.5 to 0.8 for partial or inferred readings, and below 0.5 for guesses.`;
+- Confidence: 0.9 or more only when title and author are clearly legible or explicitly stated. Use 0.5 to 0.8 for partial or inferred readings, and below 0.5 for guesses.
+
+Content check (content field):
+- BookTrap is for book posts, and adult books are welcome. Book covers with nudity, romance or "spicy" covers, dark or violent cover art, and talk about sexual or violent themes in books are all "books".
+- Use explicit_non_book only when the post's own imagery (not a book cover) is sexually explicit or shows nudity. Use graphic_violence only when the post's own imagery (not a book cover) shows real gore or serious injury.
+- Any sexual content involving someone who may be a minor is always explicit_non_book.
+- An ordinary post with no books (a cooking video, a selfie) is not_books.
+- Still list any books you can read, whatever the content verdict.`;
 
 export interface ExtractionInput {
   platform: SourcePlatform;
@@ -50,6 +65,8 @@ export interface ExtractionInput {
 
 export interface ExtractionResult {
   books: ExtractedBook[];
+  /** The content check; `refused` when Claude declined to read the post (billed, and cached as skipped). */
+  content: PostContent;
   model: string;
   costUsd: number;
   usage: { inputTokens: number; outputTokens: number };
@@ -64,8 +81,9 @@ export interface ExtractDeps {
 function buildContent(input: ExtractionInput): Anthropic.Beta.BetaContentBlockParam[] {
   const context = [
     `Post: ${PLATFORM_LABELS[input.platform]} ${input.kind === 'carousel' ? ((input.slideCount ?? input.images.length) === 1 ? 'photo' : 'photo carousel') : 'video'}`,
-    `Caption: ${input.caption || '(none)'}`,
-    `Hashtags: ${input.hashtags.length ? input.hashtags.map((tag) => `#${tag}`).join(' ') : '(none)'}`,
+    // Bounded so one post's text can't run up the cost of a read.
+    `Caption: ${input.caption.slice(0, LIMITS.captionChars) || '(none)'}`,
+    `Hashtags: ${input.hashtags.length ? input.hashtags.slice(0, LIMITS.hashtags).map((tag) => `#${tag}`).join(' ') : '(none)'}`,
     `Transcript: ${input.transcript ?? '(none available)'}`,
   ].join('\n\n');
 
@@ -135,13 +153,13 @@ export async function extractBooks(input: ExtractionInput, deps: ExtractDeps): P
   const costUsd = claudeCostUsd(response.model, response.usage);
   const usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
 
-  // Failed-but-billed responses still carry their cost, so the budget ledger sees it.
+  // A refusal is billed: it's cached as a skipped post, so pasting it again never pays twice.
   if (response.stop_reason === 'refusal') {
-    throw new PipelineError('extraction_failed', 'BookTrap couldn’t read this post.', false, { costUsd });
+    return { books: [], content: 'refused', model: response.model, costUsd, usage };
   }
   if (response.stop_reason === 'max_tokens' || !response.parsed_output) {
     throw new PipelineError('extraction_failed', 'BookTrap couldn’t finish reading this post. Try it again.', true, { costUsd });
   }
 
-  return { books: dedupe(response.parsed_output.books), model: response.model, costUsd, usage };
+  return { books: dedupe(response.parsed_output.books), content: response.parsed_output.content, model: response.model, costUsd, usage };
 }

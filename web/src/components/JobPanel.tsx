@@ -1,6 +1,6 @@
-import { ArrowClockwise, CheckCircle, Images, Info, Playlist, VideoCamera, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, CaretDown, CheckCircle, Images, Info, Playlist, Prohibit, VideoCamera, WarningCircle } from '@phosphor-icons/react';
 import { Link } from 'react-router';
-import { PLATFORM_LABELS, parseSourceUrl, type Job, type JobItem, type SourceLink } from '@booktrap/shared';
+import { BLOCKED_MESSAGES, PLATFORM_LABELS, parseSourceUrl, type Job, type JobItem, type SourceLink } from '@booktrap/shared';
 import { useJobs, useRetryItem } from '../library/hooks';
 import { describeKind } from '../library/links';
 import { PlatformIcon } from './PlatformIcon';
@@ -118,12 +118,50 @@ function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?
 }
 
 /**
+ * Posts that were skipped (moderation or a takedown), folded into one quiet row so they never crowd
+ * the books that did arrive (user's pick, option C). Opening it says which post and why.
+ */
+function SkippedFold({ items, noun }: { items: JobItem[]; noun: 'post' | 'video' }) {
+  if (items.length === 0) return null;
+  const moderated = items.some((item) => item.blocked !== 'removed');
+  return (
+    <details className="group rounded-card bg-surface-sunk px-4 py-1">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-bold text-text-muted [&::-webkit-details-marker]:hidden">
+        <Prohibit size={18} weight="fill" aria-hidden="true" className="shrink-0" />
+        {items.length} {items.length === 1 ? noun : `${noun}s`} skipped
+        <CaretDown size={14} weight="bold" aria-hidden="true" className="transition-transform duration-200 group-open:rotate-180" />
+      </summary>
+      <ul className="space-y-2 pb-3 pl-[26px] text-sm text-text-muted">
+        {items.map((item) => {
+          const { who, platform } = describeItem(item);
+          return (
+            <li key={item.id}>
+              <a href={item.inputUrl} target="_blank" rel="noreferrer" className="font-bold text-text underline-offset-4 hover:underline">
+                {who}
+              </a>{' '}
+              on {PLATFORM_LABELS[platform]}. {item.blocked ? BLOCKED_MESSAGES[item.blocked] : ''}
+            </li>
+          );
+        })}
+        {moderated && (
+          <li className="pt-1">
+            BookTrap reads posts about books, and book covers or talk about adult books are fine. A post is skipped only when it shows
+            explicit or graphic content that isn’t a book.
+          </li>
+        )}
+      </ul>
+    </details>
+  );
+}
+
+/**
  * A collection's videos, summed up inside its card: how many are read, the books they shelved, and any
  * that failed (each with its own Retry). A 25-video collection never floods the panel with 25 cards.
  */
 function CollectionProgress({ job, item, videos }: { job: Job; item: JobItem; videos: JobItem[] }) {
   const finished = videos.filter((video) => video.status === 'done' || video.status === 'failed');
   const failed = videos.filter((video) => video.status === 'failed');
+  const skipped = videos.filter((video) => video.blocked);
   const books = videos.reduce((sum, video) => sum + video.booksFound, 0);
   const reading = finished.length < videos.length;
   return (
@@ -178,6 +216,7 @@ function CollectionProgress({ job, item, videos }: { job: Job; item: JobItem; vi
           </ul>
         </details>
       )}
+      <SkippedFold items={skipped} noun="video" />
     </div>
   );
 }
@@ -185,12 +224,14 @@ function CollectionProgress({ job, item, videos }: { job: Job; item: JobItem; vi
 export function JobPanel() {
   const jobs = useJobs();
   const recent = (jobs.data ?? []).slice(0, 3);
-  // A collection's videos are shown inside the collection's own card.
-  const items = recent.flatMap((job) =>
+  // A collection's videos are shown inside the collection's own card; skipped posts fold at the end.
+  const all = recent.flatMap((job) =>
     job.items
       .filter((item) => !item.parentItemId)
       .map((item) => ({ job, item, videos: job.items.filter((child) => child.parentItemId === item.id) })),
   );
+  const items = all.filter(({ item }) => !item.blocked);
+  const skipped = all.filter(({ item }) => item.blocked).map(({ item }) => item);
 
   return (
     <section aria-labelledby="in-progress" aria-live="polite">
@@ -199,13 +240,18 @@ export function JobPanel() {
       </h2>
       {jobs.isPending ? (
         <p className="mt-2 text-sm text-text-muted">Checking for recent links…</p>
-      ) : items.length === 0 ? (
+      ) : all.length === 0 ? (
         <p className="mt-2 max-w-[34ch] text-sm text-text-muted">Links you paste show up here while BookTrap reads them.</p>
       ) : (
         <ul className="mt-3 space-y-2.5">
           {items.map(({ job, item, videos }) => (
             <ItemCard key={item.id} job={job} item={item} videos={videos} />
           ))}
+          {skipped.length > 0 && (
+            <li>
+              <SkippedFold items={skipped} noun="post" />
+            </li>
+          )}
         </ul>
       )}
     </section>

@@ -1,6 +1,16 @@
-import { PLATFORM_LABELS, PRIVATE_COLLECTION_MESSAGE, parseSourceUrl, tiktokCollectionId, type SourceLink, type SourcePlatform } from '@booktrap/shared';
+import {
+  LIMITS,
+  PLATFORM_LABELS,
+  PRIVATE_COLLECTION_MESSAGE,
+  bookLimitFor,
+  parseSourceUrl,
+  tiktokCollectionId,
+  type BlockedKind,
+  type SourceLink,
+  type SourcePlatform,
+} from '@booktrap/shared';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { CachedPost, JobItemRecord, LibraryStore } from '../store/types';
+import type { CachedPost, JobItemRecord, LibraryStore, PostContent } from '../store/types';
 import { TERMINAL_STATUSES } from '../store/types';
 import { fetchPost, type PostData } from './fetchers';
 import { listTikTokCollection } from './fetchers/tiktok-collection';
@@ -40,7 +50,7 @@ export interface PipelineDeps {
   verifyBook?: typeof verifyBook;
   resolveLink?: typeof resolveLink;
   listCollection?: typeof listTikTokCollection;
-  /** Whether the job's owner is a guest, for their daily cap when a collection expands. */
+  /** Whether the job's owner is a guest: their daily cap when a collection expands, and their book limit. */
   isGuest?: (userId: string) => Promise<boolean>;
   /** Queues the videos a collection expands into (the job queue in production). */
   enqueue?: (itemId: string, userId: string) => void;
@@ -166,6 +176,7 @@ async function readPost(
     },
     books: extraction.books,
     model: extraction.model,
+    content: extraction.content,
   };
   await store.putCachedPost(platform, postId, value);
   return value;
@@ -182,7 +193,9 @@ async function shelve(
   verification: Verification,
   post: CachedPost['post'],
   deps: PipelineDeps,
-): Promise<'added' | 'merged' | 'already'> {
+  /** Room left under the reader's book limit; a new book is refused at 0 (a repeat sighting still merges). */
+  room: { left: number },
+): Promise<'added' | 'merged' | 'already' | 'full'> {
   const { store } = deps;
   const candidate = {
     title: verification.title,
@@ -213,6 +226,7 @@ async function shelve(
     }
     return (await store.addSource(existing.id, source)) ? 'merged' : 'already';
   }
+  if (room.left <= 0) return 'full';
 
   await store.clearNewForJob(jobId, userId);
   const bookId = await store.insertBook(userId, {
@@ -234,7 +248,40 @@ async function shelve(
     );
     throw error;
   }
+  room.left--;
   return 'added';
+}
+
+/** The verdicts that skip a post, as the job item reports them. */
+const SKIPPED: Partial<Record<PostContent, BlockedKind>> = {
+  explicit_non_book: 'explicit',
+  graphic_violence: 'graphic',
+  refused: 'refused',
+};
+
+/**
+ * How many more books the reader's shelf takes (5,000, or 500 for a guest). Whether they're a guest is
+ * only asked when `incoming` books could cross the guest limit; if that can't be checked, the account
+ * limit applies: the limit is about storage, and never losing a book matters more than a few hundred rows.
+ */
+async function bookRoom(userId: string, incoming: number, { store, isGuest, log }: PipelineDeps): Promise<{ left: number; limit: number; guest: boolean }> {
+  const count = await store.countBooks(userId);
+  let guest = false;
+  if (incoming > 0 && count + incoming > LIMITS.booksPerGuest && isGuest) {
+    guest = await isGuest(userId).catch((error: unknown) => {
+      log.warn({ err: error }, 'could not check whether a reader is a guest');
+      return false;
+    });
+  }
+  const limit = bookLimitFor(guest);
+  return { left: Math.max(0, limit - count), limit, guest };
+}
+
+/** Said on an item when the shelf filled up part-way (or was already full). */
+export function shelfFullNote(skipped: number, limit: number, guest: boolean): string {
+  const books = `${skipped} ${skipped === 1 ? 'book' : 'books'}`;
+  const more = guest ? ` Save your shelf to keep up to ${LIMITS.booksPerAccount.toLocaleString('en-US')}.` : ' Delete some to make room.';
+  return `Your shelf is full (${limit.toLocaleString('en-US')} books), so ${books} from this post weren’t added.${more}`;
 }
 
 /**
@@ -364,22 +411,41 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     if (!resolved.postId) throw new PipelineError('not_a_post', `This link doesn’t lead to a ${label} post.`);
     await store.updateItem(itemId, { platform: resolved.platform, postId: resolved.postId });
 
-    const { post, books } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
+    // Taken down: never read or shelved again, and it costs nothing.
+    if (await store.isPostRemoved(resolved.platform, resolved.postId)) {
+      await store.updateItem(itemId, { status: 'done', booksFound: 0, error: null, blocked: 'removed' });
+      log.info({ itemId, platform: resolved.platform, postId: resolved.postId }, 'item skipped: post removed');
+      return;
+    }
+
+    const { post, books, content } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
+    const skipped = SKIPPED[content];
+    if (skipped) {
+      // Nothing from it is added, even books it found (an operator can unblock a wrong verdict).
+      await store.updateItem(itemId, { status: 'done', kind: post.kind, booksFound: 0, error: null, blocked: skipped });
+      log.info({ itemId, platform: post.platform, postId: post.postId, content }, 'item skipped by the content check');
+      return;
+    }
     await store.updateItem(itemId, { status: 'verifying', kind: post.kind });
 
     const wanted = books.filter((book) => deps.settings.includeBackgroundBooks || book.prominence === 'featured');
     const verify = deps.verifyBook ?? verifyBook;
+    const room = await bookRoom(item.userId, wanted.length, deps);
     let added = 0;
+    let full = 0;
     for (const book of wanted) {
       const verification = await verify(book.title, book.author, {
         googleBooksApiKey: deps.settings.googleBooksApiKey,
         log: (message, detail) => log.warn({ detail }, message),
       });
-      if ((await shelve(item.userId, item.jobId, book, verification, post, deps)) === 'added') added++;
+      const outcome = await shelve(item.userId, item.jobId, book, verification, post, deps, room);
+      if (outcome === 'added') added++;
+      if (outcome === 'full') full++;
     }
 
-    await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null });
-    log.info({ itemId, platform: post.platform, postId: post.postId, found: wanted.length, added, skippedBackground: books.length - wanted.length }, 'item done');
+    const note = full ? shelfFullNote(full, room.limit, room.guest) : undefined;
+    await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null, ...(note && { note }) });
+    log.info({ itemId, platform: post.platform, postId: post.postId, found: wanted.length, added, full, skippedBackground: books.length - wanted.length }, 'item done');
   } catch (error) {
     const message =
       error instanceof PipelineError ? error.userMessage : 'Something went wrong reading this post. Try it again.';

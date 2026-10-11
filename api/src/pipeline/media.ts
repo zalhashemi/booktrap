@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
+import { MEDIA_LIMITS } from '@booktrap/shared';
 import { PipelineError } from './errors';
 import { MEDIA_HOSTS, safeFetch } from './safe-fetch';
 
@@ -16,20 +17,7 @@ export interface ImageInput {
   base64: string;
 }
 
-export const MEDIA_LIMITS = {
-  maxSlides: 20,
-  maxFrames: 30,
-  /** One frame every this many seconds at most (brief: about one every 2s). */
-  minFrameIntervalSec: 2,
-  /** Frames are scaled to this width: legible spines without paying for full 720p. */
-  frameWidth: 720,
-  /** Raw download cap for a slide; slides are then re-encoded well under the API's 5MB per image. */
-  maxImageBytes: 15 * 1024 * 1024,
-  /** Long edge for slides sent to the model (the API downsamples beyond ~1568px anyway). */
-  slideLongEdge: 1568,
-  maxVideoBytes: 150 * 1024 * 1024,
-  maxSubtitleChars: 8000,
-} as const;
+export { MEDIA_LIMITS };
 
 export interface MediaDeps {
   apifyToken: string;

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowSquareOut, BracketsCurly, Books, CaretRight, Check, ClipboardText, FilePdf, Table, X } from '@phosphor-icons/react';
-import { toExportJson, toGenericCsv, toGoodreadsCsv, toPlainText, type Book, type PlainTextOptions } from '@booktrap/shared';
+import { LIMITS, toExportJson, toGenericCsv, toGoodreadsCsv, toPlainText, type Book, type PlainTextOptions } from '@booktrap/shared';
 import { api } from '../api/client';
 import { useAccount } from '../account/account-context';
 import { downloadFile, exportFileName } from '../library/export';
@@ -70,6 +70,8 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
   ];
   const books = (scopes.find((option) => option.value === scope) ?? scopes[0]!).books;
   const empty = books.length === 0;
+  // A PDF of thousands of covers would exhaust a phone: past the limit, export a view or a selection.
+  const tooBigForPdf = books.length > LIMITS.booksPerPdf;
 
   // The row that just finished says so on its own button for a moment, right where the reader tapped.
   const [done, setDone] = useState<string | null>(null);
@@ -190,11 +192,15 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
           <FormatRow
             icon={<FilePdf size={22} weight="duotone" aria-hidden="true" />}
             name="PDF"
-            hint="Your covers on a printable shelf, grouped by status."
+            hint={
+              tooBigForPdf
+                ? `Up to ${LIMITS.booksPerPdf.toLocaleString('en-US')} books per PDF. Filter the shelf or select books, then export This view or Selected.`
+                : 'Your covers on a printable shelf, grouped by status.'
+            }
             action={pdfBusy ? pdfStep : 'Download'}
             done={done === 'pdf' ? 'Saved' : null}
             busy={pdfBusy}
-            disabled={empty || pdfBusy || !user}
+            disabled={empty || tooBigForPdf || pdfBusy || !user}
             onRun={() => void makePdf()}
           />
           <div>

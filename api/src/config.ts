@@ -40,6 +40,8 @@ const EnvSchema = z.object({
   IP_HASH_KEY: optionalString,
   /** Cached posts (books, link, creator, thumbnail) older than this are deleted; re-reading one costs again. */
   POST_CACHE_DAYS: z.coerce.number().int().min(1).default(90),
+  /** The hidden admin page's key (reports and takedowns). Unset: the admin API doesn't exist. */
+  ADMIN_TOKEN: optionalString.pipe(z.string().min(32, 'ADMIN_TOKEN must be at least 32 characters.').optional()),
 
   ALLOWED_ORIGIN: csv.default(['http://localhost:5180']),
   /** Posts a day for a signed-in user, and for a guest (an anonymous user who hasn't added an email). */
@@ -48,7 +50,6 @@ const EnvSchema = z.object({
   DAILY_LINK_CAP_PER_IP: z.coerce.number().int().positive().default(120),
   /** Estimated Apify + Claude spend per calendar month before processing pauses for everyone. */
   MONTHLY_BUDGET_USD: z.coerce.number().positive().default(20),
-  MAX_LINKS_PER_SUBMISSION: z.coerce.number().int().positive().default(30),
   MAX_VIDEOS_PER_COLLECTION: z.coerce.number().int().positive().default(100),
   /** Claude model that reads the posts. Sonnet 5.5 matched Opus 5.5 on the Phase 2 fixtures at half the cost. */
   EXTRACTION_MODEL: z.string().default('claude-sonnet-5-5'),

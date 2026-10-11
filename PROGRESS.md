@@ -114,6 +114,15 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-11: **Phase 8 picks (user)** from the mockups (https://claude.ai/artifact/TWFssvHjgWopoCHy7pd6xS):
+  - Report this post is option C: a "more" menu on each source in the book sheet (Open post, Copy link, Report this post) that opens a small dialog.
+  - A blocked post is option C: skipped posts fold into one quiet "N posts skipped" row at the end of the job list, which opens to the reason.
+  - The admin page is option B: a list of reported posts beside the chosen post's detail (list first on phones).
+  - Report reasons: Sexual or explicit, Violent or graphic, Hateful or harassing, It's my post, and Other, where the reader writes their own note (required for Other).
+  - The limits as proposed: body 128 KB; 30 links per paste (shared, the env var goes); pasted text 20,000 characters; 100 shelves per user; 5,000 books per account and 500 per guest; 1,000 books per PDF; captions cut to 5,000 characters and 30 hashtags before extraction; finished jobs deleted after 30 days; 20 reports a day per user.
+  - **Takedown keeps edited books:** books seen only in a taken-down post are deleted unless the reader changed them (status, notes or shelves); those stay without the source.
+  - Reports are only for posts that are sources on the reporter's own shelf. A Claude refusal counts as a blocked post and is cached.
+
 - 2026-10-11: **Account screens picked (user):** Sign up / Log in is option B: email first, then "Email me a code" or "Use a password". The Save your shelf prompt is option A, a card above the paste box. The unsaved note is option B, a lavender "Unsaved" tab on the shelf header. Settings, Account is as mocked (guest, signed in, two-step delete). **Code-only accounts are allowed** and a password is optional (Claude's recommendation, user agreed to "whatever is safest and costs less"): no password to reuse or leak for those who don't want one, and an email is sent only when someone logs in on a new browser, since sessions renew themselves. **Logging in on a browser with a guest shelf merges the guest's books into the account** (duplicates folded together, as on a re-paste), then deletes the guest user. The browser proves it owns the guest shelf by sending the guest's token. This follows "never lose a book".
 - 2026-10-11: **0009 is applied** (user ran it). Checked read-only: device tables and `delete_device` gone; books, tags and jobs empty and owned by `user_id`; 10 cached posts, 26 spend records and 6 network counts kept; `user_activity` and `inactive_guests` work. The app doesn't work against Supabase until Phase 7's wiring is done.
 - 2026-10-11: The project already signed with ES256 (the JWKS lists two ES256 keys: current and standby), so no rotation was needed.

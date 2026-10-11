@@ -1,7 +1,7 @@
 import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import { ERROR_CODES } from '@booktrap/shared';
+import { ERROR_CODES, LIMITS } from '@booktrap/shared';
 import { createRevocations } from './auth/revocations';
 import { requireUser, type SessionVerifier } from './auth/session-auth';
 import type { Config } from './config';
@@ -10,6 +10,7 @@ import type { JobQueue } from './pipeline/queue';
 import type { verifyBook } from './pipeline/verify';
 import { jobRoutes } from './routes/jobs';
 import { libraryRoutes } from './routes/library';
+import { adminRoutes, reportRoutes } from './routes/reports';
 import type { LibraryStore } from './store/types';
 import { accountRoutes } from './routes/account';
 import { healthRoutes } from './routes/health';
@@ -40,7 +41,7 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     // Trust exactly the proxy hops we deploy behind (Render's edge = 1). Trusting "all" would let
     // clients pick their own IP via X-Forwarded-For and walk around every IP rate limit.
     trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS,
-    bodyLimit: 256 * 1024,
+    bodyLimit: LIMITS.requestBodyBytes,
   });
 
   await app.register(cors, {
@@ -92,7 +93,6 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     store,
     queue,
     options: {
-      maxLinksPerSubmission: config.MAX_LINKS_PER_SUBMISSION,
       dailyCapPerUser: config.DAILY_LINK_CAP_PER_USER,
       dailyCapGuest: config.DAILY_LINK_CAP_GUEST,
       dailyCapPerIp: config.DAILY_LINK_CAP_PER_IP,
@@ -103,6 +103,8 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     },
   });
   libraryRoutes(app, { auth, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
+  reportRoutes(app, { auth, store });
+  if (config.ADMIN_TOKEN) adminRoutes(app, { store, adminToken: config.ADMIN_TOKEN });
 
   return app;
 }

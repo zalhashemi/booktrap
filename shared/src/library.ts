@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { LIMITS } from './limits';
+import { BlockedKindSchema } from './moderation';
 import { SOURCE_PLATFORMS } from './source';
 
 export const SourcePlatformSchema = z.enum(SOURCE_PLATFORMS);
@@ -21,6 +23,8 @@ export const JobItemSchema = z.object({
   parentItemId: z.string().nullable(),
   /** A note for the reader on a finished item, e.g. that only part of a collection was read. */
   note: z.string().nullable(),
+  /** Set when the post was skipped and nothing from it was added (moderation or a takedown). */
+  blocked: BlockedKindSchema.nullable(),
 });
 export type JobItem = z.infer<typeof JobItemSchema>;
 
@@ -33,7 +37,7 @@ export const JobSchema = z.object({
 export type Job = z.infer<typeof JobSchema>;
 
 export const CreateJobRequestSchema = z.object({
-  urls: z.array(z.string().max(2048)).min(1).max(200),
+  urls: z.array(z.string().max(LIMITS.linkChars)).min(1).max(LIMITS.linksPerPaste),
 });
 export type CreateJobRequest = z.infer<typeof CreateJobRequestSchema>;
 
@@ -63,7 +67,7 @@ export type BookSource = z.infer<typeof BookSourceSchema>;
 export const TagSchema = z.object({ id: z.string(), name: z.string() });
 export type Tag = z.infer<typeof TagSchema>;
 export const TagListResponseSchema = z.object({ tags: z.array(TagSchema) });
-export const TAG_NAME_MAX = 60;
+export const TAG_NAME_MAX = LIMITS.shelfNameChars;
 export const TagNameSchema = z.string().trim().min(1, 'Give the shelf a name.').max(TAG_NAME_MAX);
 
 export const BookSchema = z.object({
@@ -97,11 +101,11 @@ const isbn = (digits: number) =>
 /** Everything a reader can change on a book (brief §7 Editing). Omitted fields are left alone. */
 export const UpdateBookRequestSchema = z
   .object({
-    title: z.string().trim().min(1, 'A book needs a title.').max(500),
+    title: z.string().trim().min(1, 'A book needs a title.').max(LIMITS.titleChars),
     author: z
       .string()
       .trim()
-      .max(300)
+      .max(LIMITS.authorChars)
       .transform((value) => value || null)
       .nullable(),
     isbn10: isbn(10).nullable(),
@@ -109,18 +113,18 @@ export const UpdateBookRequestSchema = z
     status: BookStatusSchema,
     notes: z
       .string()
-      .max(5000)
+      .max(LIMITS.notesChars)
       .transform((value) => value.trim() || null)
       .nullable(),
     /** false = seen (opening or editing a book clears its "new" highlight). */
     isNew: z.literal(false),
-    tagIds: z.array(z.string()).max(50),
+    tagIds: z.array(z.string()).max(LIMITS.shelvesPerBook),
   })
   .partial();
 export type UpdateBookRequest = z.input<typeof UpdateBookRequestSchema>;
 
-export const BookIdsRequestSchema = z.object({ ids: z.array(z.string()).min(1).max(500) });
-export const MergeBooksRequestSchema = z.object({ keepId: z.string(), mergeIds: z.array(z.string()).min(1).max(20) });
+export const BookIdsRequestSchema = z.object({ ids: z.array(z.string()).min(1).max(LIMITS.booksPerRequest) });
+export const MergeBooksRequestSchema = z.object({ keepId: z.string(), mergeIds: z.array(z.string()).min(1).max(LIMITS.booksPerMerge) });
 export const CountResponseSchema = z.object({ count: z.number().int() });
 
 export const BookListResponseSchema = z.object({ books: z.array(BookSchema) });

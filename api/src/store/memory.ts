@@ -11,7 +11,13 @@ import {
   type JobWithItems,
   type LibraryStore,
   type NewItem,
+  type PostContent,
+  type RemovedPostRecord,
+  type ReportRecord,
 } from './types';
+
+const BLOCKING_CONTENT: PostContent[] = ['explicit_non_book', 'graphic_violence', 'refused'];
+const TERMINAL_JOB: JobRecord['status'][] = ['done', 'failed'];
 
 type BookRow = Omit<Book, 'sources' | 'tags'> & { userId: string; normalizedKey: string; verified: boolean; deletedAt: string | null };
 
@@ -27,6 +33,8 @@ export function createMemoryLibraryStore(): LibraryStore {
   const bookTags = new Map<string, Set<string>>();
   /** Recent posts of erased users, still counted against their networks' daily caps. */
   const networkUsage: { ipHash: string; usedAt: Date }[] = [];
+  const reports: (ReportRecord & { userId: string | null })[] = [];
+  const removedPosts = new Map<string, RemovedPostRecord>();
 
   const now = () => new Date().toISOString();
   const withItems = (job: JobRecord): JobWithItems => ({
@@ -52,7 +60,7 @@ export function createMemoryLibraryStore(): LibraryStore {
     [...items.values()].filter((item) => item.parentItemId === parentItemId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   /** Posts counted against the daily caps: every item except a collection link itself. */
   const countPosts = (since: Date, match: (item: JobItemRecord) => boolean) =>
-    [...items.values()].filter((item) => new Date(item.createdAt) >= since && item.kind !== 'collection' && match(item)).length;
+    [...items.values()].filter((item) => new Date(item.createdAt) >= since && item.kind !== 'collection' && item.blocked !== 'removed' && match(item)).length;
   const carriedOver = (ipHash: string, since: Date) => networkUsage.filter((use) => use.ipHash === ipHash && use.usedAt >= since).length;
   const postsSince = (userId: string, ipHash: string | null, since: Date) => ({
     byUser: countPosts(since, (item) => item.userId === userId),
@@ -73,12 +81,24 @@ export function createMemoryLibraryStore(): LibraryStore {
       attempts: 0,
       parentItemId,
       note: null,
+      blocked: null,
       // Distinct timestamps keep the pasted (or listed) order.
       createdAt: new Date(at).toISOString(),
     };
     items.set(record.id, record);
     return record;
   };
+
+  /** Every book (live or in the Undo bin) with the post as a source. */
+  const postSightings = (platform: string, postId: string) =>
+    [...sources.entries()]
+      .filter(([, list]) => list.some((s) => s.platform === platform && s.postId === postId))
+      .flatMap(([bookId]) => {
+        const book = books.get(bookId);
+        return book ? [{ bookId, book }] : [];
+      });
+  /** What a takedown keeps: books whose status, notes or shelves the reader changed. */
+  const changedByReader = (book: BookRow, bookId: string) => book.status !== 'want_to_read' || book.notes !== null || (bookTags.get(bookId)?.size ?? 0) > 0;
 
   const store: LibraryStore = {
     // No awaits between counting and inserting: in one process that makes the caps atomic, as in Postgres.
@@ -210,6 +230,10 @@ export function createMemoryLibraryStore(): LibraryStore {
         .filter((book) => book.userId === userId && !book.deletedAt)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map(toBook);
+    },
+
+    async countBooks(userId) {
+      return [...books.values()].filter((book) => book.userId === userId && !book.deletedAt).length;
     },
 
     async getBook(userId, bookId) {
@@ -387,6 +411,121 @@ export function createMemoryLibraryStore(): LibraryStore {
       }
       return { posts, ipHashes };
     },
+    async countTags(userId) {
+      return [...tags.values()].filter((tag) => tag.userId === userId).length;
+    },
+    async purgeOldJobs(before) {
+      let count = 0;
+      for (const [id, job] of jobs) {
+        if (new Date(job.createdAt) >= before || !TERMINAL_JOB.includes(job.status)) continue;
+        jobs.delete(id);
+        for (const [itemId, item] of items) if (item.jobId === id) items.delete(itemId);
+        count++;
+      }
+      return count;
+    },
+
+    async isPostRemoved(platform, postId) {
+      return removedPosts.has(postKey(platform, postId));
+    },
+    async findOwnSource(userId, platform, postId) {
+      for (const [bookId, list] of sources) {
+        if (!liveBook(userId, bookId)) continue;
+        const hit = list.find((source) => source.platform === platform && source.postId === postId);
+        if (hit) return { url: hit.url, creatorHandle: hit.creatorHandle };
+      }
+      return null;
+    },
+    async createReport(userId, report) {
+      const open = reports.some((r) => r.userId === userId && r.status === 'open' && r.platform === report.platform && r.postId === report.postId);
+      if (open) return false;
+      reports.push({ ...report, id: randomUUID(), userId, status: 'open', createdAt: now() });
+      return true;
+    },
+    async countReportsSince(userId, since) {
+      return reports.filter((r) => r.userId === userId && new Date(r.createdAt) >= since).length;
+    },
+    async listReports(status, limit) {
+      return reports
+        .filter((r) => r.status === status)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit)
+        .map(({ userId: _userId, ...report }) => report);
+    },
+    async countReports(status) {
+      return reports.filter((r) => r.status === status).length;
+    },
+    async dismissReports(platform, postId) {
+      let count = 0;
+      for (const r of reports) {
+        if (r.status === 'open' && r.platform === platform && r.postId === postId) {
+          r.status = 'dismissed';
+          count++;
+        }
+      }
+      return count;
+    },
+    async listRemovedPosts(limit) {
+      return [...removedPosts.values()].sort((a, b) => b.removedAt.localeCompare(a.removedAt)).slice(0, limit);
+    },
+    async countRemovedPosts() {
+      return removedPosts.size;
+    },
+    async listBlockedPosts(limit) {
+      return [...cache.values()]
+        .filter((hit) => BLOCKING_CONTENT.includes(hit.content))
+        .sort((a, b) => b.fetchedAt.getTime() - a.fetchedAt.getTime())
+        .slice(0, limit)
+        .map((hit) => ({ post: hit.post, content: hit.content, fetchedAt: hit.fetchedAt.toISOString() }));
+    },
+    async countBlockedPosts() {
+      return [...cache.values()].filter((hit) => BLOCKING_CONTENT.includes(hit.content)).length;
+    },
+    async postReach(platform, postId) {
+      const target = postSightings(platform, postId);
+      const lonely = target.filter(({ bookId }) => (sources.get(bookId) ?? []).every((s) => s.platform === platform && s.postId === postId));
+      return {
+        shelves: new Set(target.map(({ book }) => book.userId)).size,
+        onlyHere: lonely.length,
+        edited: lonely.filter(({ book, bookId }) => changedByReader(book, bookId)).length,
+      };
+    },
+    async takeDownPost(post, reason) {
+      const key = postKey(post.platform, post.postId);
+      if (!removedPosts.has(key)) {
+        removedPosts.set(key, { platform: post.platform, postId: post.postId, url: post.url, creatorHandle: post.creatorHandle, reason, removedAt: now() });
+      }
+      cache.delete(key);
+      let sourcesRemoved = 0;
+      let booksDeleted = 0;
+      let booksKept = 0;
+      for (const { bookId, book } of postSightings(post.platform, post.postId)) {
+        const list = sources.get(bookId) ?? [];
+        const others = list.filter((s) => !(s.platform === post.platform && s.postId === post.postId));
+        sourcesRemoved += list.length - others.length;
+        if (others.length === 0 && !changedByReader(book, bookId)) {
+          books.delete(bookId);
+          sources.delete(bookId);
+          bookTags.delete(bookId);
+          booksDeleted++;
+          continue;
+        }
+        if (others.length === 0) booksKept++;
+        sources.set(bookId, others);
+      }
+      for (const r of reports) if (r.status === 'open' && r.platform === post.platform && r.postId === post.postId) r.status = 'taken_down';
+      return { sourcesRemoved, booksDeleted, booksKept };
+    },
+    async unblockPost(platform, postId) {
+      const key = postKey(platform, postId);
+      const removed = removedPosts.delete(key);
+      const hit = cache.get(key);
+      const skipped = Boolean(hit && BLOCKING_CONTENT.includes(hit.content));
+      if (hit?.content === 'refused') cache.delete(key);
+      else if (hit && skipped) hit.content = 'books';
+      return removed || skipped;
+    },
+
     async setBookTags(userId, bookId, tagIds) {
       if (!liveBook(userId, bookId)) return;
       const owned = tagIds.filter((id) => tags.get(id)?.userId === userId);

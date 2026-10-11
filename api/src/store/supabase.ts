@@ -5,12 +5,17 @@ import {
   TERMINAL_STATUSES,
   TagNameTakenError,
   deriveJobStatus,
+  type BlockedPostRecord,
   type BookPatch,
+  type CachedPost,
   type JobItemRecord,
   type JobRecord,
   type JobWithItems,
   type LibraryStore,
   type NewItem,
+  type PostContent,
+  type RemovedPostRecord,
+  type ReportRecord,
 } from './types';
 
 const UNIQUE_VIOLATION = '23505';
@@ -51,6 +56,7 @@ interface ItemRow {
   attempts: number;
   parent_item_id: string | null;
   note: string | null;
+  blocked: JobItemRecord['blocked'];
   created_at: string;
 }
 
@@ -83,7 +89,7 @@ interface SourceRow {
   created_at: string;
 }
 
-const ITEM_COLUMNS = 'id, job_id, user_id, input_url, source_platform, source_post_id, kind, status, error, books_found, attempts, parent_item_id, note, created_at';
+const ITEM_COLUMNS = 'id, job_id, user_id, input_url, source_platform, source_post_id, kind, status, error, books_found, attempts, parent_item_id, note, blocked, created_at';
 
 const toItem = (row: ItemRow): JobItemRecord => ({
   id: row.id,
@@ -99,6 +105,7 @@ const toItem = (row: ItemRow): JobItemRecord => ({
   attempts: row.attempts,
   parentItemId: row.parent_item_id,
   note: row.note,
+  blocked: row.blocked ?? null,
   createdAt: row.created_at,
 });
 
@@ -255,6 +262,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       if (patch.kind !== undefined) row.kind = patch.kind;
       if (patch.attempts !== undefined) row.attempts = patch.attempts;
       if (patch.note !== undefined) row.note = patch.note;
+      if (patch.blocked !== undefined) row.blocked = patch.blocked;
       check(await db.from('job_items').update(row).eq('id', itemId), 'job_items.update');
     },
 
@@ -308,7 +316,8 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
         'post_cache.get',
       ) as { post: Record<string, unknown> | null; extracted_json: unknown; model: string | null } | null;
       if (!row?.post) return null;
-      return { post: row.post, books: (row.extracted_json as { books: unknown }).books, model: row.model ?? 'unknown' } as never;
+      const extracted = row.extracted_json as { books: unknown; content?: PostContent };
+      return { post: row.post, books: extracted.books, model: row.model ?? 'unknown', content: extracted.content ?? 'books' } as unknown as CachedPost;
     },
 
     async putCachedPost(platform, postId, value) {
@@ -317,7 +326,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
           source_platform: platform,
           source_post_id: postId,
           post: value.post,
-          extracted_json: { books: value.books },
+          extracted_json: { books: value.books, content: value.content },
           model: value.model,
           fetched_at: new Date().toISOString(),
         }),
@@ -426,6 +435,12 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return rows.map(toBook);
     },
 
+    async countBooks(userId) {
+      const { count, error } = await db.from('books').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null);
+      if (error) throw new Error(`books.count failed: ${error.message}`);
+      return count ?? 0;
+    },
+
     async eraseUser(userId) {
       check(await db.rpc('delete_user_data', { p_user_id: userId }), 'delete_user_data');
     },
@@ -480,6 +495,184 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       const carried = await db.from('network_usage').delete({ count: 'exact' }).lt('used_at', ipHashBefore.toISOString());
       if (carried.error) throw new Error(`network_usage.expire failed: ${carried.error.message}`);
       return { posts: posts.count ?? 0, ipHashes: (jobs.count ?? 0) + (carried.count ?? 0) };
+    },
+
+    async purgeOldJobs(before) {
+      return Number(check(await db.rpc('purge_old_jobs', { p_before: before.toISOString() }), 'purge_old_jobs') ?? 0);
+    },
+
+    async isPostRemoved(platform, postId) {
+      const row = check(
+        await db.from('removed_posts').select('source_post_id').eq('source_platform', platform).eq('source_post_id', postId).maybeSingle(),
+        'removed_posts.get',
+      );
+      return row !== null;
+    },
+
+    async findOwnSource(userId, platform, postId) {
+      const rows = check(
+        await db
+          .from('book_sources')
+          .select('source_url, creator_handle, books!inner(user_id, deleted_at)')
+          .eq('source_platform', platform)
+          .eq('source_post_id', postId)
+          .eq('books.user_id', userId)
+          .is('books.deleted_at', null)
+          .limit(1),
+        'book_sources.own',
+      ) as { source_url: string; creator_handle: string | null }[];
+      const row = rows[0];
+      return row ? { url: row.source_url, creatorHandle: row.creator_handle } : null;
+    },
+
+    async createReport(userId, report) {
+      const { error } = await db.from('reports').insert({
+        user_id: userId,
+        source_platform: report.platform,
+        source_post_id: report.postId,
+        source_url: report.url,
+        creator_handle: report.creatorHandle,
+        reason: report.reason,
+        note: report.note,
+      });
+      if (!error) return true;
+      if (error.code === UNIQUE_VIOLATION) return false;
+      throw new Error(`reports.insert failed: ${error.message}`);
+    },
+
+    async countReportsSince(userId, since) {
+      const { count, error } = await db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', since.toISOString());
+      if (error) throw new Error(`reports.count_user failed: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async listReports(status, limit) {
+      const rows = check(
+        await db
+          .from('reports')
+          .select('id, source_platform, source_post_id, source_url, creator_handle, reason, note, status, created_at')
+          .eq('status', status)
+          .order('created_at', { ascending: false })
+          .limit(limit),
+        'reports.list',
+      ) as ReportRow[];
+      return rows.map(toReport);
+    },
+
+    async countReports(status) {
+      const { count, error } = await db.from('reports').select('id', { count: 'exact', head: true }).eq('status', status);
+      if (error) throw new Error(`reports.count failed: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async dismissReports(platform, postId) {
+      const rows = check(
+        await db
+          .from('reports')
+          .update({ status: 'dismissed', resolved_at: new Date().toISOString() })
+          .eq('source_platform', platform)
+          .eq('source_post_id', postId)
+          .eq('status', 'open')
+          .select('id'),
+        'reports.dismiss',
+      ) as { id: string }[];
+      return rows.length;
+    },
+
+    async listRemovedPosts(limit) {
+      const rows = check(
+        await db
+          .from('removed_posts')
+          .select('source_platform, source_post_id, source_url, creator_handle, reason, removed_at')
+          .order('removed_at', { ascending: false })
+          .limit(limit),
+        'removed_posts.list',
+      ) as {
+        source_platform: RemovedPostRecord['platform'];
+        source_post_id: string;
+        source_url: string | null;
+        creator_handle: string | null;
+        reason: RemovedPostRecord['reason'];
+        removed_at: string;
+      }[];
+      return rows.map((row) => ({
+        platform: row.source_platform,
+        postId: row.source_post_id,
+        url: row.source_url,
+        creatorHandle: row.creator_handle,
+        reason: row.reason,
+        removedAt: row.removed_at,
+      }));
+    },
+
+    async countRemovedPosts() {
+      const { count, error } = await db.from('removed_posts').select('source_post_id', { count: 'exact', head: true });
+      if (error) throw new Error(`removed_posts.count failed: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async listBlockedPosts(limit) {
+      const rows = check(
+        await db
+          .from('post_cache')
+          .select('post, extracted_json, fetched_at')
+          .in('extracted_json->>content', BLOCKING_CONTENT)
+          .order('fetched_at', { ascending: false })
+          .limit(limit),
+        'post_cache.blocked',
+      ) as { post: BlockedPostRecord['post']; extracted_json: { content: PostContent }; fetched_at: string }[];
+      return rows.map((row) => ({ post: row.post, content: row.extracted_json.content, fetchedAt: row.fetched_at }));
+    },
+
+    async countBlockedPosts() {
+      const { count, error } = await db
+        .from('post_cache')
+        .select('source_post_id', { count: 'exact', head: true })
+        .in('extracted_json->>content', BLOCKING_CONTENT);
+      if (error) throw new Error(`post_cache.count_blocked failed: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async postReach(platform, postId) {
+      const rows = check(await db.rpc('post_reach', { p_platform: platform, p_post_id: postId }), 'post_reach') as
+        | { shelves: number; only_here: number; edited: number }[]
+        | { shelves: number; only_here: number; edited: number };
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      return { shelves: row?.shelves ?? 0, onlyHere: row?.only_here ?? 0, edited: row?.edited ?? 0 };
+    },
+
+    async takeDownPost(post, reason) {
+      const result = check(
+        await db.rpc('take_down_post', {
+          p_platform: post.platform,
+          p_post_id: post.postId,
+          p_reason: reason,
+          p_url: post.url,
+          p_handle: post.creatorHandle,
+        }),
+        'take_down_post',
+      ) as { sources_removed: number; books_deleted: number; books_kept: number };
+      return { sourcesRemoved: result.sources_removed, booksDeleted: result.books_deleted, booksKept: result.books_kept };
+    },
+
+    async unblockPost(platform, postId) {
+      const removed = check(
+        await db.from('removed_posts').delete().eq('source_platform', platform).eq('source_post_id', postId).select('source_post_id'),
+        'removed_posts.delete',
+      ) as unknown[];
+      const cached = await this.getCachedPost(platform, postId);
+      const skipped = cached !== null && BLOCKING_CONTENT.includes(cached.content);
+      if (cached && cached.content === 'refused') {
+        // Nothing was read, so there are no books to keep: the next paste reads it again.
+        check(await db.from('post_cache').delete().eq('source_platform', platform).eq('source_post_id', postId), 'post_cache.unblock');
+      } else if (cached && skipped) {
+        await this.putCachedPost(platform, postId, { ...cached, content: 'books' });
+      }
+      return removed.length > 0 || skipped;
     },
 
     async getBook(userId, bookId) {
@@ -624,6 +817,12 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       return rows.length > 0;
     },
 
+    async countTags(userId) {
+      const { count, error } = await db.from('tags').select('id', { count: 'exact', head: true }).eq('user_id', userId);
+      if (error) throw new Error(`tags.count failed: ${error.message}`);
+      return count ?? 0;
+    },
+
     async setBookTags(userId, bookId, tagIds) {
       const book = check(
         await db.from('books').select('id').eq('id', bookId).eq('user_id', userId).is('deleted_at', null).maybeSingle(),
@@ -652,6 +851,33 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
 }
 
 const ID_CHUNK = 100;
+
+/** Verdicts that skip a post. */
+const BLOCKING_CONTENT: PostContent[] = ['explicit_non_book', 'graphic_violence', 'refused'];
+
+interface ReportRow {
+  id: string;
+  source_platform: ReportRecord['platform'];
+  source_post_id: string;
+  source_url: string;
+  creator_handle: string | null;
+  reason: ReportRecord['reason'];
+  note: string | null;
+  status: ReportRecord['status'];
+  created_at: string;
+}
+
+const toReport = (row: ReportRow): ReportRecord => ({
+  id: row.id,
+  platform: row.source_platform,
+  postId: row.source_post_id,
+  url: row.source_url,
+  creatorHandle: row.creator_handle,
+  reason: row.reason,
+  note: row.note,
+  status: row.status,
+  createdAt: row.created_at,
+});
 
 function chunks<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];

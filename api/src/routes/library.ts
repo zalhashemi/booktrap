@@ -2,6 +2,8 @@ import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import {
   BookIdsRequestSchema,
   ERROR_CODES,
+  LIMITS,
+  MEDIA_LIMITS,
   MergeBooksRequestSchema,
   TagNameSchema,
   UpdateBookRequestSchema,
@@ -29,7 +31,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (value: string) => UUID.test(value);
 
 const COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const MAX_COVER_BYTES = 2 * 1024 * 1024;
 
 /** The body, or null once it passes `maxBytes` (content-length can be missing or wrong). */
 async function readCapped(response: Response, maxBytes: number): Promise<Buffer | null> {
@@ -135,7 +136,7 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
           await response.body?.cancel();
           throw missing();
         }
-        const bytes = await readCapped(response, MAX_COVER_BYTES);
+        const bytes = await readCapped(response, MEDIA_LIMITS.maxCoverBytes);
         if (!bytes) throw missing();
         image = { bytes, type };
       } catch (error) {
@@ -193,8 +194,15 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
   app.post('/v1/tags', auth, async (request, reply): Promise<Tag> => {
     const parsed = z.object({ name: TagNameSchema }).safeParse(request.body);
     if (!parsed.success) throw new HttpError(400, ERROR_CODES.badRequest, firstIssue(parsed.error));
+    const userId = request.user!.id;
+    // At the limit, a name that already exists still answers with that shelf (creating is idempotent).
+    if ((await store.countTags(userId)) >= LIMITS.shelvesPerUser) {
+      const existing = (await store.listTags(userId)).find((tag) => tag.name.toLowerCase() === parsed.data.name.toLowerCase());
+      if (existing) return existing;
+      throw new HttpError(409, ERROR_CODES.limitReached, `You can have up to ${LIMITS.shelvesPerUser} shelves. Delete one to make another.`);
+    }
     reply.code(201);
-    return store.createTag(request.user!.id, parsed.data.name);
+    return store.createTag(userId, parsed.data.name);
   });
 
   app.patch<{ Params: { tagId: string } }>('/v1/tags/:tagId', auth, async (request): Promise<Tag> => {

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowSquareOut, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react';
-import { BOOK_STATUSES, PLATFORM_LABELS, type Book, type UpdateBookRequest } from '@booktrap/shared';
+import { BOOK_STATUSES, LIMITS, PLATFORM_LABELS, type Book, type UpdateBookRequest } from '@booktrap/shared';
 import { ApiRequestError } from '../api/client';
 import { STATUS_LABELS } from '../library/filters';
 import { useCreateTag, useTags, useUpdateBook } from '../library/hooks';
 import { sourceHeading } from '../library/links';
 import { PlatformIcon } from './PlatformIcon';
+import { SourceMenu } from './ReportPost';
 import { BookFlags, CoverPlate } from './BookRow';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
@@ -204,8 +205,8 @@ function SheetBody({ book, onClose, requestClose, setCloseGuard, onDelete }: Bod
           </h3>
           <ul className="mt-1 divide-y divide-rule">
             {book.sources.map((source) => (
-              <li key={source.id}>
-                <a href={source.url} target="_blank" rel="noreferrer" className="flex min-h-12 items-center justify-between gap-3 py-2 text-sm hover:text-accent-ink">
+              <li key={source.id} className="flex items-center gap-1">
+                <a href={source.url} target="_blank" rel="noreferrer" className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3 py-2 text-sm hover:text-accent-ink">
                   <PlatformIcon platform={source.platform} />
                   <span className="min-w-0 flex-1">
                     <span className="block font-bold">@{source.creatorHandle ?? PLATFORM_LABELS[source.platform]}</span>
@@ -215,6 +216,7 @@ function SheetBody({ book, onClose, requestClose, setCloseGuard, onDelete }: Bod
                   </span>
                   <ArrowSquareOut size={18} className="shrink-0 text-text-faint" aria-label={`Opens ${PLATFORM_LABELS[source.platform]} in a new tab`} />
                 </a>
+                <SourceMenu source={source} />
               </li>
             ))}
           </ul>
@@ -234,14 +236,14 @@ function SheetBody({ book, onClose, requestClose, setCloseGuard, onDelete }: Bod
         {editing ? (
           <section aria-label="Edit details" className="space-y-6 border-t border-rule pt-6">
             <Field id={ids.title} label="Title">
-              <input id={ids.title} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required maxLength={500} className="field" />
+              <input id={ids.title} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required maxLength={LIMITS.titleChars} className="field" />
             </Field>
             <Field id={ids.author} label="Author">
               <input
                 id={ids.author}
                 value={draft.author}
                 onChange={(event) => setDraft({ ...draft, author: event.target.value })}
-                maxLength={300}
+                maxLength={LIMITS.authorChars}
                 placeholder="Unknown"
                 className="field"
               />
@@ -253,7 +255,7 @@ function SheetBody({ book, onClose, requestClose, setCloseGuard, onDelete }: Bod
                 value={draft.notes}
                 onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
                 rows={3}
-                maxLength={5000}
+                maxLength={LIMITS.notesChars}
                 placeholder="Who recommended it, why it caught your eye…"
                 className="field resize-y"
               />
@@ -402,7 +404,7 @@ function TagPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
               id={inputId}
               autoFocus
               value={name}
-              maxLength={60}
+              maxLength={LIMITS.shelfNameChars}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {

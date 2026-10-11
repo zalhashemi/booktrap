@@ -6,6 +6,7 @@ import {
   CountResponseSchema,
   TagListResponseSchema,
   TagSchema,
+  type CreateReportRequest,
   type UpdateBookRequest,
   HealthResponseSchema,
   JobListResponseSchema,
@@ -176,6 +177,8 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
     renameTag: (tagId: string, name: string) =>
       request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'PATCH', body: { name }, schema: TagSchema }),
     deleteTag: (tagId: string) => request(`/v1/tags/${encodeURIComponent(tagId)}`, { method: 'DELETE', schema: z.unknown() }),
+    /** "Report this post": only for posts that are sources on the reader's own shelf. */
+    reportPost: (report: CreateReportRequest) => request('/v1/reports', { method: 'POST', body: report, schema: z.unknown() }),
   };
 }
 
@@ -203,4 +206,5 @@ export type ApiClient = ReturnType<typeof createApiClient>;
 
 // vite.config.ts refuses to build for production without VITE_API_URL, so the
 // localhost fallback can only ever apply in development and tests.
-export const api = createApiClient(import.meta.env.VITE_API_URL || 'http://localhost:8787');
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+export const api = createApiClient(API_URL);

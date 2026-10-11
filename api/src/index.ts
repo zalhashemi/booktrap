@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
-import { FREE_VIDEOS_PER_COLLECTION } from '@booktrap/shared';
+import { FREE_VIDEOS_PER_COLLECTION, LIMITS } from '@booktrap/shared';
 import { purgeIdleGuests } from './account';
 import { createSessionVerifier, type SessionVerifier } from './auth/session-auth';
 import { loadConfig } from './config';
@@ -80,8 +80,8 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 await app.listen({ port: config.PORT, host: config.HOST });
 
 // Every 6 hours: purge books deleted over 30 days ago (Undo only needs the recent ones), and expire
-// what the privacy policy says we stop keeping: old cached posts, hashed networks past their day, and
-// guest shelves nobody has visited for 30 days.
+// what the privacy policy says we stop keeping: old cached posts, hashed networks past their day, jobs
+// finished over 30 days ago, and guest shelves nobody has visited for 30 days.
 const PURGE_EVERY_MS = 6 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const purge = () =>
@@ -96,6 +96,10 @@ const purge = () =>
         (expired) => (expired.posts || expired.ipHashes) && app.log.info(expired, 'expired retained data'),
         (error: unknown) => app.log.warn({ err: error }, 'data expiry failed'),
       ),
+    store.purgeOldJobs(new Date(Date.now() - LIMITS.jobHistoryDays * DAY_MS)).then(
+      (count) => count && app.log.info({ count }, 'purged old jobs'),
+      (error: unknown) => app.log.warn({ err: error }, 'purge of old jobs failed'),
+    ),
     purgeIdleGuests({ store, users, queue }).then(
       (count) => count && app.log.info({ count }, 'deleted idle guest shelves'),
       (error: unknown) => app.log.warn({ err: error }, 'idle guest purge failed'),

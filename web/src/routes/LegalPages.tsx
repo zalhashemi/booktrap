@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
 
-const LAST_UPDATED = '10 October 2026';
+const LAST_UPDATED = '11 October 2026';
 
 /**
  * How long things are kept. These mirror the API's defaults (POST_CACHE_DAYS, the 2-day network hash,
@@ -202,12 +202,26 @@ export function PrivacyPage() {
         to Bahrain&rsquo;s Personal Data Protection Authority, or, in the EU or UK, to your local data protection authority.
       </P>
 
+      <H2 id="reports">Reports and the content check</H2>
+      <P>
+        When BookTrap reads a post, it also checks whether the post itself shows explicit or graphic content that isn&rsquo;t a book (book
+        covers and talk about adult books are fine). Such a post is skipped: nothing from it is added, and the result is kept in the shared
+        cache so the post isn&rsquo;t read again.
+      </P>
+      <P>
+        You can report a post from a book&rsquo;s sources (the &ldquo;more&rdquo; button, then Report this post). A report keeps the post link,
+        the creator&rsquo;s handle, the reason, your note if you write one, and which account sent it. Only we see reports, and the creator
+        isn&rsquo;t told who sent one. If you delete your account, your reports stay without your account attached. A post we take down is
+        removed from every shelf and isn&rsquo;t read again, whoever pastes it.
+      </P>
+
       <H2 id="creators">For creators</H2>
       <P>
         BookTrap only reads public posts that its users paste, and keeps the book titles, the post link, your public handle and the
         thumbnail link. To have your handle and posts removed from our cache and from the sources shown on shelves, email{' '}
-        <Mail subject="BookTrap removal request" /> with the post links or your handle. We remove them within 14 days. The book titles a
-        reader saved stay on their own shelf, without your post.
+        <Mail subject="BookTrap removal request" /> with the post links or your handle. We remove them within 14 days, and the posts
+        aren&rsquo;t read again. A book found only in a removed post leaves the shelves it was on, unless a reader had already marked it, written
+        notes on it or put it on one of their shelves: then it stays, without your post.
       </P>
 
       <H2>Children</H2>

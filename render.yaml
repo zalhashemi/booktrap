@@ -46,8 +46,6 @@ services:
         value: "5"
       - key: DAILY_LINK_CAP_PER_IP
         value: "120"
-      - key: MAX_LINKS_PER_SUBMISSION
-        value: "30"
       - key: MAX_VIDEOS_PER_COLLECTION
         value: "100"
       - key: MONTHLY_BUDGET_USD
