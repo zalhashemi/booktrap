@@ -10,7 +10,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 4 | Bulk, collections and Instagram | Done |
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
-| 7 | Accounts (Supabase Auth) | Not started (next) |
+| 7 | Accounts (Supabase Auth) | In progress: token verifier, migration 0009 (tested in PGlite, not run yet) and shelf backup done; screen mockups shown, waiting on the user's picks |
 | 8 | Limits, moderation, report and takedown | Not started |
 | 9 | Scale, storage and cost | Not started |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
@@ -114,6 +114,8 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-11: **Accounts plumbing (Phase 7):** guests' visits are recorded in `user_activity` (the API writes at most hourly), because Supabase doesn't record a visit when a session refreshes. `inactive_guests()` reads `auth.users` as its owner (`security definer`, only `service_role` may call it), and the API deletes those users through Supabase's admin API. Deleting an account runs `delete_user_data()` first (carrying today's network counts, as 7b did), then the admin delete; the cascade from `auth.users` covers anything left. A capped submission now answers `{"capped": "user"}` instead of `"device"`.
+
 - 2026-10-10: **Phase 7 adjustments (user):** no passkeys for now (guests can't register one in Supabase, and the API is beta); tokens are verified locally with Supabase's asymmetric JWT signing keys (the project migrates to them).
 
 - 2026-10-10: **Phase order replaced** with the plan above (Accounts, Limits and moderation, Scale and cost, then Legal and deploy). **The live deploy (Render API, Cloudflare Pages) is to be taken offline** until the plan is done, since real users would otherwise create device-owned shelves that Phase 7 drops.
@@ -169,6 +171,36 @@ Public Instagram posts (Penguin UK, chosen for testing):
 ## Limits (user approved 2026-10-08)
 
 30 links per paste, 100 videos per collection (ask above that), 40 posts/device/day, 120 posts/IP/day, $20/month global budget (processing pauses when reached), cached posts free. Extraction model: compare Opus 5.5 and Sonnet 5.5 on the test fixtures in Phase 2, then the user picks.
+
+## Phase 7: Accounts (in progress, 2026-10-11)
+
+Done so far (no routes or screens rewired yet):
+- **`api/src/auth/session-auth.ts`**: `createSessionVerifier` checks Supabase access tokens locally with jose against the project's JWKS (`/auth/v1/.well-known/jwks.json`, cached and refetched on an unknown key id). It accepts ES256 only, issuer `<SUPABASE_URL>/auth/v1`, audience `authenticated`, role `authenticated`, a uuid `sub` and 5 seconds of clock drift, and returns `{ id, isAnonymous }`. `requireUser` is the preHandler: it reads `Authorization: Bearer` and gives every failure the same 401. It isn't mounted yet. The 16 tests use ES256 keys generated locally: signed-in and guest tokens, expired, drift, wrong issuer and audience, roles `anon` and `service_role`, a key the project doesn't publish, an HS256 token, a tampered payload, a non-uuid `sub`, the JWKS fetched from a local server, and one 401 body for every bad header. Dependency: `jose` 6.2.12.
+- **`supabase/migrations/0009_accounts.sql`** (one transaction):
+  - Drops every device-owned row and moves ownership to `user_id` → `auth.users(id)` (cascade; `set null` for spend).
+  - Drops devices, the device tombstones, `delete_device` and the trigger.
+  - Rebuilds the cap functions for users. The caller passes the cap, so guests get 5.
+  - Adds `delete_user_data`, `user_activity` and `inactive_guests`.
+  - Keeps cached posts, spend history and network counts.
+  - Tested in PGlite on top of 0001-0008 with seeded device data, as `service_role` against a stand-in for Supabase's auth schema and grants. 14 checks:
+    - the device rows and objects are gone; cache, spend (with no owner) and network counts are kept
+    - the foreign keys point at `auth.users`
+    - a guest's cap of 5 holds and pasted order is kept
+    - the network cap counts every user and deleted accounts
+    - collection children stop at the room left and aren't added twice
+    - `delete_user_data` keeps the network count and can run twice
+    - deleting the auth user cascades and keeps spend
+    - `inactive_guests` finds only guests not seen for 30 days
+    - `service_role` can't read `auth.users` directly
+    - `anon` and `authenticated` can't execute anything
+    - a second run fails and changes nothing
+  - **Not run in Supabase yet.**
+- **Backup of the device shelves** before 0009: `api/scripts/backup-device-shelves.ts` (select-only; leaves out device secrets and hashed networks) wrote `backups/device-shelves-2026-10-11.json` (gitignored): 23 devices, 183 books, 182 sources, 1 tag, 23 jobs, 32 items. The largest shelf, the dev shelf, has 43 live books and 1 in the Undo bin. Every count matched a direct count.
+- **Mockups** of the four new screens (Sign up / Log in sheet, Save your shelf prompt, the unsaved note on the shelf header, Settings → Account), shown as options at 390 and 1280 in both themes: https://claude.ai/artifact/H1p3MeQFU9rD4FQrfB559B. Waiting on the user's picks, plus two decisions: whether logging in on a browser with a guest shelf merges those books into the account, and whether code-only accounts (no password) are allowed.
+
+Waiting on the user: the Supabase dashboard setup (anonymous sign-ins and Email on, the Magic Link template carrying `{{ .Token }}`, JWT signing keys migrated to ES256 without revoking the legacy key, Site URL and redirect `http://localhost:5180/**`), then running 0009 with the API stopped.
+
+Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
 
 ## 7c: Deploy (live on 2026-10-10, then taken offline)
 

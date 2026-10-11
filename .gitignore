@@ -17,3 +17,6 @@ test-results/
 
 # Personal notes
 dev-notes.txt
+
+# Local data backups (may hold personal data)
+backups/
