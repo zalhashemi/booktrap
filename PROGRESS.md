@@ -11,7 +11,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 5 | Exports | Done (Goodreads test import pending) |
 | 6 | Design pass | Done |
 | 7 | Accounts (Supabase Auth) | Done (2026-10-11): built, code-reviewed and tested live, including the email-code flows. Real users need a verified email domain first (Phase 10) |
-| 8 | Limits, moderation, report and takedown | Built and unit-tested (2026-10-11); code review, migration 0010 in Supabase and the live Playwright checks to come |
+| 8 | Limits, moderation, report and takedown | Done (2026-10-11): built, code-reviewed, 0010 applied, tested live |
 | 9 | Scale, storage and cost | Not started |
 | 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
 
@@ -265,7 +265,7 @@ Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymou
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
 
-## Phase 8: Limits, moderation, report and takedown (in progress, 2026-10-11)
+## Phase 8: Limits, moderation, report and takedown (done, 2026-10-11)
 
 Built (`9172e99`):
 - **Limits** in `shared/src/limits.ts` (`LIMITS`, `MEDIA_LIMITS`, `bookLimitFor`), read by the API and the web app:
@@ -313,6 +313,22 @@ Code review (high, over `1c4e169..HEAD`) found 10 issues; all fixed:
 - The verdict-to-block mapping was written four times, and the shelf-full message twice. Fix: `BLOCKED_BY_CONTENT` in the store types and `shelfFullMessage` in shared.
 
 Tests after the fixes: 65 shared, 186 API, 32 web; 0010 in PGlite, 11 checks.
+
+**0010 is applied** (user, 2026-10-11). Checked read-only: the new column, tables and functions answer, the 10 cached posts are kept, and the publishable key can't read reports.
+
+**Live checks** (Playwright, real Supabase, $0): three synthetic cached posts (`booktrap.test`, ids 799999999999999000x: books, explicit, graphic) and a throwaway account made with the admin API. The API ran with a throwaway admin key, so the real one never left `api/.env`. All of it was deleted afterwards.
+- One paste: "2 books shelved" and "2 posts skipped", which opens to each post and why.
+- Book sheet: changed a book to Reading. The source menu puts focus on Open post, and Esc closes the menu but not the sheet. Report: no reason chosen, then Other without a note, each says what's missing next to its field. Esc closes the dialog but not the sheet. Sent: the toast, and the report on `/admin`.
+- `/admin`: a wrong key is refused, and no guest session starts. Title "Admin · BookTrap", `noindex`. Open shows the report with its note, and the detail shows 1 shelf, 2 books only there, 1 changed. Take down: the confirmation names what goes, with focus on Keep it. Result: Night Circus deleted, Piranesi (Reading) kept. Pasting it again: skipped as removed.
+- Auto-blocked: both skipped posts listed. Unblocking the explicit one, then pasting it again, shelved its book from the cache without reading it again.
+- 32 links: the limit note, and Catch books waits.
+- 390 and 1280 in light and dark: no horizontal overflow, no tap target under 44px, and the menu stays inside the sheet.
+- Bugs found and fixed:
+  - The report dialog's form sat inside the sheet's form, so sending submitted the page. It's now rendered into the body (still the top modal).
+  - The dialog's errors appeared far from their fields; they now sit next to them, with an icon.
+  - A book kept after its only post was removed said "Seen in 0 posts"; it now says the post was removed and the book stays.
+  - The takedown toast said "1 deleted, 1 kept"; it now names books.
+  - The admin tab row was cut off on phones with no sign it scrolls; it fades on the right, as the shelf's does.
 
 ## 7c: Deploy (live on 2026-10-10, then taken offline)
 

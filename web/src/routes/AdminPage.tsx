@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ArrowCounterClockwise, ArrowLeft, ArrowSquareOut, LockSimple, Prohibit, SignOut } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -152,6 +152,20 @@ function Reports({ client, onLocked }: { client: AdminClient; onLocked: () => vo
   const counts = posts.data?.counts;
   const waiting = counts?.open ?? 0;
 
+  // Phones: the tab row scrolls, and fades on the right while there's more of it (as on the shelf).
+  const scroller = useRef<HTMLDivElement>(null);
+  const [moreRight, setMoreRight] = useState(false);
+  const checkScroll = () => {
+    const element = scroller.current;
+    if (element) setMoreRight(element.scrollLeft + element.clientWidth < element.scrollWidth - 2);
+  };
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+    // The counts widen the tabs once they load.
+  }, [counts]);
+
   return (
     <>
       <h1 className="font-display text-[2.2rem] leading-[1.05] md:text-[3.1rem]">Reports</h1>
@@ -161,7 +175,11 @@ function Reports({ client, onLocked }: { client: AdminClient; onLocked: () => vo
 
       <TakedownByLink client={client} />
 
-      <div className="mt-6 overflow-x-auto [scrollbar-width:none]">
+      <div
+        ref={scroller}
+        onScroll={checkScroll}
+        className={`mt-6 overflow-x-auto [scrollbar-width:none] ${moreRight ? '[mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)]' : ''}`}
+      >
         <div className="tab-row min-w-max" role="group" aria-label="Show">
           {ADMIN_TABS.map((value) => (
             <button
@@ -251,7 +269,7 @@ function PostDetail({ post, tab, client, onBack }: { post: AdminPost; tab: Admin
   const reachQuery = useQuery({ queryKey: ['admin', 'reach', post.platform, post.postId], queryFn: () => client.reach(ref), enabled: tab !== 'removed' });
   const takeDown = useMutation({
     mutationFn: () => client.takeDown(ref),
-    onSuccess: (r) => done(`Taken down: ${r.sourcesRemoved} ${r.sourcesRemoved === 1 ? 'source' : 'sources'} removed, ${r.booksDeleted} deleted, ${r.booksKept} kept.`),
+    onSuccess: (r) => done(takedownSummary(r)),
     onError: failed,
   });
   const dismiss = useMutation({ mutationFn: () => client.dismiss(ref), onSuccess: () => done('Reports dismissed.'), onError: failed });
@@ -394,7 +412,7 @@ function TakedownByLink({ client }: { client: AdminClient }) {
   const takeDown = useMutation({
     mutationFn: () => client.takeDown({ url: url.trim() }),
     onSuccess: (r) => {
-      toast(`Taken down: ${r.sourcesRemoved} ${r.sourcesRemoved === 1 ? 'source' : 'sources'} removed, ${r.booksDeleted} deleted, ${r.booksKept} kept.`);
+      toast(takedownSummary(r));
       setUrl('');
       setConfirming(false);
       void queryClient.invalidateQueries({ queryKey: ['admin'] });
@@ -452,4 +470,10 @@ function TakedownByLink({ client }: { client: AdminClient }) {
       </div>
     </form>
   );
+}
+
+/** What a takedown did, in the toast. */
+function takedownSummary(r: { sourcesRemoved: number; booksDeleted: number; booksKept: number }): string {
+  const books = (n: number) => `${n} ${n === 1 ? 'book' : 'books'}`;
+  return `Taken down: removed from ${r.sourcesRemoved} ${r.sourcesRemoved === 1 ? 'book' : 'books'} on shelves, ${books(r.booksDeleted)} deleted, ${books(r.booksKept)} kept because readers had changed them.`;
 }

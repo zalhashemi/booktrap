@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { ArrowSquareOut, Copy, DotsThreeVertical, Flag, X } from '@phosphor-icons/react';
+import { createPortal } from 'react-dom';
+import { ArrowSquareOut, Copy, DotsThreeVertical, Flag, WarningCircle, X } from '@phosphor-icons/react';
 import { useMutation } from '@tanstack/react-query';
 import { LIMITS, PLATFORM_LABELS, REPORT_REASONS, REPORT_REASON_LABELS, type BookSource, type ReportReason } from '@booktrap/shared';
 import { ApiRequestError, api } from '../api/client';
@@ -123,12 +124,17 @@ export function SourceMenu({ source }: { source: BookSource }) {
   );
 }
 
-/** Why the post is reported, and an optional note (needed for Other). A modal over the book sheet. */
+/**
+ * Why the post is reported, and an optional note (needed for Other). A modal over the book sheet,
+ * rendered into the body: the sheet is itself a form, and forms can't nest. As the newest modal
+ * dialog it is on top, and everything under it (the sheet included) is inert.
+ */
 function ReportDialog({ source, onClose }: { source: BookSource; onClose: (sent: boolean) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [note, setNote] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // Shown next to what it's about: the reasons, the note, or (sending failed) above the buttons.
+  const [error, setError] = useState<{ on: 'reason' | 'note' | 'send'; message: string } | null>(null);
   const ids = { title: useId(), note: useId(), noteHelp: useId(), error: useId() };
   const send = useMutation({ mutationFn: () => api.reportPost({ platform: source.platform, postId: source.postId, reason: reason!, note: note.trim() || null }) });
   const needsNote = reason === 'other';
@@ -140,16 +146,19 @@ function ReportDialog({ source, onClose }: { source: BookSource; onClose: (sent:
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!reason) return setError('Choose what’s wrong with the post.');
-    if (needsNote && !note.trim()) return setError('Tell us what’s wrong in the note.');
+    // React events bubble through portals: this form's submit must not reach the book sheet's form.
+    event.stopPropagation();
+    if (!reason) return setError({ on: 'reason', message: 'Choose what’s wrong with the post.' });
+    if (needsNote && !note.trim()) return setError({ on: 'note', message: 'Tell us what’s wrong in the note.' });
     setError(null);
     send.mutate(undefined, {
       onSuccess: () => onClose(true),
-      onError: (failure) => setError(failure instanceof ApiRequestError ? failure.message : 'Couldn’t send the report. Check your connection and try again.'),
+      onError: (failure) =>
+        setError({ on: 'send', message: failure instanceof ApiRequestError ? failure.message : 'Couldn’t send the report. Check your connection and try again.' }),
     });
   };
 
-  return (
+  return createPortal(
     <dialog
       ref={dialog}
       aria-labelledby={ids.title}
@@ -174,8 +183,9 @@ function ReportDialog({ source, onClose }: { source: BookSource; onClose: (sent:
           </button>
         </div>
 
-        <fieldset className="grid gap-2" aria-describedby={error ? ids.error : undefined}>
+        <fieldset className="grid gap-2" aria-describedby={error?.on === 'reason' ? ids.error : undefined}>
           <legend className="mb-2 text-[0.95rem] font-bold">What’s wrong with it?</legend>
+          {error?.on === 'reason' && <FieldError id={ids.error} message={error.message} />}
           {REPORT_REASONS.map((value) => (
             <label
               key={value}
@@ -216,20 +226,18 @@ function ReportDialog({ source, onClose }: { source: BookSource; onClose: (sent:
             rows={3}
             maxLength={LIMITS.reportNoteChars}
             required={needsNote}
-            aria-describedby={ids.noteHelp}
+            aria-describedby={error?.on === 'note' ? `${ids.error} ${ids.noteHelp}` : ids.noteHelp}
+            aria-invalid={error?.on === 'note' || undefined}
             placeholder={reason === 'mine' ? 'Your handle, so we know it’s you' : 'Anything that helps us check it'}
-            className="field mt-1.5 min-h-20 resize-y"
+            className="field mt-1.5 min-h-20 resize-y aria-invalid:border-[var(--note-ink)]"
           />
+          {error?.on === 'note' && <FieldError id={ids.error} message={error.message} />}
           <p id={ids.noteHelp} className="mt-1.5 text-[0.85rem] text-text-muted">
             Only BookTrap sees reports. The creator isn’t told who sent it.
           </p>
         </div>
 
-        {error && (
-          <p id={ids.error} role="alert" className="text-sm text-note-ink">
-            {error}
-          </p>
-        )}
+        {error?.on === 'send' && <FieldError id={ids.error} message={error.message} />}
 
         <div className="flex flex-wrap gap-2.5">
           <Button type="submit" disabled={send.isPending} className="px-5 text-[0.92rem]">
@@ -241,6 +249,16 @@ function ReportDialog({ source, onClose }: { source: BookSource; onClose: (sent:
           </Button>
         </div>
       </form>
-    </dialog>
+    </dialog>,
+    document.body,
+  );
+}
+
+function FieldError({ id, message }: { id: string; message: string }) {
+  return (
+    <p id={id} role="alert" className="mt-1.5 flex items-start gap-1.5 text-sm font-bold text-note-ink">
+      <WarningCircle size={18} weight="fill" className="mt-px shrink-0" aria-hidden="true" />
+      {message}
+    </p>
   );
 }

@@ -36,5 +36,7 @@ export function sourceSummary(sources: BookSource[]): string {
 }
 
 export function sourceHeading(sources: BookSource[]): string {
+  // A book can outlive its only post (taken down after a report, the reader having changed it).
+  if (sources.length === 0) return 'Where it was found';
   return sources.length === 1 ? 'Found in 1 post' : `Seen in ${sources.length} posts`;
 }

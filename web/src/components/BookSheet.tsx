@@ -203,6 +203,9 @@ function SheetBody({ book, onClose, requestClose, setCloseGuard, onDelete }: Bod
           <h3 id="sources-heading" className="text-[0.95rem] font-bold">
             {sourceHeading(book.sources)}
           </h3>
+          {book.sources.length === 0 && (
+            <p className="mt-1.5 text-sm text-text-muted">The post it came from was removed from BookTrap. The book stays on your shelf.</p>
+          )}
           <ul className="mt-1 divide-y divide-rule">
             {book.sources.map((source) => (
               <li key={source.id} className="flex items-center gap-1">
