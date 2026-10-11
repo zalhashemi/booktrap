@@ -569,6 +569,42 @@ describe('JobQueue', () => {
     expect(maxActive).toBe(2);
     expect(order.indexOf('end a1')).toBeLessThan(order.indexOf('start a2'));
   });
+  it('lets readers take turns, so a long paste doesn’t hold a slot while others wait', async () => {
+    const started: string[] = [];
+    const queue = new JobQueue(async (id) => {
+      started.push(id);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }, 1);
+    for (let i = 1; i <= 4; i++) queue.enqueue(`a${i}`, 'user-a');
+    queue.enqueue('b1', 'user-b');
+    queue.enqueue('c1', 'user-c');
+    await queue.idle();
+    // Before: a1 a2 a3 a4 b1 c1. Now b and c each get a turn after a's first.
+    expect(started).toEqual(['a1', 'b1', 'c1', 'a2', 'a3', 'a4']);
+  });
+
+  it('estimates each waiting item’s place and wait', async () => {
+    const releases: (() => void)[] = [];
+    const queue = new JobQueue(async () => new Promise<void>((resolve) => releases.push(resolve)), 2);
+    queue.enqueue('a1', 'user-a');
+    queue.enqueue('b1', 'user-b');
+    queue.enqueue('a2', 'user-a');
+    queue.enqueue('c1', 'user-c');
+    queue.enqueue('c2', 'user-c');
+    const estimates = queue.estimates();
+    // Running: a1, b1. Waiting, in turn order: c1 (never started), a2, c2.
+    expect(estimates.has('a1')).toBe(false);
+    expect([...estimates].map(([id, e]) => [id, e.ahead])).toEqual([['c1', 2], ['a2', 3], ['c2', 4]]);
+    // Waves of 2 at the default 40s, minus half the running wave.
+    expect(estimates.get('c1')!.etaSeconds).toBe(20);
+    expect(estimates.get('c2')!.etaSeconds).toBe(60);
+    while (releases.length) releases.shift()!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    while (releases.length) releases.shift()!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    while (releases.length) releases.shift()!();
+    await queue.idle();
+  });
 });
 
 describe('moderation and limits in the pipeline', () => {

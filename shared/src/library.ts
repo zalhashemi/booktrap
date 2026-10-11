@@ -26,6 +26,8 @@ export const JobItemSchema = z.object({
   /** Set when the post was skipped and nothing from it was added (moderation or a takedown). */
   // Defaulted: a web build that ships before its API still reads the older API's jobs.
   blocked: BlockedKindSchema.nullable().default(null),
+  /** For a waiting item: how many start before it and about how long until it starts (Phase 9). */
+  queue: z.object({ ahead: z.number().int(), etaSeconds: z.number().int() }).nullable().default(null),
 });
 export type JobItem = z.infer<typeof JobItemSchema>;
 

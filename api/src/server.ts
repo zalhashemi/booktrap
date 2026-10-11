@@ -99,7 +99,7 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
       monthlyBudgetUsd: config.MONTHLY_BUDGET_USD,
       killSwitch: config.GLOBAL_SPEND_KILL_SWITCH,
       ipHashKey: config.ipHashKey,
-      pipelineConfigured: Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
+      pipelineConfigured: config.LOAD_TEST || Boolean(config.APIFY_TOKEN && config.ANTHROPIC_API_KEY),
     },
   });
   libraryRoutes(app, { auth, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });

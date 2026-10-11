@@ -16,7 +16,7 @@ import {
 import type { z } from 'zod';
 import { HttpError } from '../errors';
 import { MAX_ATTEMPTS, monthStart, utcDayStart } from '../pipeline/process';
-import type { JobQueue } from '../pipeline/queue';
+import type { JobQueue, QueueEstimate } from '../pipeline/queue';
 import { DailyCapError, type ItemKind, type JobWithItems, type LibraryStore } from '../store/types';
 
 export interface JobRouteOptions {
@@ -30,7 +30,7 @@ export interface JobRouteOptions {
   pipelineConfigured: boolean;
 }
 
-export function toJobResponse(job: JobWithItems): Job {
+export function toJobResponse(job: JobWithItems, estimates?: Map<string, QueueEstimate>): Job {
   return {
     id: job.id,
     status: job.status,
@@ -47,6 +47,7 @@ export function toJobResponse(job: JobWithItems): Job {
       parentItemId: item.parentItemId,
       note: item.note,
       blocked: item.blocked,
+      queue: item.status === 'queued' ? (estimates?.get(item.id) ?? null) : null,
     })),
   };
 }
@@ -142,7 +143,7 @@ export function jobRoutes(
       }
       for (const item of job.items) queue.enqueue(item.id, user.id);
       reply.code(201);
-      return toJobResponse(job);
+      return toJobResponse(job, queue.estimates());
     },
   );
 
@@ -154,13 +155,14 @@ export function jobRoutes(
 
   app.get('/v1/jobs', auth, async (request): Promise<z.infer<typeof JobListResponseSchema>> => {
     const jobs = await store.listJobs(request.user!.id, 5);
-    return { jobs: jobs.map(toJobResponse) };
+    const estimates = queue.estimates();
+    return { jobs: jobs.map((job) => toJobResponse(job, estimates)) };
   });
 
   app.get<{ Params: { jobId: string } }>('/v1/jobs/:jobId', auth, async (request): Promise<Job> => {
     const job = await store.getJob(request.user!.id, request.params.jobId).catch(() => null);
     if (!job) throw new HttpError(404, ERROR_CODES.notFound, 'No such job.');
-    return toJobResponse(job);
+    return toJobResponse(job, queue.estimates());
   });
 
   app.post<{ Params: { jobId: string; itemId: string } }>(
@@ -190,7 +192,7 @@ export function jobRoutes(
       await store.updateItem(item.id, { status: 'queued', error: null });
       await store.refreshJobStatus(job.id);
       queue.enqueue(item.id, user.id);
-      return toJobResponse((await store.getJob(user.id, job.id))!);
+      return toJobResponse((await store.getJob(user.id, job.id))!, queue.estimates());
     },
   );
 

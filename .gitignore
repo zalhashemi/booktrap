@@ -20,3 +20,6 @@ dev-notes.txt
 
 # Local data backups (may hold personal data)
 backups/
+
+# Load-test keys and results (api/scripts/load)
+api/.load/

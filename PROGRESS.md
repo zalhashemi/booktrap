@@ -114,6 +114,11 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-11: **Phase 9 set-up (user):**
+  - The load test runs in Docker at Render-like limits, through **Colima**. There's no Homebrew, so Lima 2.2.1, Colima 0.10.3 and the Docker 29.9.0 CLI were installed from their official releases into `~/.local` (no sudo; Lima and Colima checked against their published checksums).
+  - The 100 simulated readers hit the **real Supabase project** (throwaway accounts and rows, deleted afterwards), with Apify and Claude stubbed so nothing is paid for.
+  - Storage is measured through **migration 0011**: a read-only `storage_report()` (service role only), against a seeded realistic test shelf.
+
 - 2026-10-11: **Phase 8 picks (user)** from the mockups (https://claude.ai/artifact/TWFssvHjgWopoCHy7pd6xS):
   - Report this post is option C: a "more" menu on each source in the book sheet (Open post, Copy link, Report this post) that opens a small dialog.
   - A blocked post is option C: skipped posts fold into one quiet "N posts skipped" row at the end of the job list, which opens to the reason.

@@ -4,6 +4,7 @@ import { FREE_VIDEOS_PER_COLLECTION, LIMITS } from '@booktrap/shared';
 import { purgeIdleGuests } from './account';
 import { createSessionVerifier, type SessionVerifier } from './auth/session-auth';
 import { loadConfig } from './config';
+import { loadTestMode } from './load-test';
 import { processItem } from './pipeline/process';
 import { JobQueue } from './pipeline/queue';
 import { buildApp } from './server';
@@ -22,8 +23,14 @@ const db =
     : null;
 const users = db ? createSupabaseUserDirectory(db) : createMemoryUserDirectory();
 const store = db ? createSupabaseLibraryStore(db) : createMemoryLibraryStore();
+// Load-test mode (never in production): the load script's own session key and stubbed paid services.
+const load = config.LOAD_TEST
+  ? await loadTestMode({ supabaseUrl: config.SUPABASE_URL!, jwksFile: config.LOAD_TEST_JWKS_FILE!, timeScale: config.LOAD_TEST_TIME_SCALE })
+  : null;
 // Sign-in is Supabase Auth: without a project, no token can be checked, so every request is refused.
-const verifySession: SessionVerifier = config.SUPABASE_URL
+const verifySession: SessionVerifier = load
+  ? load.verifySession
+  : config.SUPABASE_URL
   ? createSessionVerifier({ supabaseUrl: config.SUPABASE_URL })
   : async () => {
       throw new Error('Supabase is not configured');
@@ -41,8 +48,9 @@ runItem = (itemId) =>
     store,
     log: pipelineLog,
     settings: {
-      apifyToken: config.APIFY_TOKEN,
-      anthropic: config.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: config.ANTHROPIC_API_KEY }) : undefined,
+      // Load-test mode stubs both, so no real key is needed (or sent anywhere).
+      apifyToken: load ? 'load-test' : config.APIFY_TOKEN,
+      anthropic: load ? ({} as Anthropic) : config.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: config.ANTHROPIC_API_KEY }) : undefined,
       googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY,
       model: config.EXTRACTION_MODEL,
       effort: config.EXTRACTION_EFFORT,
@@ -57,12 +65,14 @@ runItem = (itemId) =>
     },
     isGuest: (userId) => users.isGuest(userId),
     enqueue: (childId, userId) => queue.enqueue(childId, userId),
+    ...load?.stubs,
   });
 
+if (load) app.log.warn({ timeScale: config.LOAD_TEST_TIME_SCALE }, 'LOAD TEST MODE: test sessions and stubbed Apify, Claude and catalogue');
 if (config.storage === 'memory') {
   app.log.warn('SUPABASE_URL is not set: using in-memory storage, and no one can sign in.');
 }
-if (!config.APIFY_TOKEN || !config.ANTHROPIC_API_KEY) {
+if (!load && (!config.APIFY_TOKEN || !config.ANTHROPIC_API_KEY)) {
   app.log.warn('APIFY_TOKEN or ANTHROPIC_API_KEY is missing: new links are refused as "paused".');
 }
 

@@ -64,6 +64,16 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  /**
+   * Load-test mode (api/scripts/load): sessions signed by the load script's key (LOAD_TEST_JWKS_FILE),
+   * Apify, Claude and the catalogue stubbed, delays times LOAD_TEST_TIME_SCALE. Refused in production.
+   */
+  LOAD_TEST: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  LOAD_TEST_JWKS_FILE: optionalString,
+  LOAD_TEST_TIME_SCALE: z.coerce.number().positive().max(1).default(1),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -86,6 +96,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
 
   // Its own key in production: borrowing the Supabase key would reset every network's count when it's rotated.
   if (config.NODE_ENV === 'production' && !config.IP_HASH_KEY) throw new Error('IP_HASH_KEY is required in production.');
+  if (config.LOAD_TEST && config.NODE_ENV === 'production') throw new Error('LOAD_TEST is never allowed in production.');
+  if (config.LOAD_TEST && (!config.LOAD_TEST_JWKS_FILE || !config.SUPABASE_URL)) {
+    throw new Error('LOAD_TEST needs LOAD_TEST_JWKS_FILE and SUPABASE_URL (see api/scripts/load).');
+  }
 
   return {
     ...config,

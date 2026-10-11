@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+.git
+.playwright-mcp
+backups
+web/src
+web/public
+**/.env
+**/.env.*
+api/.load
+*.md

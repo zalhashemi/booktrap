@@ -162,38 +162,45 @@ export async function extractFrames(
       },
     });
     await pipeline(Readable.fromWeb(response.body as never), cap, createWriteStream(videoPath));
-
-    const log = await runFfmpeg([
-      '-hide_banner',
-      '-loglevel', 'info',
-      '-i', videoPath,
-      '-vf', frameFilter(durationSec || 60, deps.frameWidth ?? MEDIA_LIMITS.frameWidth),
-      '-fps_mode', 'vfr',
-      '-q:v', '4',
-      join(dir, 'frame_%d.jpg'),
-    ]);
-    const times = [...log.matchAll(/pts_time:\s*([\d.]+)/g)].map((match) => Number(match[1]));
-
-    const files = (await readdir(dir))
-      .map((name) => ({ name, n: Number(/^frame_(\d+)\.jpg$/.exec(name)?.[1] ?? NaN) }))
-      .filter((file) => Number.isFinite(file.n))
-      .sort((a, b) => a.n - b.n);
-    if (files.length === 0) throw new PipelineError('media_failed', 'BookTrap couldn’t read any frames from this video.');
-
-    const chosen = thin(files, MEDIA_LIMITS.maxFrames);
-    return Promise.all(
-      chosen.map(async (file) => ({
-        label: times[file.n - 1] !== undefined ? `Frame at ${formatTime(times[file.n - 1]!)}` : `Frame ${file.n}`,
-        mediaType: 'image/jpeg' as const,
-        base64: (await readFile(join(dir, file.name))).toString('base64'),
-      })),
-    );
+    return await framesFromFile(videoPath, dir, durationSec, deps.frameWidth);
   } catch (error) {
     if (error instanceof PipelineError) throw error;
     throw new PipelineError('media_failed', 'BookTrap couldn’t process this video. Try again in a minute.', true);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Samples frames from a video already on disk into `dir` (the caller owns and removes it). Split out
+ * so the load test can run the real ffmpeg work on a local sample video.
+ */
+export async function framesFromFile(videoPath: string, dir: string, durationSec: number, frameWidth?: number): Promise<ImageInput[]> {
+  const log = await runFfmpeg([
+    '-hide_banner',
+    '-loglevel', 'info',
+    '-i', videoPath,
+    '-vf', frameFilter(durationSec || 60, frameWidth ?? MEDIA_LIMITS.frameWidth),
+    '-fps_mode', 'vfr',
+    '-q:v', '4',
+    join(dir, 'frame_%d.jpg'),
+  ]);
+  const times = [...log.matchAll(/pts_time:\s*([\d.]+)/g)].map((match) => Number(match[1]));
+
+  const files = (await readdir(dir))
+    .map((name) => ({ name, n: Number(/^frame_(\d+)\.jpg$/.exec(name)?.[1] ?? NaN) }))
+    .filter((file) => Number.isFinite(file.n))
+    .sort((a, b) => a.n - b.n);
+  if (files.length === 0) throw new PipelineError('media_failed', 'BookTrap couldn’t read any frames from this video.');
+
+  const chosen = thin(files, MEDIA_LIMITS.maxFrames);
+  return Promise.all(
+    chosen.map(async (file) => ({
+      label: times[file.n - 1] !== undefined ? `Frame at ${formatTime(times[file.n - 1]!)}` : `Frame ${file.n}`,
+      mediaType: 'image/jpeg' as const,
+      base64: (await readFile(join(dir, file.name))).toString('base64'),
+    })),
+  );
 }
 
 /** WebVTT -> plain text, de-duplicated (TikTok captions repeat lines across cues). */
