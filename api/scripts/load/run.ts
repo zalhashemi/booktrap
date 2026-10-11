@@ -322,6 +322,9 @@ async function clean() {
     if (data.users.length < 1000) break;
   }
   const cache = await db.from('post_cache').delete({ count: 'exact' }).eq('model', 'load-test');
+  // The stubs cost nothing, but each read still leaves a $0 spend row: drop those (real spend is never $0).
+  const spend = await db.from('spend_events').delete({ count: 'exact' }).eq('usd', 0);
+  console.log(`deleted ${spend.count ?? 0} zero-cost spend rows`);
   console.log(`deleted ${removed} load-test accounts and ${cache.count ?? 0} cached load-test posts`);
 }
 

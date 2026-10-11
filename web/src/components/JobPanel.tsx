@@ -1,8 +1,9 @@
-import { ArrowClockwise, CaretDown, CheckCircle, Images, Info, Playlist, Prohibit, VideoCamera, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, CaretDown, CheckCircle, HourglassMedium, Images, Info, Playlist, Prohibit, VideoCamera, WarningCircle } from '@phosphor-icons/react';
 import { Link } from 'react-router';
 import { BLOCKED_MESSAGES, PLATFORM_LABELS, parseSourceUrl, type Job, type JobItem, type SourceLink } from '@booktrap/shared';
 import { useJobs, useRetryItem } from '../library/hooks';
 import { describeKind } from '../library/links';
+import { aboutWait } from '../library/wait';
 import { PlatformIcon } from './PlatformIcon';
 
 const STAGES: Record<JobItem['status'], { label: string; step: number }> = {
@@ -114,6 +115,26 @@ function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?
         </div>
       )}
     </li>
+  );
+}
+
+/** Below this, a wait isn't worth mentioning. */
+const NOTICEABLE_WAIT_S = 20;
+
+/**
+ * When the queue is long, one line above the cards says so (user's pick, option C, with their wording):
+ * the wait until the reader's next link starts, from the server's estimate.
+ */
+function BusyNotice({ items }: { items: JobItem[] }) {
+  const waits = items.filter((item) => item.status === 'queued' && item.queue).map((item) => item.queue!.etaSeconds);
+  if (waits.length === 0) return null;
+  const next = Math.min(...waits);
+  if (next < NOTICEABLE_WAIT_S) return null;
+  return (
+    <p className="mt-3 flex items-start gap-2.5 rounded-[16px] bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] px-3.5 py-3 text-[0.92rem] font-bold">
+      <HourglassMedium size={20} weight="fill" className="mt-px shrink-0 text-accent-ink" aria-hidden="true" />
+      BookTrap is busy. Your {waits.length === 1 ? 'link starts' : 'links start'} in {aboutWait(next)}.
+    </p>
   );
 }
 
@@ -243,6 +264,8 @@ export function JobPanel() {
       ) : all.length === 0 ? (
         <p className="mt-2 max-w-[34ch] text-sm text-text-muted">Links you paste show up here while BookTrap reads them.</p>
       ) : (
+        <>
+        <BusyNotice items={recent.flatMap((job) => job.items)} />
         <ul className="mt-3 space-y-2.5">
           {items.map(({ job, item, videos }) => (
             <ItemCard key={item.id} job={job} item={item} videos={videos} />
@@ -253,6 +276,7 @@ export function JobPanel() {
             </li>
           )}
         </ul>
+        </>
       )}
     </section>
   );
