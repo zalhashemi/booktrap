@@ -491,9 +491,9 @@ describe('rate limiting behind a proxy', () => {
 });
 
 describe('config', () => {
-  it('trusts one proxy hop by default in production only', () => {
+  it('trusts Render’s three proxy hops by default in production only', () => {
     const prodEnv = { NODE_ENV: 'production', SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k', IP_HASH_KEY: 'h' };
-    expect(loadConfig(prodEnv).TRUST_PROXY_HOPS).toBe(1);
+    expect(loadConfig(prodEnv).TRUST_PROXY_HOPS).toBe(3);
     expect(loadConfig({}).TRUST_PROXY_HOPS).toBe(0);
   });
 

@@ -24,8 +24,8 @@ import {
 /** The current access token, or a freshly refreshed one after the API refused it. Null when signed out. */
 export type TokenSource = (options: { refresh: boolean }) => Promise<string | null>;
 
-/** Long enough for the free API host to wake from sleep. */
-const REQUEST_TIMEOUT_MS = 75_000;
+/** The API is always on (Render Starter). The slowest call is a guest merge, which may wait up to 45s for a link to finish. */
+const REQUEST_TIMEOUT_MS = 55_000;
 
 export class ApiRequestError extends Error {
   constructor(

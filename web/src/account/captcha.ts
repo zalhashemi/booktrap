@@ -22,10 +22,13 @@ declare global {
   }
 }
 
+/** The Turnstile script never loaded: almost always a content blocker. */
 const BLOCKED = new AccountError(
   'captcha',
   'BookTrap couldn’t check this browser. If a content blocker is on, allow challenges.cloudflare.com, then try again.',
 );
+/** The script loaded but the check itself failed or ran out of time. */
+const CHECK_FAILED = new AccountError('captcha', 'BookTrap couldn’t check this browser. Reload the page and try again.');
 
 let loading: Promise<Turnstile> | null = null;
 
@@ -35,8 +38,13 @@ function loadTurnstile(): Promise<Turnstile> {
     const script = document.createElement('script');
     script.src = SCRIPT_URL;
     script.async = true;
-    script.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(BLOCKED));
-    script.onerror = () => reject(BLOCKED);
+    // A failed tag is removed, so trying again doesn't pile up blocked scripts.
+    const fail = () => {
+      script.remove();
+      reject(BLOCKED);
+    };
+    script.onload = () => (window.turnstile ? resolve(window.turnstile) : fail());
+    script.onerror = fail;
     document.head.append(script);
   }).catch((error: unknown) => {
     loading = null;
@@ -56,22 +64,27 @@ export async function captchaToken(): Promise<string | undefined> {
   let widgetId: string | undefined;
   try {
     return await new Promise<string>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(BLOCKED), GIVE_UP_MS);
+      const timer = window.setTimeout(() => reject(CHECK_FAILED), GIVE_UP_MS);
       const fail = () => {
         window.clearTimeout(timer);
-        reject(BLOCKED);
+        reject(CHECK_FAILED);
       };
-      widgetId = turnstile.render(container, {
-        sitekey: SITE_KEY,
-        appearance: 'interaction-only',
-        callback: (token: string) => {
-          window.clearTimeout(timer);
-          resolve(token);
-        },
-        'error-callback': fail,
-        'expired-callback': fail,
-        'timeout-callback': fail,
-      });
+      try {
+        widgetId = turnstile.render(container, {
+          sitekey: SITE_KEY,
+          appearance: 'interaction-only',
+          callback: (token: string) => {
+            window.clearTimeout(timer);
+            resolve(token);
+          },
+          'error-callback': fail,
+          'expired-callback': fail,
+          'timeout-callback': fail,
+        });
+      } catch {
+        // A bad site key or a broken page: Turnstile throws instead of calling back.
+        fail();
+      }
     });
   } finally {
     if (widgetId) turnstile.remove(widgetId);

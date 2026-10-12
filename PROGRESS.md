@@ -297,7 +297,20 @@ Deployed (12 Oct 2026): the API on Render Starter at `https://api.booktrap.app` 
 - **Reading from Render**, 2 uncached posts pasted on the live site: a TikTok photo carousel (7 books) and an Instagram post (9 books), all 14 covers loading. $0.066 in all (Apify $0.007, Claude $0.058). Share-link lookup from Render not tested yet (both were full links).
 - Cloudflare Web Analytics was on for the site; its beacon is blocked by the CSP. The user is switching it off (the policy says no analytics).
 
-Still to do after the deploy: a share-link lookup from Render; a security review; a Playwright full-flow test against production at 390 and 1280 in both themes; the final Code Review (high).
+- **Security pass on the live deploy**: admin routes refuse without the key (401); CORS refuses other sites; 2 MB bodies get 413; private responses `no-store`, `nosniff`, `no-referrer`; the per-IP rate limit is on. Supabase, with the publishable key and as a signed-in reader (a throwaway account made through the admin API): every table (12) refuses reads and writes (42501), and every function refuses execution when called with real arguments.
+- **Playwright full flow on booktrap.app** (cached posts, $0): a fresh guest pasted both posts (16 books), logged in with a password to an existing throwaway account, and the guest shelf merged into it (16 books after a reload). Add, Shelf, Settings, Privacy and Terms at 390 and 1280 in light and dark: no sideways scroll, no button under 44px. Console: only Turnstile's own log line and an Open Library cover 404 (the lettered plate, as designed).
+- **Found and fixed:** a cached repaste of 16 books took 49s, because each book's catalogue lookup ran one after another (Google Books, then Open Library, up to 8s each). Now 4 at a time, still shelved in the post's order: the same paste takes 20s. Google Books was answering 503 or empty all afternoon (other book apps reported it on 8 and 10 Oct); the Open Library fallback found the books.
+- Items still run one at a time per reader (by design: two of a reader's posts can't race to add the same book).
+- Cleanup: the throwaway account and 15 guest shelves made by the tests were deleted.
+
+- **Code Review (high), 10 findings, all fixed:**
+  - The log-in email is now code only. Its button signed the browser in without moving the guest shelf into the account (the guest's books would be lost), and a mail scanner opening the link used up the code. The save-your-shelf email keeps its button (that flow already copes with a used link).
+  - Catalogue lookups are paced server-wide (4 at once across all posts, not 4 per post), books are shelved as their lookups finish (still in the post's order), and a lookup that throws shelves the book as read instead of failing the post.
+  - Turnstile: a failed or timed-out check says "Reload the page and try again" (the content-blocker message is only for a script that never loaded); a throw from `render` gets the same message and cleans up; a blocked script tag is removed before a retry.
+  - `TRUST_PROXY_HOPS` defaults to 3 in production (dropped from `render.yaml`), documented as holding only while `api.booktrap.app` is DNS only.
+  - Request timeout 75s to 55s (always on; the slowest call is a guest merge waiting up to 45s), stale "free server" comments, and the emails' privacy link is absolute (no `//privacy` if the Site URL gains a slash).
+
+Still to do: the user pastes the code-only log-in template into Supabase; a share-link lookup from Render (needs a short link); Buy Me a Coffee (the user is setting up the page; placement options first).
 
 ## Phase 9: Scale, storage and cost (done, 2026-10-11)
 

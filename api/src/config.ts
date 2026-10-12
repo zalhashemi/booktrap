@@ -104,7 +104,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   return {
     ...config,
     ipHashKey: config.IP_HASH_KEY ?? config.SUPABASE_SERVICE_ROLE_KEY ?? 'booktrap-dev-ip-key',
-    TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.NODE_ENV === 'production' ? 1 : 0),
+    // Render: its in-container proxy, load balancer and Cloudflare (measured, Phase 10). Only while
+    // api.booktrap.app stays a DNS-only CNAME: proxying it through our own Cloudflare zone adds a hop.
+    TRUST_PROXY_HOPS: config.TRUST_PROXY_HOPS ?? (config.NODE_ENV === 'production' ? 3 : 0),
     storage: hasSupabase ? ('supabase' as const) : ('memory' as const),
   };
 }

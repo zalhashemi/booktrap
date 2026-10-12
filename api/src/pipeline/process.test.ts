@@ -4,7 +4,7 @@ import type { LibraryStore } from '../store/types';
 import type { PostData } from './fetchers';
 import { PipelineError } from './errors';
 import type { ExtractedBook } from './extract';
-import { processItem, type PipelineDeps } from './process';
+import { createLimiter, processItem, type PipelineDeps } from './process';
 import { JobQueue } from './queue';
 import type { Verification } from './verify';
 
@@ -134,6 +134,34 @@ describe('processItem', () => {
     expect(verifyBook).toHaveBeenCalledTimes(9);
     expect(most).toBe(4);
     expect(inserted).toEqual(titles);
+  });
+
+  it('shelves a book whose lookup throws as it was read, and keeps the rest', async () => {
+    const store = createMemoryLibraryStore();
+    const verifyBook = vi.fn(async (title: string, author: string | null) => {
+      if (title === 'Broken') throw new Error('catalogue down');
+      return verified(title, author, '9780000000001');
+    });
+    const { deps } = makeDeps(store, { x: [book('Broken', 'A'), book('Fine', 'B')] }, { verifyBook });
+    const job = await runJob(store, deps, [URL_A]);
+
+    expect(job.items[0]).toMatchObject({ status: 'done', booksFound: 2 });
+    const shelved = await store.listBooks(USER);
+    expect(shelved.map((entry) => [entry.title, entry.isbn13]).sort()).toEqual([['Broken', null], ['Fine', '9780000000001']]);
+  });
+
+  it('paces lookups across every post being read, not per post', async () => {
+    const limit = createLimiter(2);
+    let running = 0;
+    let most = 0;
+    const task = () =>
+      limit(async () => {
+        most = Math.max(most, ++running);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        running--;
+      });
+    await Promise.all(Array.from({ length: 7 }, task));
+    expect(most).toBe(2);
   });
 
   it('adds low-confidence and unmatched books as read, without flagging them', async () => {

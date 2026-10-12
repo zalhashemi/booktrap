@@ -46,4 +46,17 @@ describe('captchaToken', () => {
     // A fresh module copy each test, so the class is matched by name.
     expect(error).toMatchObject({ name: 'AccountError', code: 'captcha' });
   });
+
+  it('turns Turnstile throwing at the start into the same plain message, and cleans up', async () => {
+    window.turnstile = {
+      render: () => {
+        throw new Error('Invalid sitekey');
+      },
+      remove: vi.fn(),
+    };
+    const captchaToken = await load('bad-key');
+    const error = await captchaToken().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ name: 'AccountError', code: 'captcha', message: expect.stringMatching(/Reload the page/) });
+    expect(document.body.children).toHaveLength(0);
+  });
 });

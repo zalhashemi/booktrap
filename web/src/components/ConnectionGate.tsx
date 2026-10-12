@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AccountError, useAccount } from '../account/account-context';
 import { Button } from './Button';
 
-/** After this long, explain that the free server may be waking up. */
+/** After this long, say it's taking longer than usual. */
 const SLOW_AFTER_MS = 4000;
 
 /** `open` pages (the privacy policy and terms) render whatever the shelf's state. */

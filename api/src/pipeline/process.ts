@@ -21,21 +21,33 @@ import { isSameBook, normalizedKey } from './normalize';
 import { resolveLink } from './resolve';
 import { verifyBook, type Verification } from './verify';
 
-/** Catalogue lookups per post at once: fast enough, and well inside Google Books' per-user rate. */
+/**
+ * Catalogue lookups (Google Books, then Open Library) in flight at once across the whole server, not per
+ * post: 3 posts read at a time must not multiply it. One by one, 16 books took 49s on Render.
+ */
 const LOOKUPS_AT_ONCE = 4;
 
-/** `run` over `items` with at most `limit` running at once; results keep the items' order. */
-async function mapLimited<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await run(items[index]!);
+/** Runs tasks with at most `limit` in flight; the rest wait their turn in order. */
+export function createLimiter(limit: number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      return await task();
+    } finally {
+      active--;
+      waiting.shift()?.();
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
+}
+
+const lookupLimiter = createLimiter(LOOKUPS_AT_ONCE);
+
+/** What a lookup that finds nothing returns: the book as read from the post. */
+function unmatched(book: ExtractedBook): Verification {
+  return { verified: false, title: book.title, author: book.author, isbn10: null, isbn13: null, coverUrl: null, publishedYear: null, score: 0 };
 }
 
 export interface PipelineSettings {
@@ -65,6 +77,8 @@ export interface PipelineDeps {
   fetchPost?: typeof fetchPost;
   extractBooks?: typeof extractBooks;
   verifyBook?: typeof verifyBook;
+  /** Test seam: the server-wide pace of catalogue lookups. */
+  lookupLimiter?: ReturnType<typeof createLimiter>;
   resolveLink?: typeof resolveLink;
   listCollection?: typeof listTikTokCollection;
   /** Whether the job's owner is a guest: their daily cap when a collection expands, and their book limit. */
@@ -445,16 +459,23 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     const room = await bookRoom(item.userId, wanted.length, deps);
     let added = 0;
     let full = 0;
-    // Catalogue lookups run a few at a time (one by one, 16 books took 49s on Render, cached post or not);
-    // books are still shelved in the post's order.
-    const verifications = await mapLimited(wanted, LOOKUPS_AT_ONCE, (book) =>
-      verify(book.title, book.author, {
-        googleBooksApiKey: deps.settings.googleBooksApiKey,
-        log: (message, detail) => log.warn({ detail }, message),
+    // Every lookup starts now (the server-wide limiter paces them); each book is shelved as soon as its own
+    // lookup and the ones before it are done, so the shelf fills in the post's order. A lookup that throws
+    // shelves the book as read, unmatched, like a lookup that finds nothing.
+    const limit = deps.lookupLimiter ?? lookupLimiter;
+    const lookups = wanted.map((book) =>
+      limit(() =>
+        verify(book.title, book.author, {
+          googleBooksApiKey: deps.settings.googleBooksApiKey,
+          log: (message, detail) => log.warn({ detail }, message),
+        }),
+      ).catch((error: unknown): Verification => {
+        log.warn({ err: error, title: book.title }, 'book lookup failed');
+        return unmatched(book);
       }),
     );
     for (const [index, book] of wanted.entries()) {
-      const outcome = await shelve(item.userId, item.jobId, book, verifications[index]!, post, deps, room);
+      const outcome = await shelve(item.userId, item.jobId, book, await lookups[index]!, post, deps, room);
       if (outcome === 'added') added++;
       if (outcome === 'full') full++;
     }
