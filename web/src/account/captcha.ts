@@ -3,13 +3,20 @@ import { AccountError } from './account-context';
 /**
  * Cloudflare Turnstile, which Supabase checks before it starts a guest, signs someone in or emails a
  * code (Phase 10: a new anonymous session per visit was a way around the guest limit). The widget is
- * Invisible in the Turnstile dashboard, so nobody sees a puzzle. Without a site key (tests, a copy of
+ * Managed in the Turnstile dashboard and rendered interaction-only, so most people see nothing and a
+ * browser Turnstile doubts (strict privacy settings) gets a checkbox rather than a dead end. Without a site key (tests, a copy of
  * BookTrap with CAPTCHA off in Supabase) no token is sent.
  */
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 /** Turnstile usually answers in about a second; a blocked script never answers at all. */
 const GIVE_UP_MS = 20_000;
+/**
+ * A failed check is often passed on a second try (Firefox with strict tracking protection, a privacy
+ * extension, a flaky network), and Turnstile retries by itself while its widget stays up.
+ */
+const MAX_FAILURES = 3;
+const RETRY_MS = 2000;
 
 interface Turnstile {
   render(container: HTMLElement, options: Record<string, unknown>): string | undefined;
@@ -28,7 +35,10 @@ const BLOCKED = new AccountError(
   'BookTrap couldn’t check this browser. If a content blocker is on, allow challenges.cloudflare.com, then try again.',
 );
 /** The script loaded but the check itself failed or ran out of time. */
-const CHECK_FAILED = new AccountError('captcha', 'BookTrap couldn’t check this browser. Reload the page and try again.');
+const CHECK_FAILED = new AccountError(
+  'captcha',
+  'BookTrap couldn’t check this browser. Reload the page and try again. If it keeps happening, turn off strict tracking protection or privacy extensions for booktrap.app, or try another browser.',
+);
 
 let loading: Promise<Turnstile> | null = null;
 
@@ -65,6 +75,7 @@ export async function captchaToken(): Promise<string | undefined> {
   try {
     return await new Promise<string>((resolve, reject) => {
       const timer = window.setTimeout(() => reject(CHECK_FAILED), GIVE_UP_MS);
+      let failures = 0;
       const fail = () => {
         window.clearTimeout(timer);
         reject(CHECK_FAILED);
@@ -77,7 +88,14 @@ export async function captchaToken(): Promise<string | undefined> {
             window.clearTimeout(timer);
             resolve(token);
           },
-          'error-callback': fail,
+          retry: 'auto',
+          'retry-interval': RETRY_MS,
+          // Returning true tells Turnstile the error is handled; it then tries again by itself.
+          'error-callback': () => {
+            failures += 1;
+            if (failures >= MAX_FAILURES) fail();
+            return true;
+          },
           'expired-callback': fail,
           'timeout-callback': fail,
         });

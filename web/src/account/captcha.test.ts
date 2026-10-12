@@ -35,9 +35,26 @@ describe('captchaToken', () => {
     expect(document.body.children).toHaveLength(0);
   });
 
-  it('explains a blocked check in words', async () => {
+  it('waits out a failed try while Turnstile retries', async () => {
+    const remove = vi.fn();
+    const render = vi.fn((_el: HTMLElement, options: Record<string, unknown>) => {
+      queueMicrotask(() => {
+        expect((options['error-callback'] as () => unknown)()).toBe(true);
+        (options.callback as (token: string) => void)('token-after-retry');
+      });
+      return 'widget';
+    });
+    window.turnstile = { render, remove };
+    const captchaToken = await load('site-key');
+    await expect(captchaToken()).resolves.toBe('token-after-retry');
+    expect(render.mock.calls[0]![1]).toMatchObject({ retry: 'auto' });
+    expect(remove).toHaveBeenCalledWith('widget');
+  });
+
+  it('explains a check that keeps failing in words', async () => {
     const render = (_el: HTMLElement, options: Record<string, unknown>) => {
-      queueMicrotask(options['error-callback'] as () => void);
+      const onError = options['error-callback'] as () => void;
+      queueMicrotask(() => [1, 2, 3].forEach(onError));
       return 'widget';
     };
     window.turnstile = { render, remove: vi.fn() };
