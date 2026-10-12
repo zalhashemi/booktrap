@@ -67,9 +67,11 @@ function loadTurnstile(): Promise<Turnstile> {
 export async function captchaToken(): Promise<string | undefined> {
   if (!SITE_KEY) return undefined;
   const turnstile = await loadTurnstile();
-  // A widget per token: each is used once. Should Turnstile ever need a click, it shows at the bottom.
+  // A widget per token: each is used once. Should Turnstile ever need a click, it shows at the bottom,
+  // above the phone layout's tab bar.
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:60';
+  container.style.cssText =
+    'position:fixed;left:50%;bottom:calc(5.5rem + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60';
   document.body.append(container);
   let widgetId: string | undefined;
   try {
