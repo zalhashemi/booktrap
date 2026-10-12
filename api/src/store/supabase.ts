@@ -186,6 +186,8 @@ const PATCH_COLUMNS: Record<keyof BookPatch, string> = {
 };
 
 export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
+  /** job_items.from_cache (0012); false once the database says it isn't there yet. */
+  let hasFromCache = true;
   const jobSelect = `id, user_id, status, cleared_new, created_at, job_items (${ITEM_COLUMNS})`;
 
   return {
@@ -268,7 +270,15 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       if (patch.attempts !== undefined) row.attempts = patch.attempts;
       if (patch.note !== undefined) row.note = patch.note;
       if (patch.blocked !== undefined) row.blocked = patch.blocked;
-      check(await db.from('job_items').update(row).eq('id', itemId), 'job_items.update');
+      if (patch.fromCache !== undefined && hasFromCache) row.from_cache = patch.fromCache;
+      let result = await db.from('job_items').update(row).eq('id', itemId);
+      // Before migration 0012 the column doesn't exist: finishing the item matters more than the stat.
+      if (result.error?.code === 'PGRST204' && 'from_cache' in row) {
+        hasFromCache = false;
+        delete row.from_cache;
+        result = await db.from('job_items').update(row).eq('id', itemId);
+      }
+      check(result, 'job_items.update');
     },
 
     async unfinishedItems() {
@@ -506,7 +516,7 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
       // Postgres sums come back as strings or numbers depending on type: make them numbers.
       return {
         ...raw,
-        spendInRange: Number(raw.spendInRange),
+        paidPostsSpend: Number(raw.paidPostsSpend),
         spendMonth: { anthropic: Number(raw.spendMonth.anthropic), apify: Number(raw.spendMonth.apify) },
         databaseBytes: Number(raw.databaseBytes),
       };

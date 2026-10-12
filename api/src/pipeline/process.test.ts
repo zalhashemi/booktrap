@@ -210,6 +210,15 @@ describe('processItem', () => {
     expect(cached?.post).not.toHaveProperty('caption');
   });
 
+  it('marks a post served from the cache, for the stats', async () => {
+    const store = createMemoryLibraryStore();
+    const { deps } = makeDeps(store, { x: [book('Giovanni’s Room', 'James Baldwin')] });
+    const first = await runJob(store, deps, [URL_A]);
+    const second = await runJob(store, deps, [URL_A]);
+    expect((await store.getItem(first.items[0]!.id))?.fromCache).toBe(false);
+    expect((await store.getItem(second.items[0]!.id))?.fromCache).toBe(true);
+  });
+
   it('pays for a post only once: a second paste of the same post uses the cache', async () => {
     const store = createMemoryLibraryStore();
     const { deps, fetchPost, extractBooks } = makeDeps(store, { x: [book('Babel', 'R. F. Kuang')] });

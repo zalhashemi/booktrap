@@ -109,6 +109,7 @@ Readers delete their own account (or guest shelf) in Settings, Your data (`DELET
 
 - **A reader asking about their data**: find them by email under Authentication, Users in the Supabase dashboard. Their user id owns their rows (`books.user_id` and so on).
 - **A creator asking for removal** (promised within 14 days): open `/admin` in the web app, enter the admin key (`ADMIN_TOKEN` in the API's environment), and paste each post's link under "Take down a link". Or from `api/`: `npx tsx --env-file=.env scripts/takedown.ts <post link>` (`--dry-run` first shows how far it reached). A taken-down post leaves every shelf and is never read again, whoever pastes it. Books seen only in it are deleted, unless a reader changed them (status, notes or shelves): those stay without the source. For a whole handle, find its posts first: `select distinct source_platform, source_post_id, source_url from book_sources where creator_handle = '<handle>';`.
+- **Stats**: the Stats tab on `/admin` shows readers, posts read per day (paid against free cache hits), this month's spend against the budget with a forecast, failures, the most-shelved books and the database size. Counts only, never a reader's shelf. Needs migration 0012.
 - **Reports** from readers ("Report this post" in a book's sources) wait under Open on `/admin`, grouped by post, with how many shelves each post is on. Take down or Dismiss. The Auto-blocked tab lists posts the content check skipped (explicit or graphic, not books, or that Claude declined); Unblock marks a wrong verdict as a book post, and the next paste shelves its books without reading it again.
 
 ## Deploy
@@ -117,7 +118,7 @@ Four services: **Supabase** (database and sign-in), **Render** (the API, `render
 
 1. **Domain** (Cloudflare Registrar): `booktrap.app`. The site is `https://booktrap.app` and the API is `https://api.booktrap.app`.
 2. **Supabase**:
-   - Run every file in `supabase/migrations/` in order (0001 to 0011).
+   - Run every file in `supabase/migrations/` in order (0001 to 0012).
    - Authentication, URL Configuration: Site URL `https://booktrap.app`; redirect URLs `https://booktrap.app/**` (keep `http://localhost:5180/**` for development).
    - Authentication, Emails: paste `supabase/templates/magic-link.html` into **Magic Link** (subject "Your BookTrap log-in code") and `email-change.html` into **Change Email Address** (subject "Save your BookTrap shelf"). Both need `{{ .Token }}`: the app asks for the code. The log-in email is code only on purpose: signing in from a link would skip moving a guest shelf into the account, and mail scanners that open links would use up the code.
    - Authentication, Emails, SMTP: host `smtp.resend.com`, port 465, user `resend`, password a Resend API key (sending access, this domain only), sender `hello@booktrap.app`, name `BookTrap`.

@@ -46,11 +46,17 @@ export function AdminStatsView({ client, onLocked }: { client: AdminClient; onLo
           ))}
         </div>
       </div>
-      <p className="mt-3 max-w-[60ch] text-[1.05rem] text-text-muted">Counts and totals only. Days follow this browser’s time zone.</p>
+      <p className="mt-3 max-w-[60ch] text-[1.05rem] text-text-muted">
+        Counts and totals only. Days follow {stats.data ? stats.data.timeZone.replace(/_/g, ' ') : 'this browser’s time zone'}; spend follows the
+        budget’s month, which runs on UTC.
+      </p>
 
       <div className="mt-6" aria-live="polite" aria-busy={stats.isFetching}>
         {stats.data ? (
           <div className={`grid gap-4 transition-opacity duration-200 ${stats.isPlaceholderData ? 'opacity-60' : ''}`}>
+            {stats.data.clipped && (
+              <p className="text-[0.92rem] text-note-ink">Paste history is kept for 30 days, so the first days of this range are missing some posts.</p>
+            )}
             <Tiles stats={stats.data} />
             <PerDay stats={stats.data} />
             <div className="grid gap-4 md:grid-cols-2">
@@ -121,10 +127,10 @@ function Tiles({ stats }: { stats: AdminStats }) {
 function PerDay({ stats }: { stats: AdminStats }) {
   const days = stats.perDay;
   const peak = Math.max(1, ...days.map((entry) => entry.paid + entry.cached));
-  // Three gridlines at round numbers under the peak.
+  // Gridlines at a round step, the chart's top the first one at or above the busiest day.
   const step = niceStep(peak / 3);
-  const top = Math.max(peak, step * 3);
-  const lines = [step, step * 2, step * 3].filter((value) => value <= top);
+  const top = step * Math.ceil(peak / step);
+  const lines = Array.from({ length: top / step }, (_, index) => step * (index + 1));
   const middle = days[Math.floor(days.length / 2)];
   return (
     <Card>

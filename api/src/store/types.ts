@@ -29,6 +29,8 @@ export interface JobItemRecord {
   note: string | null;
   /** Why nothing from the post was added (moderation or a takedown); null for an ordinary item. */
   blocked: BlockedKind | null;
+  /** Served from the post cache (free) rather than read new. Written when the item finishes; only the stats read it. */
+  fromCache?: boolean;
   createdAt: string;
 }
 
@@ -194,7 +196,7 @@ export interface LibraryStore {
   getItem(itemId: string): Promise<JobItemRecord | null>;
   updateItem(
     itemId: string,
-    patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'platform' | 'postId' | 'kind' | 'attempts' | 'note' | 'blocked'>>,
+    patch: Partial<Pick<JobItemRecord, 'status' | 'error' | 'booksFound' | 'platform' | 'postId' | 'kind' | 'attempts' | 'note' | 'blocked' | 'fromCache'>>,
   ): Promise<void>;
   /** Items that were queued or mid-flight when the process stopped (free hosting sleeps). */
   unfinishedItems(): Promise<JobItemRecord[]>;
@@ -340,10 +342,12 @@ export function deriveJobStatus(items: Pick<JobItemRecord, 'status'>[]): JobStat
 export type { BookStatus };
 
 /** What `admin_stats` returns; `buildAdminStats` fills the days without posts and works out the forecast. */
-export interface AdminStatsRaw extends Pick<AdminStats, 'from' | 'today' | 'readers' | 'active7d' | 'posts' | 'perDay' | 'topFailures' | 'topBooks' | 'databaseBytes'> {
+export interface AdminStatsRaw
+  extends Pick<AdminStats, 'timeZone' | 'from' | 'today' | 'clipped' | 'readers' | 'active7d' | 'posts' | 'perDay' | 'topFailures' | 'topBooks' | 'databaseBytes'> {
   monthStart: string;
   monthEnd: string;
   now: string;
-  spendInRange: number;
+  /** The spend rows of the posts read new in the range. */
+  paidPostsSpend: number;
   spendMonth: { anthropic: number; apify: number };
 }

@@ -3,8 +3,10 @@ import { buildAdminStats } from './stats';
 import type { AdminStatsRaw } from './store/types';
 
 const raw = (overrides: Partial<AdminStatsRaw> = {}): AdminStatsRaw => ({
+  timeZone: 'Asia/Bahrain',
   from: '2026-10-06',
   today: '2026-10-12',
+  clipped: false,
   monthStart: '2026-09-30T21:00:00Z',
   monthEnd: '2026-10-31T21:00:00Z',
   now: '2026-10-11T21:00:00Z',
@@ -13,7 +15,7 @@ const raw = (overrides: Partial<AdminStatsRaw> = {}): AdminStatsRaw => ({
   posts: { done: 3, paid: 2, failed: 1, tiktok: 3, instagram: 1 },
   perDay: [{ day: '2026-10-09', paid: 1, cached: 2 }],
   topFailures: [],
-  spendInRange: 0.1,
+  paidPostsSpend: 0.1,
   spendMonth: { anthropic: 8, apify: 2 },
   topBooks: [],
   databaseBytes: 1,

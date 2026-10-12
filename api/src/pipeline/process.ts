@@ -152,11 +152,11 @@ async function readPost(
   postUrl: string,
   postId: string,
   deps: PipelineDeps,
-): Promise<CachedPost> {
+): Promise<CachedPost & { fromCache: boolean }> {
   const { store, settings } = deps;
   const cached = await store.getCachedPost(platform, postId);
   // Rows cached before Instagram support carry no platform in their post JSON: the key is the truth.
-  if (cached) return { ...cached, post: { ...cached.post, platform } };
+  if (cached) return { ...cached, post: { ...cached.post, platform }, fromCache: true };
 
   if (!settings.apifyToken || !settings.anthropic) {
     throw new PipelineError('paused', 'BookTrap has paused reading for now. Your link is saved, try it again later.', true);
@@ -210,7 +210,7 @@ async function readPost(
     content: extraction.content,
   };
   await store.putCachedPost(platform, postId, value);
-  return value;
+  return { ...value, fromCache: false };
 }
 
 /**
@@ -435,7 +435,7 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     };
     if (await store.isPostRemoved(resolved.platform, resolved.postId)) return await skipRemoved();
 
-    const { post, books, content } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
+    const { post, books, content, fromCache } = await readPost(itemId, item.userId, resolved.platform, resolved.url, resolved.postId, deps);
     // A takedown can land while the post is being read (it takes a while): take it down again, which
     // removes the cache row just written and anything shelved, so the operator's takedown holds.
     const undoIfRemoved = async () => {
@@ -448,7 +448,7 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     const skipped = BLOCKED_BY_CONTENT[content];
     if (skipped) {
       // Nothing from it is added, even books it found (an operator can unblock a wrong verdict).
-      await store.updateItem(itemId, { status: 'done', kind: post.kind, booksFound: 0, error: null, blocked: skipped });
+      await store.updateItem(itemId, { status: 'done', kind: post.kind, booksFound: 0, error: null, blocked: skipped, fromCache });
       log.info({ itemId, platform: post.platform, postId: post.postId, content }, 'item skipped by the content check');
       return;
     }
@@ -482,7 +482,7 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
 
     if (await undoIfRemoved()) return;
     const note = full ? shelfFullMessage(room.guest, full) : undefined;
-    await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null, ...(note && { note }) });
+    await store.updateItem(itemId, { status: 'done', booksFound: wanted.length, error: null, fromCache, ...(note && { note }) });
     log.info({ itemId, platform: post.platform, postId: post.postId, found: wanted.length, added, full, skippedBackground: books.length - wanted.length }, 'item done');
   } catch (error) {
     const message =

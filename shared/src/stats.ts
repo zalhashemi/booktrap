@@ -16,9 +16,13 @@ const usd = z.number().nonnegative();
 
 export const AdminStatsSchema = z.object({
   range: z.enum(STATS_RANGES),
-  /** First and last day shown, as YYYY-MM-DD in the operator's time zone. */
+  /** The zone the days are counted in: the browser's, or UTC if the database doesn't know it. */
+  timeZone: z.string(),
+  /** First and last day shown, as YYYY-MM-DD in that zone. */
   from: z.string(),
   today: z.string(),
+  /** The range reaches past the 30 days of paste history kept: its first days are missing posts. */
+  clipped: z.boolean(),
   readers: z.object({ total: count, accounts: count, guests: count, newInRange: count }),
   active7d: count,
   posts: z.object({ done: count, paid: count, failed: count, tiktok: count, instagram: count }),
@@ -26,12 +30,12 @@ export const AdminStatsSchema = z.object({
   perDay: z.array(z.object({ day: z.string(), paid: count, cached: count })),
   topFailures: z.array(z.object({ error: z.string(), count })),
   spend: z.object({
-    /** This calendar month, whatever the range. */
+    /** This month (the UTC month the budget counts), whatever the range. */
     month: z.object({ anthropic: usd, apify: usd, total: usd }),
     budgetUsd: usd,
     /** This month's spend at its pace so far, carried to the month's end. */
     forecastUsd: usd,
-    /** Spend in the range over the posts read new (paid) in it; null without any. */
+    /** What the posts read new in the range cost, on average; null without any. */
     perNewPostUsd: usd.nullable(),
   }),
   topBooks: z.array(z.object({ title: z.string(), author: z.string().nullable(), shelves: count })),

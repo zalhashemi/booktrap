@@ -14,8 +14,8 @@ function daysBetween(from: string, to: string): string[] {
 }
 
 /**
- * The Stats view from `admin_stats`: days without posts filled in as zeros, this month's spend carried to
- * the month's end at its pace so far, and the average cost of a post read new.
+ * The Stats view from `admin_stats`: days without posts filled in as zeros, this (UTC) month's spend carried
+ * to the month's end at its pace so far, and the average cost of a post read new.
  */
 export function buildAdminStats(raw: AdminStatsRaw, range: StatsRange, budgetUsd: number): AdminStats {
   const counted = new Map(raw.perDay.map((entry) => [entry.day, entry]));
@@ -29,8 +29,10 @@ export function buildAdminStats(raw: AdminStatsRaw, range: StatsRange, budgetUsd
 
   return {
     range,
+    timeZone: raw.timeZone,
     from: raw.from,
     today: raw.today,
+    clipped: raw.clipped,
     readers: raw.readers,
     active7d: raw.active7d,
     posts: raw.posts,
@@ -40,7 +42,7 @@ export function buildAdminStats(raw: AdminStatsRaw, range: StatsRange, budgetUsd
       month: { anthropic: round(raw.spendMonth.anthropic), apify: round(raw.spendMonth.apify), total: round(total) },
       budgetUsd,
       forecastUsd: round((total / elapsed) * monthLength),
-      perNewPostUsd: raw.posts.paid ? round(raw.spendInRange / raw.posts.paid) : null,
+      perNewPostUsd: raw.posts.paid ? round(raw.paidPostsSpend / raw.posts.paid) : null,
     },
     topBooks: raw.topBooks,
     databaseBytes: raw.databaseBytes,
