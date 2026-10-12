@@ -51,6 +51,28 @@ describe('captchaToken', () => {
     expect(remove).toHaveBeenCalledWith('widget');
   });
 
+  it('stops its own clock while a checkbox waits on the person', async () => {
+    vi.useFakeTimers();
+    try {
+      let options: Record<string, unknown> = {};
+      window.turnstile = {
+        render: (_el, given) => {
+          options = given;
+          (given['before-interactive-callback'] as () => void)();
+          return 'widget';
+        },
+        remove: vi.fn(),
+      };
+      const captchaToken = await load('site-key');
+      const token = captchaToken();
+      await vi.advanceTimersByTimeAsync(60_000);
+      (options.callback as (token: string) => void)('token-after-click');
+      await expect(token).resolves.toBe('token-after-click');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('explains a check that keeps failing in words', async () => {
     const render = (_el: HTMLElement, options: Record<string, unknown>) => {
       const onError = options['error-callback'] as () => void;

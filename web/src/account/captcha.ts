@@ -96,6 +96,8 @@ export async function captchaToken(): Promise<string | undefined> {
             if (failures >= MAX_FAILURES) fail();
             return true;
           },
+          // A checkbox is up and waiting on the person: Turnstile's own timeout-callback takes over.
+          'before-interactive-callback': () => window.clearTimeout(timer),
           'expired-callback': fail,
           'timeout-callback': fail,
         });
