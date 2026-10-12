@@ -14,10 +14,20 @@ import { createAdminClient, type AdminClient } from '../api/admin';
 import { ApiRequestError } from '../api/client';
 import { Button } from '../components/Button';
 import { PlatformIcon } from '../components/PlatformIcon';
+import { AdminStatsView } from './AdminStats';
 import { useToast } from '../components/toast-context';
 
 /** Kept for this tab only: closing it forgets the key. */
 const KEY_STORAGE = 'booktrap.admin-key';
+const VIEW_STORAGE = 'booktrap.admin-view';
+type View = 'reports' | 'stats';
+const readView = (): View => {
+  try {
+    return sessionStorage.getItem(VIEW_STORAGE) === 'stats' ? 'stats' : 'reports';
+  } catch {
+    return 'reports';
+  }
+};
 const readKey = () => {
   try {
     return sessionStorage.getItem(KEY_STORAGE);
@@ -47,6 +57,15 @@ const whoOf = (post: AdminPost) => (post.creatorHandle ? `@${post.creatorHandle}
 /** The hidden admin page (user's pick, option B): reported posts beside the chosen one's detail. Linked from nowhere. */
 export function AdminPage() {
   const [key, setKey] = useState<string | null>(readKey);
+  const [view, setView] = useState<View>(readView);
+  const show = (next: View) => {
+    setView(next);
+    try {
+      sessionStorage.setItem(VIEW_STORAGE, next);
+    } catch {
+      // Private mode: the view resets on reload.
+    }
+  };
   const queryClient = useQueryClient();
   const lock = () => {
     try {
@@ -74,7 +93,30 @@ export function AdminPage() {
         )}
       </header>
       <main className="mx-auto w-full max-w-[1080px] px-4 pt-2 pb-16 md:px-8 md:pt-6">
-        {key ? <Reports client={createAdminClient(key)} onLocked={lock} /> : <KeyGate onKey={setKey} />}
+        {key ? (
+          <>
+            <div role="group" aria-label="Admin view" className="mb-6 inline-flex gap-1 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]">
+              {(['reports', 'stats'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={view === value}
+                  onClick={() => show(value)}
+                  className="h-11 rounded-pill px-5 text-[0.95rem] font-bold text-text-muted transition-colors duration-200 hover:text-text aria-pressed:bg-accent aria-pressed:text-on-tab"
+                >
+                  {value === 'reports' ? 'Reports' : 'Stats'}
+                </button>
+              ))}
+            </div>
+            {view === 'stats' ? (
+              <AdminStatsView client={createAdminClient(key)} onLocked={lock} />
+            ) : (
+              <Reports client={createAdminClient(key)} onLocked={lock} />
+            )}
+          </>
+        ) : (
+          <KeyGate onKey={setKey} />
+        )}
       </main>
     </div>
   );

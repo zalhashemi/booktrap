@@ -6,6 +6,7 @@ import {
   TERMINAL_STATUSES,
   TagNameTakenError,
   deriveJobStatus,
+  type AdminStatsRaw,
   type CachedPost,
   type JobItemRecord,
   type JobRecord,
@@ -25,7 +26,7 @@ export function createMemoryLibraryStore(): LibraryStore {
   const jobs = new Map<string, JobRecord & { ipHash: string | null }>();
   const items = new Map<string, JobItemRecord>();
   const cache = new Map<string, CachedPost & { fetchedAt: Date }>();
-  const spend: { usd: number; at: Date }[] = [];
+  const spend: { usd: number; at: Date; provider: string; jobItemId: string | null }[] = [];
   const books = new Map<string, BookRow>();
   const sources = new Map<string, (BookSource & { bookId: string })[]>();
   const tags = new Map<string, Tag & { userId: string }>();
@@ -171,7 +172,7 @@ export function createMemoryLibraryStore(): LibraryStore {
       cache.set(postKey(platform, postId), { ...value, fetchedAt: new Date() });
     },
     async recordSpend(event) {
-      spend.push({ usd: event.usd, at: new Date() });
+      spend.push({ usd: event.usd, at: new Date(), provider: event.provider, jobItemId: event.jobItemId });
     },
     async spendSince(since) {
       return spend.filter((entry) => entry.at >= since).reduce((sum, entry) => sum + entry.usd, 0);
@@ -412,6 +413,64 @@ export function createMemoryLibraryStore(): LibraryStore {
     },
     async countTags(userId) {
       return [...tags.values()].filter((tag) => tag.userId === userId).length;
+    },
+    async adminStats(range, timeZone) {
+      // A rough copy of admin_stats (0012) for development: no auth users here, so every reader seen
+      // (by their jobs or books) counts as an account.
+      const dayOf = (at: string | Date) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(at));
+      const today = dayOf(new Date());
+      const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+      const monthStartDay = `${today.slice(0, 7)}-01`;
+      const from = range === '7d' ? shift(today, -6) : range === '30d' ? shift(today, -29) : monthStartDay;
+      const inRange = (at: string | Date) => dayOf(at) >= from;
+      const paidItems = new Set(spend.filter((entry) => entry.provider === 'anthropic').map((entry) => entry.jobItemId));
+      const posts = [...items.values()].filter((item) => item.kind !== 'collection' && inRange(item.createdAt));
+      const done = posts.filter((item) => item.status === 'done');
+      const perDay = new Map<string, { paid: number; cached: number }>();
+      for (const item of done) {
+        const day = perDay.get(dayOf(item.createdAt)) ?? { paid: 0, cached: 0 };
+        if (paidItems.has(item.id)) day.paid++;
+        else day.cached++;
+        perDay.set(dayOf(item.createdAt), day);
+      }
+      const failures = new Map<string, number>();
+      for (const item of posts) if (item.status === 'failed' && item.error) failures.set(item.error, (failures.get(item.error) ?? 0) + 1);
+      const shelves = new Map<string, { title: string; author: string | null; users: Set<string> }>();
+      for (const book of books.values()) {
+        if (book.deletedAt || !inRange(book.createdAt)) continue;
+        const entry = shelves.get(book.normalizedKey) ?? { title: book.title, author: book.author, users: new Set<string>() };
+        entry.users.add(book.userId);
+        shelves.set(book.normalizedKey, entry);
+      }
+      const readers = new Set([...jobs.values()].map((job) => job.userId).concat([...books.values()].map((book) => book.userId)));
+      const monthStart = new Date(`${monthStartDay}T00:00:00Z`);
+      const monthSpend = (provider: string) => spend.filter((entry) => entry.provider === provider && entry.at >= monthStart).reduce((sum, entry) => sum + entry.usd, 0);
+      const stats: AdminStatsRaw = {
+        from,
+        today,
+        monthStart: monthStart.toISOString(),
+        monthEnd: new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1)).toISOString(),
+        now: new Date().toISOString(),
+        readers: { total: readers.size, accounts: readers.size, guests: 0, newInRange: 0 },
+        active7d: readers.size,
+        posts: {
+          done: done.length,
+          paid: done.filter((item) => paidItems.has(item.id)).length,
+          failed: posts.filter((item) => item.status === 'failed').length,
+          tiktok: posts.filter((item) => (item.status === 'done' || item.status === 'failed') && item.platform === 'tiktok').length,
+          instagram: posts.filter((item) => (item.status === 'done' || item.status === 'failed') && item.platform === 'instagram').length,
+        },
+        perDay: [...perDay].sort(([a], [b]) => a.localeCompare(b)).map(([day, counts]) => ({ day, ...counts })),
+        topFailures: [...failures].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3).map(([error, count]) => ({ error, count })),
+        spendInRange: spend.filter((entry) => inRange(entry.at)).reduce((sum, entry) => sum + entry.usd, 0),
+        spendMonth: { anthropic: monthSpend('anthropic'), apify: monthSpend('apify') },
+        topBooks: [...shelves.values()]
+          .map(({ title, author, users }) => ({ title, author, shelves: users.size }))
+          .sort((a, b) => b.shelves - a.shelves || a.title.localeCompare(b.title))
+          .slice(0, 5),
+        databaseBytes: 0,
+      };
+      return stats;
     },
     async purgeOldJobs(before) {
       let count = 0;

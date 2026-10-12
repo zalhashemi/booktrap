@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import {
   AdminPostListSchema,
+  AdminStatsSchema,
   ApiErrorSchema,
   PostReachSchema,
   TakedownResponseSchema,
   type AdminTab,
+  type StatsRange,
   type PostRef,
   type TakedownRequest,
 } from '@booktrap/shared';
@@ -47,6 +49,9 @@ export function createAdminClient(key: string, baseUrl = API_URL) {
     takeDown: (target: TakedownRequest) => request('/admin/takedown', TakedownResponseSchema, target),
     dismiss: (post: PostRef) => request('/admin/dismiss', z.object({ dismissed: z.number() }), post),
     unblock: (post: PostRef) => request('/admin/unblock', z.object({ unblocked: z.boolean() }), post),
+    /** Counts and totals, with days and months in this browser's time zone. */
+    stats: (range: StatsRange) =>
+      request(`/admin/stats?range=${range}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, AdminStatsSchema),
   };
 }
 

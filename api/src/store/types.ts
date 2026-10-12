@@ -1,4 +1,4 @@
-import type { BlockedKind, Book, BookStatus, Evidence, JobItemStatus, PostReach, ReportReason, SourcePlatform, Tag } from '@booktrap/shared';
+import type { AdminStats, BlockedKind, Book, BookStatus, Evidence, JobItemStatus, PostReach, ReportReason, SourcePlatform, StatsRange, Tag } from '@booktrap/shared';
 import type { ExtractedBook } from '../pipeline/extract';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -264,6 +264,8 @@ export interface LibraryStore {
   expireRetention(cutoffs: { postCacheBefore: Date; ipHashBefore: Date }): Promise<{ posts: number; ipHashes: number }>;
   /** Deletes finished jobs created before `before` (with their items). Returns how many. */
   purgeOldJobs(before: Date): Promise<number>;
+  /** The admin Stats view's counts for a range in the operator's time zone (`admin_stats`, 0012). */
+  adminStats(range: StatsRange, timeZone: string): Promise<AdminStatsRaw>;
 
   // Phase 8: moderation, reports and takedown.
   /** A post taken down: never read or shelved again, whoever pastes it. */
@@ -336,3 +338,12 @@ export function deriveJobStatus(items: Pick<JobItemRecord, 'status'>[]): JobStat
 }
 
 export type { BookStatus };
+
+/** What `admin_stats` returns; `buildAdminStats` fills the days without posts and works out the forecast. */
+export interface AdminStatsRaw extends Pick<AdminStats, 'from' | 'today' | 'readers' | 'active7d' | 'posts' | 'perDay' | 'topFailures' | 'topBooks' | 'databaseBytes'> {
+  monthStart: string;
+  monthEnd: string;
+  now: string;
+  spendInRange: number;
+  spendMonth: { anthropic: number; apify: number };
+}

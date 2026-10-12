@@ -114,7 +114,7 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
   });
   libraryRoutes(app, { auth, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
   reportRoutes(app, { auth, store });
-  if (config.ADMIN_TOKEN) adminRoutes(app, { store, adminToken: config.ADMIN_TOKEN });
+  if (config.ADMIN_TOKEN) adminRoutes(app, { store, adminToken: config.ADMIN_TOKEN, monthlyBudgetUsd: config.MONTHLY_BUDGET_USD });
 
   return app;
 }

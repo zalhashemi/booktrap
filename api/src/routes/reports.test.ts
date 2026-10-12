@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LIMITS } from '@booktrap/shared';
+import { AdminStatsSchema, LIMITS } from '@booktrap/shared';
 import { testSessions } from '../auth/test-sessions';
 import { loadConfig } from '../config';
 import { JobQueue } from '../pipeline/queue';
@@ -42,6 +42,24 @@ describe('reports, admin and limits', () => {
   }
   beforeEach(() => build({ ADMIN_TOKEN, APIFY_TOKEN: 'x', ANTHROPIC_API_KEY: 'y' }));
   afterEach(() => app.close());
+
+  it('shows the admin stats: counts only, every day of the range, behind the admin key', async () => {
+    await shelve(userId, 'Babel', '111');
+    await shelve(userId, 'Piranesi', '111');
+    const other = await sessions!.signIn();
+    await shelve(other.userId, 'Babel', '333');
+    expect((await app.inject({ method: 'GET', url: '/admin/stats?range=7d' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/admin/stats?range=year', headers: admin })).statusCode).toBe(400);
+
+    const res = await app.inject({ method: 'GET', url: '/admin/stats?range=7d&tz=Asia/Bahrain', headers: admin });
+    expect(res.statusCode).toBe(200);
+    const stats = AdminStatsSchema.parse(res.json());
+    expect(stats.perDay).toHaveLength(7);
+    expect(stats.topBooks[0]).toEqual({ title: 'Babel', author: null, shelves: 2 });
+    expect(stats.spend).toMatchObject({ budgetUsd: 20, perNewPostUsd: null });
+    // A bad time zone falls back to UTC instead of reaching the database.
+    expect((await app.inject({ method: 'GET', url: '/admin/stats?range=month&tz=Not/AZone%27', headers: admin })).statusCode).toBe(200);
+  });
 
   it('reports a post on the reader’s own shelf, once', async () => {
     await shelve(userId, 'Babel', '111');

@@ -6,14 +6,17 @@ import {
   ERROR_CODES,
   LIMITS,
   PostRefSchema,
+  STATS_RANGES,
   TakedownRequestSchema,
   type AdminPostList,
+  type AdminStats,
   type AdminTab,
   type PostReach,
   type TakedownResponse,
 } from '@booktrap/shared';
 import { HttpError } from '../errors';
 import { NotAPostError, listAdminPosts, postFromUrl, takeDown } from '../moderation';
+import { buildAdminStats } from '../stats';
 import { utcDayStart } from '../pipeline/process';
 import type { resolveLink } from '../pipeline/resolve';
 import type { LibraryStore } from '../store/types';
@@ -58,7 +61,7 @@ function sameSecret(given: string, expected: string): boolean {
  */
 export function adminRoutes(
   app: FastifyInstance,
-  deps: { store: LibraryStore; adminToken: string; resolve?: typeof resolveLink },
+  deps: { store: LibraryStore; adminToken: string; monthlyBudgetUsd: number; resolve?: typeof resolveLink },
 ) {
   const { store, adminToken } = deps;
   const requireAdmin = async (request: FastifyRequest) => {
@@ -87,6 +90,15 @@ export function adminRoutes(
   app.get<{ Querystring: { tab?: string } }>('/admin/posts', options, async (request): Promise<AdminPostList> => {
     const tab = (ADMIN_TABS as readonly string[]).includes(request.query.tab ?? '') ? (request.query.tab as AdminTab) : 'open';
     return listAdminPosts(store, tab);
+  });
+
+  // The Stats view: counts and totals for a range, in the operator's time zone (the browser's).
+  app.get('/admin/stats', options, async (request): Promise<AdminStats> => {
+    const query = request.query as { range?: string; tz?: string };
+    const range = STATS_RANGES.find((value) => value === query.range);
+    if (!range) throw new HttpError(400, ERROR_CODES.badRequest, 'Choose 7 days, 30 days or this month.');
+    const timeZone = query.tz && isTimeZone(query.tz) ? query.tz : 'UTC';
+    return buildAdminStats(await store.adminStats(range, timeZone), range, deps.monthlyBudgetUsd);
   });
 
   app.post('/admin/takedown', options, async (request): Promise<TakedownResponse> => {
@@ -120,4 +132,15 @@ export function adminRoutes(
     if (unblocked) request.log.info({ platform, postId }, 'post unblocked');
     return { unblocked };
   });
+}
+
+/** An IANA zone both Node and Postgres know (letters, digits, "/", "_", "-", "+"), e.g. Asia/Bahrain. */
+function isTimeZone(value: string): boolean {
+  if (value.length > 64 || !/^[A-Za-z][A-Za-z0-9/_+-]*$/.test(value)) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }

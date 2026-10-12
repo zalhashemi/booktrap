@@ -6,6 +6,7 @@ import {
   TagNameTakenError,
   deriveJobStatus,
   BLOCKING_CONTENT,
+  type AdminStatsRaw,
   type BlockedPostRecord,
   type BookPatch,
   type CachedPost,
@@ -498,6 +499,17 @@ export function createSupabaseLibraryStore(db: SupabaseClient): LibraryStore {
 
     async purgeOldJobs(before) {
       return Number(check(await db.rpc('purge_old_jobs', { p_before: before.toISOString() }), 'purge_old_jobs') ?? 0);
+    },
+
+    async adminStats(range, timeZone) {
+      const raw = check(await db.rpc('admin_stats', { p_range: range, p_tz: timeZone }), 'admin_stats') as AdminStatsRaw;
+      // Postgres sums come back as strings or numbers depending on type: make them numbers.
+      return {
+        ...raw,
+        spendInRange: Number(raw.spendInRange),
+        spendMonth: { anthropic: Number(raw.spendMonth.anthropic), apify: Number(raw.spendMonth.apify) },
+        databaseBytes: Number(raw.databaseBytes),
+      };
     },
 
     async isPostRemoved(platform, postId) {
