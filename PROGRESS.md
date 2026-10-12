@@ -13,7 +13,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 7 | Accounts (Supabase Auth) | Done (2026-10-11): built, code-reviewed and tested live, including the email-code flows. Real users need a verified email domain first (Phase 10) |
 | 8 | Limits, moderation, report and takedown | Done (2026-10-11): built, code-reviewed, 0010 applied, tested live |
 | 9 | Scale, storage and cost | Done (2026-10-11): load-tested at Render's limits, storage measured, fair queue and busy notice built, cost report written |
-| 10 | Legal and deploy (the old Phase 7) | In progress (2026-10-12): code side built (compression, Turnstile, Render Starter, branded emails, policies). Waiting on the domain, Resend, Turnstile and dashboard setup (README, Deploy), then the deploy checks |
+| 10 | Legal and deploy (the old Phase 7) | Done (2026-10-12): live at https://booktrap.app (API `api.booktrap.app`), Resend email, Turnstile, code-reviewed, security-checked and Playwright-tested in production. Open: a share-link lookup from Render, a lawyer's review and the PDPA notification before any paid tier |
 
 The old "Phase 7: Hardening and deploy" became Phase 10 on 2026-10-10. Its finished work keeps the names 7a, 7b and 7c in the sections below. Section §12 of the brief follows the new order.
 
@@ -276,7 +276,7 @@ Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymou
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
 
-## Phase 10: Legal and deploy (in progress, 2026-10-12)
+## Phase 10: Legal and deploy (done, 2026-10-12)
 
 Built (code side):
 - **Response compression** (`@fastify/compress`): Brotli at quality 4, or gzip, for responses over 1 KB. A 200-book shelf comes back at under a fifth of its size (test). Covers pass through.
@@ -310,7 +310,10 @@ Deployed (12 Oct 2026): the API on Render Starter at `https://api.booktrap.app` 
   - `TRUST_PROXY_HOPS` defaults to 3 in production (dropped from `render.yaml`), documented as holding only while `api.booktrap.app` is DNS only.
   - Request timeout 75s to 55s (always on; the slowest call is a guest merge waiting up to 45s), stale "free server" comments, and the emails' privacy link is absolute (no `//privacy` if the Site URL gains a slash).
 
-Still to do: the user pastes the code-only log-in template into Supabase; a share-link lookup from Render (needs a short link); Buy Me a Coffee (the user is setting up the page; placement options first).
+- **Ko-fi** (user, 2026-10-12: "somewhere in a top corner across all pages"): a lavender "Buy me a coffee" pill at the top right of the header on every page (lime means New and teal means act), opening https://ko-fi.com/zalhashemi in a new tab. Plain link, no Ko-fi widget script (no tracking, no CSP change). Terms: tips are voluntary and unlock nothing; privacy: Ko-fi handles them under its own policy.
+- **Public repo prep:** the whole git history was scanned for key patterns and for the exact values in `api/.env` and `web/.env`: none found. README rewritten for visitors (screenshots in `docs/screenshots/`, what it does, how it works, stack, setup, Ko-fi), with the operator notes after it.
+
+Still open: a share-link lookup from Render (needs a short link); the code-only log-in template pasted into Supabase (user); a lawyer's review and the PDPA notification before any paid tier.
 
 ## Phase 9: Scale, storage and cost (done, 2026-10-11)
 
