@@ -1,6 +1,6 @@
-import { Books, GearSix, Plus, type Icon } from '@phosphor-icons/react';
+import { Books, Coffee, GearSix, Plus, type Icon } from '@phosphor-icons/react';
 import { Link, NavLink, Outlet, useMatches } from 'react-router';
-import { contactHref } from '../legal';
+import { SUPPORT_URL, contactHref } from '../legal';
 import { useAccount } from '../account/account-context';
 import { AuthSheetProvider } from './AuthSheet';
 import { ConnectionGate } from './ConnectionGate';
@@ -37,30 +37,33 @@ export function AppShell() {
             <Link to="/" className="wordmark -mx-1 inline-flex min-h-11 items-center px-1 text-[1.45rem] md:text-[1.6rem]" aria-label="BookTrap home">
               BookTrap
             </Link>
-            <nav aria-label="Main" className="hidden md:block">
-              <ul className="flex items-center gap-1 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]">
-                {TABS.map(({ to, label, icon: TabIcon }) => (
-                  <li key={to}>
-                    <NavLink
-                      to={to}
-                      end={to === '/'}
-                      className={({ isActive }) =>
-                        `flex h-11 items-center gap-2 rounded-pill px-4 text-[0.95rem] font-bold transition-colors duration-200 ${
-                          isActive ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <TabIcon size={18} weight={isActive ? 'fill' : 'bold'} aria-hidden="true" />
-                          {label}
-                        </>
-                      )}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+            <div className="flex items-center gap-3">
+              <nav aria-label="Main" className="hidden md:block">
+                <ul className="flex items-center gap-1 rounded-pill bg-surface p-1 shadow-[inset_0_0_0_1.5px_var(--rule)]">
+                  {TABS.map(({ to, label, icon: TabIcon }) => (
+                    <li key={to}>
+                      <NavLink
+                        to={to}
+                        end={to === '/'}
+                        className={({ isActive }) =>
+                          `flex h-11 items-center gap-2 rounded-pill px-4 text-[0.95rem] font-bold transition-colors duration-200 ${
+                            isActive ? 'bg-accent text-on-tab' : 'text-text-muted hover:text-text'
+                          }`
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <TabIcon size={18} weight={isActive ? 'fill' : 'bold'} aria-hidden="true" />
+                            {label}
+                          </>
+                        )}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+              <SupportLink />
+            </div>
           </div>
         </header>
 
@@ -142,5 +145,21 @@ function StorageNotice() {
         Private browsing is the usual cause.
       </p>
     </div>
+  );
+}
+
+/** Ko-fi, top right on every page. Lavender, since lime means "New" and teal means "act". */
+function SupportLink() {
+  return (
+    <a
+      href={SUPPORT_URL}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex h-11 items-center gap-2 rounded-pill bg-note px-4 text-[0.95rem] font-bold text-on-tab transition-[filter,transform] duration-200 hover:brightness-105 active:scale-[0.98]"
+    >
+      <Coffee size={18} weight="bold" aria-hidden="true" />
+      Buy me a coffee
+      <span className="sr-only"> (opens Ko-fi in a new tab)</span>
+    </a>
   );
 }

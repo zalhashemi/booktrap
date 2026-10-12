@@ -1,17 +1,67 @@
 # BookTrap
 
-Paste TikTok or Instagram links (posts, carousels, reels, mixed freely), or a public TikTok collection, and BookTrap finds every book shown or mentioned in them. It adds each one to a want-to-read shelf, with covers and ISBNs from Google Books and Open Library when they match, you can export to Goodreads, PDF, text, CSV or JSON.
+**Paste a TikTok or Instagram link, get every book in it on your shelf.** BookTrap watches the post the way a reader would (the covers held up to the camera, the spines on the shelf behind, the caption, the on-screen text and what's said out loud) and turns it into a want-to-read list you can export to Goodreads.
 
-The product source of truth is `BUILD_BRIEF_BookCatcher.md` (it uses the working name "BookCatcher"). Build status lives in `PROGRESS.md`.
+**Live at [booktrap.app](https://booktrap.app)** · free, no account needed to try it
 
-## Layout
+<p>
+  <img src="docs/screenshots/shelf-desktop.png" alt="A BookTrap shelf with 16 books caught from a TikTok carousel and an Instagram post" width="68%">
+  <img src="docs/screenshots/shelf-phone-dark.png" alt="The same shelf on a phone, in dark mode" width="24%">
+</p>
+
+## What it does
+
+- **Any BookTok or Bookstagram post:** videos, photo carousels, reels and share links, several at once, or a whole public TikTok collection.
+- **Finds the books, not the clutter:** Claude reads the frames, caption, hashtags and subtitles, and keeps the books the post is actually about (a shelf in the background doesn't count).
+- **Real covers and ISBNs** from Google Books and Open Library, and one row per book: the same book from two posts becomes one entry with both sources.
+- **A shelf you can work with:** want to read, reading and read; your own shelves; notes; search, sort and a list view; undo.
+- **Take it anywhere:** Goodreads CSV (imports into Goodreads and Fable), PDF with covers, CSV, JSON or plain text.
+- **No sign-up to start:** a guest shelf works straight away; saving it with an email (a code or a password) keeps it on every device.
+- **Safe to share:** an invisible bot check, daily limits, a content check that skips explicit posts, and report and takedown tools for readers and creators.
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[Pasted link] --> B[Resolve share link]
+  B --> C{Read before?}
+  C -- yes --> G
+  C -- no --> D[Fetch the public post<br/>Apify]
+  D --> E[Sample video frames or<br/>carousel slides<br/>ffmpeg]
+  E --> F[Find the books<br/>Claude, structured output]
+  F --> G[Match covers and ISBNs<br/>Google Books, Open Library]
+  G --> H[Fold duplicates and shelve]
+```
+
+Each post is read once and cached (90 days), so a post a hundred people paste costs the same as one. Videos are never stored: frames are sampled into a temporary folder and deleted. A fair queue gives every reader a turn, and a monthly budget and spend kill switch keep the bill bounded.
+
+## Built with
+
+| Part | Stack |
+|---|---|
+| Web app (`web/`) | React 19, Vite, TypeScript, Tailwind CSS v4, TanStack Query, React Router; an installable PWA with light and dark themes |
+| API (`api/`) | Node 24, Fastify, TypeScript, Zod, ffmpeg |
+| Reading posts | Apify scrapers, Anthropic Claude (vision and structured output) |
+| Data and sign-in | Supabase (Postgres with row-level security, anonymous and email auth) |
+| Hosting | Render (API), Cloudflare Pages, DNS, Turnstile and Email Routing, Resend (email) |
+| Quality | Vitest (about 300 tests), ESLint, GitHub Actions CI, Playwright checks, load-tested with Docker at production limits |
+
+Some engineering notes:
+- **The browser never touches the database.** Every table has row-level security with no policies; only the API's server key can read data, and every query is scoped to the signed-in user, whose token the API checks against Supabase's published signing keys.
+- **Guests become accounts without losing anything.** A guest is an anonymous Supabase user; saving the shelf adds an email to the same user, and logging in from a guest browser merges the guest's books into the account, folding duplicates.
+- **Costs are measured, not guessed.** Every paid call is recorded; a 100-reader load test sized the server; the [cost report](BookTrap-cost-report.pdf) projects spend at 100, 1,000 and 10,000 readers.
+- **Privacy by default.** No ads, analytics or tracking cookies; network addresses are kept only as keyed hashes for 2 days; a strict Content-Security-Policy; readers delete their account and everything in it from Settings.
+
+## Repository layout
 
 | Path | What it is |
 |---|---|
-| `web/` | React 19 + Vite + TypeScript PWA (Tailwind v4, TanStack Query, React Router). Deploys to Cloudflare Pages. |
-| `api/` | Node + TypeScript API (Fastify). Holds every third-party key. Deploys to Render. |
-| `shared/` | Zod schemas and types used by both. |
-| `supabase/migrations/` | Postgres schema. RLS is on for every table with no policies, so only the API's secret key can reach data. |
+| `web/` | The web app. Deploys to Cloudflare Pages. |
+| `api/` | The API. Holds every third-party key. Deploys to Render (`render.yaml`). |
+| `shared/` | Zod schemas, limits and export formats used by both. |
+| `supabase/migrations/` | The Postgres schema, in order. |
+| `supabase/templates/` | The sign-in email templates. |
+| `BUILD_BRIEF_BookCatcher.md`, `PROGRESS.md` | The product brief (working name "BookCatcher") and the build log, phase by phase, with every decision. |
 
 ## Run it locally
 
@@ -19,23 +69,21 @@ Requires Node 22.12+ (`.nvmrc` pins 24).
 
 ```sh
 npm install
-cp api/.env.example api/.env    # fill in keys as phases need them
+cp api/.env.example api/.env    # keys for Supabase, Apify, Anthropic, Google Books
 cp web/.env.example web/.env
 npm run dev                     # API on :8787, web on :5180
+npm run check                   # lint, typecheck, tests and build (what CI runs)
 ```
 
-If `SUPABASE_URL` is empty, the API uses **in-memory storage**, which is wiped on every restart. That's fine for UI work. For real persistence, connect Supabase:
+With `SUPABASE_URL` empty, the API keeps everything in memory (wiped on restart), which is enough for UI work. For real data, create a Supabase project, run every file in `supabase/migrations/` in order in the SQL editor, put the project URL and **secret** key in `api/.env`, and the URL and **publishable** key in `web/.env`. `GET http://localhost:8787/health` then reports `"storage":"supabase"`. Reading posts needs `APIFY_TOKEN` and `ANTHROPIC_API_KEY`.
 
-1. Create a project at supabase.com.
-2. Open **SQL Editor**, paste `supabase/migrations/0001_init.sql`, and run it.
-3. In **Project Settings, API Keys**, copy the Project URL and the **secret** key (`sb_secret_...`) into `api/.env` as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
-4. Restart `npm run dev`. `GET http://localhost:8787/health` should report `"storage":"supabase"`.
+## Support
 
-## Checks
+BookTrap is free. If it found you a good book, you can [buy me a coffee on Ko-fi](https://ko-fi.com/zalhashemi): it helps pay for reading posts and hosting.
 
-```sh
-npm run check      # lint + typecheck + tests + build (what CI runs)
-```
+---
+
+The sections below are the operator's notes: how the moving parts fit together, and how to run and deploy BookTrap.
 
 ## How accounts work
 
@@ -71,17 +119,18 @@ Four services: **Supabase** (database and sign-in), **Render** (the API, `render
 2. **Supabase**:
    - Run every file in `supabase/migrations/` in order (0001 to 0011).
    - Authentication, URL Configuration: Site URL `https://booktrap.app`; redirect URLs `https://booktrap.app/**` (keep `http://localhost:5180/**` for development).
-   - Authentication, Emails: paste `supabase/templates/magic-link.html` into **Magic Link** (subject "Your BookTrap log-in code") and `email-change.html` into **Change Email Address** (subject "Save your BookTrap shelf"). Both need `{{ .Token }}`: the app asks for the code.
+   - Authentication, Emails: paste `supabase/templates/magic-link.html` into **Magic Link** (subject "Your BookTrap log-in code") and `email-change.html` into **Change Email Address** (subject "Save your BookTrap shelf"). Both need `{{ .Token }}`: the app asks for the code. The log-in email is code only on purpose: signing in from a link would skip moving a guest shelf into the account, and mail scanners that open links would use up the code.
    - Authentication, Emails, SMTP: host `smtp.resend.com`, port 465, user `resend`, password a Resend API key (sending access, this domain only), sender `hello@booktrap.app`, name `BookTrap`.
-   - Authentication, Attack Protection: turn on CAPTCHA, provider Turnstile, with the Turnstile **secret** key.
-3. **Resend**: add the domain `booktrap.app` (region close to Singapore if offered) and add its DNS records (SPF, DKIM, and the return-path MX) in Cloudflare DNS. Add a DMARC record: `_dmarc` TXT `v=DMARC1; p=quarantine; rua=mailto:hello@booktrap.app`. Wait for "Verified".
+   - Authentication, Attack Protection: turn on CAPTCHA with the provider set to **Turnstile** (it defaults to hCaptcha, which rejects every Turnstile token) and the Turnstile **secret** key. Do this last, once the site has `VITE_TURNSTILE_SITE_KEY`: until then every sign-in fails.
+3. **Resend**: add the domain `booktrap.app` with sending only (receiving off: Cloudflare Email Routing receives mail) and copy its records into Cloudflare DNS: the DKIM TXT `resend._domainkey` and the CNAMEs `send` and `rsend`, both **DNS only** (proxied CNAMEs can't verify). One DMARC record, `_dmarc` TXT `v=DMARC1; p=none;` (tighten to `p=quarantine` once mail is flowing). Wait for "Verified".
 4. **Cloudflare**:
    - Email Routing: forward `hello@booktrap.app` to the operator's inbox (the policies show this address).
    - Turnstile: a widget for `booktrap.app` and `localhost`, mode **Invisible**. The site key goes to Pages (`VITE_TURNSTILE_SITE_KEY`) and `web/.env`; the secret goes to Supabase only.
-5. **Render** (API): New, Blueprint, pick this repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY` and `ALLOWED_ORIGIN` (`https://booktrap.app`). `IP_HASH_KEY` and `ADMIN_TOKEN` (the key for `/admin`) are generated. `region` matches the Supabase project (Singapore) and can't be changed later. Settings, Custom Domains: add `api.booktrap.app`, then in Cloudflare DNS a CNAME `api` to the `onrender.com` address, **DNS only** (grey cloud), so requests reach Render directly and the client IP chain stays Render's. When it's live, `https://api.booktrap.app/health/ready` answers `{"ok":true}`.
+5. **Render** (API): New, Blueprint, pick this repo (a resumed service keeps its old build: use Manual Deploy, Deploy latest commit). Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY` and `ALLOWED_ORIGIN` (`https://booktrap.app`). `IP_HASH_KEY` and `ADMIN_TOKEN` (the key for `/admin`) are generated. `region` matches the Supabase project (Singapore) and can't be changed later. Settings, Custom Domains: add `api.booktrap.app`, then in Cloudflare DNS a CNAME `api` to the `onrender.com` address, **DNS only** (grey cloud), so requests reach Render directly and the client IP chain stays Render's (the API trusts exactly 3 proxy hops, measured: proxying the record adds a fourth). When it's live, `https://api.booktrap.app/health/ready` answers `{"ok":true}`.
 6. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this repo.
    - Build command: `npm run build -w @booktrap/web` (Pages installs dependencies itself). Build output directory: `web/dist`.
    - Environment variables (all public; they ship in the bundle): `VITE_API_URL=https://api.booktrap.app`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_TURNSTILE_SITE_KEY`.
-   - Custom domains: add `booktrap.app`.
+   - Custom domains: add `booktrap.app`. Turn off Web Analytics for the project (the policies promise no analytics, and the CSP blocks its script anyway).
+   - A changed variable needs a new build. "Retry deployment" rebuilds that deployment's own commit, so retry the latest one.
    - Node comes from `.nvmrc`. Unknown paths fall back to `index.html`, so `/shelf` and `/privacy` load directly. The build writes `web/dist/_headers`: a Content-Security-Policy naming the API, Supabase and Turnstile, `nosniff`, `frame-ancestors 'none'` and long caching for hashed assets. Preview deployments have their own address, which `ALLOWED_ORIGIN` doesn't list, so they can't reach the API.
 7. Check: open `https://booktrap.app`, paste a link, see it shelved, then save the shelf with an email and log in on another browser with the emailed code.

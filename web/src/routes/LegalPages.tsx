@@ -233,6 +233,13 @@ export function PrivacyPage() {
         notes on it or put it on one of their shelves: then it stays, without your post.
       </P>
 
+      <H2>Tips</H2>
+      <P>
+        The &ldquo;Buy me a coffee&rdquo; button opens our page on Ko-fi. Anything you send is handled on Ko-fi, under its own terms and
+        privacy policy, and we see what Ko-fi shows us (the name and message you choose, and the amount). BookTrap doesn&rsquo;t link it to
+        your shelf.
+      </P>
+
       <H2>Children</H2>
       <P>BookTrap isn&rsquo;t meant for children under 13, and we don&rsquo;t knowingly collect their data.</P>
 
@@ -280,6 +287,12 @@ export function TermsPage() {
         Posts belong to their creators and platforms. BookTrap links back to them and never republishes their photos or videos.
         BookTrap isn&rsquo;t affiliated with TikTok, Instagram, Meta, ByteDance, Goodreads or Fable, and their names are used only to
         describe what BookTrap works with. To ask for something to be removed, email <Mail subject="BookTrap removal request" />.
+      </P>
+
+      <H2>Tips</H2>
+      <P>
+        Tips through Ko-fi are voluntary and very welcome. They help pay for reading posts and hosting, but they don&rsquo;t unlock features,
+        raise limits or buy any service, and they aren&rsquo;t refundable through BookTrap (ask Ko-fi).
       </P>
 
       <H2>Accuracy</H2>
