@@ -155,7 +155,11 @@ export function PrivacyPage() {
         </li>
         <li>
           <strong>Cloudflare</strong>: serves this website. Its Turnstile check also confirms that whoever starts a shelf or signs in
-          isn&rsquo;t a bot, using signals from your browser. It doesn&rsquo;t set tracking cookies.
+          isn&rsquo;t a bot, using signals from your browser. It doesn&rsquo;t set tracking cookies. See Cloudflare&rsquo;s{' '}
+          <a href="https://www.cloudflare.com/turnstile-privacy-policy/" className="underline" target="_blank" rel="noreferrer">
+            Turnstile Privacy Addendum
+          </a>
+          .
         </li>
         <li>
           <strong>Apify</strong>: fetches the public posts you paste from TikTok and Instagram.
