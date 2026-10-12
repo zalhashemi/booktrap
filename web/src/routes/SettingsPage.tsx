@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { Link, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { CloudCheck, CloudSlash, DownloadSimple, Eye, EyeSlash, Key, SignOut, Trash } from '@phosphor-icons/react';
-import { toExportJson } from '@booktrap/shared';
 import { AccountError, useAccount, useUser } from '../account/account-context';
 import { api, NetworkError } from '../api/client';
 import { useAuthSheet } from '../components/auth-sheet-context';
@@ -11,7 +10,7 @@ import { DeleteAccountSheet } from '../components/DeleteAccountSheet';
 import { Section, ShelvesSection } from '../components/SettingsSections';
 import { useToast } from '../components/toast-context';
 import { downloadFile, exportFileName } from '../library/export';
-import { useBooks } from '../library/hooks';
+import { useBooks, useDataExport, useRequestDataExport } from '../library/hooks';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
 import { useTheme, type Theme } from '../theme';
 
@@ -223,10 +222,6 @@ function DataSection() {
     if (confirming) keepRef.current?.focus();
   }, [confirming]);
 
-  const download = () => {
-    if (!books.data) return;
-    downloadFile(exportFileName('booktrap-my-data', 'json'), toExportJson(books.data), 'application/json');
-  };
 
   const onDelete = async () => {
     setDeleting(true);
@@ -264,10 +259,7 @@ function DataSection() {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="button" variant="quiet" onClick={download} disabled={!books.data}>
-          <DownloadSimple size={18} weight="bold" aria-hidden="true" />
-          Download my data
-        </Button>
+        <DownloadDataButton />
         {!confirming && (
           <Button
             type="button"
@@ -323,6 +315,59 @@ function DataSection() {
         />
       )}
     </Section>
+  );
+}
+
+/**
+ * "Download my data" is made on the server in the background: asking returns at once, the row shows
+ * progress, then a download. A recent export is reused rather than made again.
+ */
+function DownloadDataButton() {
+  const toast = useToast();
+  const status = useDataExport();
+  const requestExport = useRequestDataExport();
+  const [saving, setSaving] = useState(false);
+  const data = status.data;
+  const making = data?.status === 'queued' || data?.status === 'running' || requestExport.isPending;
+
+  const ask = () =>
+    requestExport.mutate(undefined, {
+      onError: (error) => toast(error instanceof NetworkError ? 'Couldn’t reach BookTrap. Try again in a moment.' : 'Couldn’t start your download. Try again in a moment.'),
+    });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      downloadFile(exportFileName('my-data', 'json'), await api.exportFile());
+    } catch {
+      // Dropped by the server since (it keeps a file 15 minutes): make a fresh one.
+      await status.refetch();
+      toast('That download has expired. Ask for a new one.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (data?.status === 'ready') {
+    return (
+      <Button type="button" variant="quiet" onClick={() => void save()} disabled={saving} className="shadow-[inset_0_0_0_1.5px_var(--success)]">
+        <DownloadSimple size={18} weight="bold" aria-hidden="true" />
+        {saving ? 'Downloading…' : 'Your data is ready: download'}
+      </Button>
+    );
+  }
+  return (
+    <>
+      <Button type="button" variant="quiet" onClick={ask} disabled={making} aria-live="polite">
+        <DownloadSimple size={18} weight="bold" aria-hidden="true" />
+        {making ? 'Preparing your data…' : 'Download my data'}
+      </Button>
+      {data?.status === 'failed' && (
+        <p role="alert" className="w-full text-sm text-note-ink">
+          Your data couldn’t be prepared just now. Nothing was lost. Try again.
+        </p>
+      )}
+    </>
   );
 }
 

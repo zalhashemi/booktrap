@@ -11,6 +11,7 @@ const keys = {
   jobs: (userId: string) => ['jobs', userId] as const,
   books: (userId: string) => ['books', userId] as const,
   tags: (userId: string) => ['tags', userId] as const,
+  export: (userId: string) => ['export', userId] as const,
 };
 
 const isActive = (job: Job) => job.status === 'queued' || job.status === 'running';
@@ -63,6 +64,26 @@ export function useRetryItem() {
       queryClient.setQueryData<Job[]>(jobsKey, (jobs = []) => jobs.map((existing) => (existing.id === job.id ? job : existing)));
       void queryClient.invalidateQueries({ queryKey: jobsKey });
     },
+  });
+}
+
+/** "Download my data": the reader's recent export, or null. Polls every 2s while it's being made, then stops. */
+export function useDataExport() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: keys.export(userId),
+    queryFn: ({ signal }) => api.exportStatus(signal),
+    refetchInterval: (query) => (query.state.data?.status === 'queued' || query.state.data?.status === 'running' ? 2000 : false),
+  });
+}
+
+/** Asks for an export. The server answers at once and makes it in the background. */
+export function useRequestDataExport() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.requestExport(),
+    onSuccess: (status) => queryClient.setQueryData(keys.export(userId), status),
   });
 }
 

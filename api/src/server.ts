@@ -9,6 +9,7 @@ import { requireUser, type SessionVerifier } from './auth/session-auth';
 import type { Config } from './config';
 import { HttpError, errorBody } from './errors';
 import type { JobQueue } from './pipeline/queue';
+import { createExportJobs } from './export-jobs';
 import type { verifyBook } from './pipeline/verify';
 import { jobRoutes } from './routes/jobs';
 import { libraryRoutes } from './routes/library';
@@ -97,7 +98,8 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
   const auth = requireUser(verifySession, { revocations, onSeen: (userId, at) => users.touch(userId, at) });
 
   healthRoutes(app, users);
-  accountRoutes(app, { auth, verify: verifySession, store, users, queue, revocations });
+  const exports = createExportJobs({ store, log: (error) => app.log.error({ err: error }, 'data export failed') });
+  accountRoutes(app, { auth, verify: verifySession, store, users, queue, revocations, exports });
   jobRoutes(app, {
     auth,
     store,

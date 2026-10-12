@@ -1,13 +1,14 @@
 import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
-import { ERROR_CODES, MergeGuestRequestSchema, type MeResponse, type MergeGuestResponse } from '@booktrap/shared';
+import { ERROR_CODES, MergeGuestRequestSchema, type ExportStatus, type ExportStatusResponse, type MeResponse, type MergeGuestResponse } from '@booktrap/shared';
 import { deleteAccount, GuestBusyError, mergeGuestShelf, type AccountDeps } from '../account';
 import type { SessionVerifier } from '../auth/session-auth';
+import type { ExportJobs } from '../export-jobs';
 import { HttpError } from '../errors';
 
 /** An account is deleted only by a session signed in with an emailed code this recently, so a stolen sign-in alone can't delete it. */
 export const DELETE_CODE_WINDOW_MS = 10 * 60 * 1000;
 
-export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: preHandlerAsyncHookHandler; verify: SessionVerifier }) {
+export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: preHandlerAsyncHookHandler; verify: SessionVerifier; exports: ExportJobs }) {
   const auth = { preHandler: deps.auth };
 
   app.get('/v1/me', auth, async (request): Promise<MeResponse> => {
@@ -28,6 +29,27 @@ export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: 
     await deleteAccount(user.id, deps);
     request.log.info('account deleted by its owner');
     reply.code(204);
+  });
+
+  /**
+   * "Download my data" (privacy policy: the right of access): every book with its sources, shelves and
+   * notes, as JSON. Made in the background; the reader polls the status, then fetches the file.
+   */
+  app.post('/v1/account/export', { ...auth, config: { rateLimit: { max: 30, timeWindow: '1 hour' } } }, async (request, reply): Promise<ExportStatus> => {
+    reply.code(202);
+    return deps.exports.request(request.user!.id);
+  });
+
+  app.get('/v1/account/export', auth, async (request): Promise<ExportStatusResponse> => ({ export: deps.exports.status(request.user!.id) }));
+
+  app.get('/v1/account/export/file', auth, async (request, reply) => {
+    const file = deps.exports.file(request.user!.id);
+    if (!file) throw new HttpError(404, ERROR_CODES.notFound, 'The export isn’t ready, or has expired. Ask for a new one.');
+    return reply
+      .header('content-type', 'application/json; charset=utf-8')
+      .header('content-disposition', 'attachment; filename="booktrap-my-data.json"')
+      .header('cache-control', 'no-store')
+      .send(file);
   });
 
   /**

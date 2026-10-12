@@ -1,4 +1,5 @@
 import type { Revocations } from './auth/revocations';
+import type { ExportJobs } from './export-jobs';
 import type { JobQueue } from './pipeline/queue';
 import { isSameBook } from './pipeline/normalize';
 import type { LibraryStore } from './store/types';
@@ -10,6 +11,8 @@ export interface AccountDeps {
   queue: JobQueue;
   /** Refuses a deleted user's still-valid tokens. */
   revocations?: Revocations;
+  /** "Download my data" files waiting for the user. */
+  exports?: ExportJobs;
 }
 
 /** How long a merge waits for a link the guest pasted to finish reading. */
@@ -31,8 +34,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * "Delete account": everything the user owns, then the user. Their networks' recent posts keep counting
  * against those networks' caps. Running it again after a partial failure finishes the job.
  */
-export async function deleteAccount(userId: string, { store, users, queue, revocations }: AccountDeps): Promise<void> {
+export async function deleteAccount(userId: string, { store, users, queue, revocations, exports }: AccountDeps): Promise<void> {
   queue.forgetUser(userId);
+  exports?.forgetUser(userId);
   await store.eraseUser(userId);
   await users.remove(userId);
   revocations?.revoke(userId);

@@ -181,6 +181,36 @@ describe('accounts', () => {
     expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: guest.headers })).statusCode).toBe(204);
   });
 
+  it('makes "Download my data" in the background, for its owner only, and reuses a recent one', async () => {
+    const { app, store, signIn } = await setup();
+    const reader = await signIn();
+    const other = await signIn();
+    await store.insertBook(reader.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });
+    expect((await app.inject({ method: 'GET', url: '/v1/account/export', headers: reader.headers })).json()).toEqual({ export: null });
+
+    const asked = await app.inject({ method: 'POST', url: '/v1/account/export', headers: reader.headers });
+    expect(asked.statusCode).toBe(202);
+    expect(asked.json().status).toBe('queued');
+
+    let status = asked.json().status;
+    for (let i = 0; i < 50 && status !== 'ready'; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+      status = (await app.inject({ method: 'GET', url: '/v1/account/export', headers: reader.headers })).json().export.status;
+    }
+    expect(status).toBe('ready');
+    const file = await app.inject({ method: 'GET', url: '/v1/account/export/file', headers: reader.headers });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers['content-disposition']).toMatch(/attachment/);
+    expect(file.json()).toMatchObject({ app: 'BookTrap', version: 1, books: [{ title: 'Babel' }] });
+
+    // Asking again within the cooldown hands back the same export instead of making another.
+    const again = await app.inject({ method: 'POST', url: '/v1/account/export', headers: reader.headers });
+    expect(again.json()).toMatchObject({ status: 'ready', requestedAt: asked.json().requestedAt });
+    // Someone else's export is never theirs.
+    expect((await app.inject({ method: 'GET', url: '/v1/account/export/file', headers: other.headers })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/v1/account/export/file' })).statusCode).toBe(401);
+  });
+
   it('merges a guest shelf into the account logged in to, folding duplicates', async () => {
     const { app, store, users, signIn } = await setup();
     const reader = await signIn();

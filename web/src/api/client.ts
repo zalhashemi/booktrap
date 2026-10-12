@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   ApiErrorSchema,
   BookListResponseSchema,
+  ExportStatusResponseSchema,
+  ExportStatusSchema,
   BookSchema,
   CountResponseSchema,
   TagListResponseSchema,
@@ -155,6 +157,14 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
     /** After logging in: adds the guest shelf this browser had (proved by its token) to the account. */
     mergeGuest: (guestToken: string) =>
       request('/v1/account/merge-guest', { method: 'POST', body: { guestToken }, schema: MergeGuestResponseSchema }),
+    /** "Download my data": asks for an export (made in the background), then its progress, then the file. */
+    requestExport: () => request('/v1/account/export', { method: 'POST', body: {}, schema: ExportStatusSchema }),
+    exportStatus: async (signal?: AbortSignal) => (await request('/v1/account/export', { schema: ExportStatusResponseSchema, signal })).export,
+    exportFile: () =>
+      send('/v1/account/export/file', { timeoutMs: 60_000 }, async (response) => {
+        if (!response.ok) throw new ApiRequestError(response.status, 'unknown', 'The export isn’t ready, or has expired.');
+        return response.blob();
+      }),
     usage: (signal?: AbortSignal) => request('/v1/usage', { schema: UsageResponseSchema, signal }),
     createJob: (urls: string[]) => request('/v1/jobs', { method: 'POST', body: { urls }, schema: JobSchema }),
     listJobs: (signal?: AbortSignal) => request('/v1/jobs', { schema: JobListResponseSchema, signal }),

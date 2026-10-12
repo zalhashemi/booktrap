@@ -21,6 +21,20 @@ export const MergeGuestResponseSchema = z.object({
 });
 export type MergeGuestResponse = z.infer<typeof MergeGuestResponseSchema>;
 
+/** "Download my data", made in the background: the reader polls this until the file is ready. */
+export const ExportStatusSchema = z.object({
+  status: z.enum(['queued', 'running', 'ready', 'failed']),
+  requestedAt: z.string(),
+  readyAt: z.string().nullable(),
+  /** Asking again before this hands back this same export. */
+  nextAt: z.string(),
+});
+export type ExportStatus = z.infer<typeof ExportStatusSchema>;
+
+/** The reader's recent export, or null when there's none (never asked for, or dropped). */
+export const ExportStatusResponseSchema = z.object({ export: ExportStatusSchema.nullable() });
+export type ExportStatusResponse = z.infer<typeof ExportStatusResponseSchema>;
+
 /** Today's reading for this user, against their daily cap (resets at midnight UTC). Guests get fewer. */
 export const UsageResponseSchema = z.object({
   postsToday: z.number().int(),
