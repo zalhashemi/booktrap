@@ -39,7 +39,7 @@ function Opening() {
       </div>
       {slow && (
         <p className="mt-5 text-text-muted">
-          The BookTrap server naps when it&rsquo;s quiet. Waking it can take up to a minute.
+          This is taking longer than usual. Hang on a moment.
         </p>
       )}
     </section>
@@ -50,8 +50,11 @@ function describe(error: Error | null): { title: string; body: string } {
   if (error instanceof AccountError && error.code === 'network') {
     return {
       title: 'Can’t reach BookTrap',
-      body: 'Check your connection and try again. If the server was asleep, it may need another moment to wake up.',
+      body: 'Check your connection and try again.',
     };
+  }
+  if (error instanceof AccountError && error.code === 'captcha') {
+    return { title: 'Couldn’t check this browser', body: error.message };
   }
   if (error instanceof AccountError && error.code === 'rate_limited') {
     return { title: 'Too many new shelves from this network', body: 'Wait a few minutes, then try again.' };

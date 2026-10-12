@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { ERROR_CODES } from '@booktrap/shared';
 import { api as defaultApi, ApiRequestError, NetworkError, type ApiClient } from '../api/client';
+import { captchaToken } from './captcha';
 import { toAccountError } from './errors';
 import { AccountContext, AccountError, type AccountContextValue, type AccountUser, type LoginResult } from './account-context';
 import { authClient, type AuthClient } from './supabase';
@@ -98,7 +99,7 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
       const run = async () => {
         const { data: existing } = await auth.getSession();
         if (existing.session) return existing.session;
-        const { data, error } = await auth.signInAnonymously();
+        const { data, error } = await auth.signInAnonymously({ options: { captchaToken: await captchaToken() } });
         if (error || !data.session) throw error ?? new Error('No session came back');
         return data.session;
       };
@@ -271,14 +272,14 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
   }, [isMember, userId, retryGuestMerge]);
 
   const logInWithPassword = useCallback(
-    (email: string, password: string) => logIn((authApi) => authApi.signInWithPassword({ email, password })),
+    (email: string, password: string) => logIn(async (authApi) => authApi.signInWithPassword({ email, password, options: { captchaToken: await captchaToken() } })),
     [logIn],
   );
 
   const sendLoginCode = useCallback(
     async (email: string) => {
       const authApi = requireAuth();
-      await call(() => authApi.signInWithOtp({ email, options: { shouldCreateUser: false } }));
+      await call(async () => authApi.signInWithOtp({ email, options: { shouldCreateUser: false, captchaToken: await captchaToken() } }));
     },
     [requireAuth, call],
   );

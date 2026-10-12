@@ -39,18 +39,23 @@ function assertApiUrl(url: string | undefined) {
   }
 }
 
+/** Cloudflare Turnstile (the CAPTCHA) loads its script and widget frame from here. */
+const TURNSTILE = 'https://challenges.cloudflare.com';
+
 /**
  * Cloudflare Pages response headers (`dist/_headers`), written at build time because the
  * Content-Security-Policy names the API's origin and the Supabase project (sign-in). Scripts come from
- * this site only (plus WebAssembly for the PDF engine's layout), the page talks only to itself, the API
- * and Supabase Auth, and covers and thumbnails may come from any https image host.
+ * this site only (plus WebAssembly for the PDF engine's layout, and Cloudflare Turnstile's script and
+ * frame, the CAPTCHA), the page talks only to itself, the API and Supabase Auth, and covers and
+ * thumbnails may come from any https image host.
  */
 function cloudflareHeaders(apiUrl: string, supabaseUrl: string | undefined): Plugin {
   const api = new URL(apiUrl).origin;
   const auth = supabaseUrl ? ` ${new URL(supabaseUrl).origin}` : '';
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'wasm-unsafe-eval'",
+    `script-src 'self' 'wasm-unsafe-eval' ${TURNSTILE}`,
+    `frame-src ${TURNSTILE}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
@@ -76,7 +81,6 @@ function cloudflareHeaders(apiUrl: string, supabaseUrl: string | undefined): Plu
   ].join('\n');
   return {
     name: 'booktrap-cloudflare-headers',
-    apply: 'build',
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: '_headers', source: headers });
     },
@@ -98,7 +102,7 @@ export default defineConfig(({ command, mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png', 'theme-init.js'],
+        includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
         manifest: {
           name: 'BookTrap',
           short_name: 'BookTrap',

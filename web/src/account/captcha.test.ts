@@ -1,0 +1,49 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+  delete window.turnstile;
+  document.head.querySelectorAll('script').forEach((script) => script.remove());
+});
+
+async function load(siteKey?: string) {
+  if (siteKey) vi.stubEnv('VITE_TURNSTILE_SITE_KEY', siteKey);
+  return (await import('./captcha')).captchaToken;
+}
+
+describe('captchaToken', () => {
+  it('sends no token when CAPTCHA isn’t configured', async () => {
+    const captchaToken = await load();
+    await expect(captchaToken()).resolves.toBeUndefined();
+    expect(document.head.querySelector('script')).toBeNull();
+  });
+
+  it('gets a fresh token from a widget and removes the widget afterwards', async () => {
+    const remove = vi.fn();
+    const render = vi.fn((_el: HTMLElement, options: Record<string, unknown>) => {
+      queueMicrotask(() => (options.callback as (token: string) => void)(`token-${render.mock.calls.length}`));
+      return `widget-${render.mock.calls.length}`;
+    });
+    window.turnstile = { render, remove };
+    const captchaToken = await load('site-key');
+    await expect(captchaToken()).resolves.toBe('token-1');
+    await expect(captchaToken()).resolves.toBe('token-2');
+    expect(render.mock.calls[0]![1]).toMatchObject({ sitekey: 'site-key', appearance: 'interaction-only' });
+    expect(remove).toHaveBeenCalledWith('widget-1');
+    expect(remove).toHaveBeenCalledWith('widget-2');
+    expect(document.body.children).toHaveLength(0);
+  });
+
+  it('explains a blocked check in words', async () => {
+    const render = (_el: HTMLElement, options: Record<string, unknown>) => {
+      queueMicrotask(options['error-callback'] as () => void);
+      return 'widget';
+    };
+    window.turnstile = { render, remove: vi.fn() };
+    const captchaToken = await load('site-key');
+    const error = await captchaToken().catch((caught: unknown) => caught);
+    // A fresh module copy each test, so the class is matched by name.
+    expect(error).toMatchObject({ name: 'AccountError', code: 'captcha' });
+  });
+});

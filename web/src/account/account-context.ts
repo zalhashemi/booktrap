@@ -46,7 +46,7 @@ export interface AccountContextValue {
   retryGuestMerge: () => Promise<LoginResult>;
 }
 
-export type AccountErrorCode = 'email_taken' | 'bad_code' | 'bad_login' | 'weak_password' | 'rate_limited' | 'network' | 'unknown';
+export type AccountErrorCode = 'email_taken' | 'bad_code' | 'bad_login' | 'weak_password' | 'rate_limited' | 'network' | 'captcha' | 'unknown';
 
 /** A sign-in problem the screens can explain in words. */
 export class AccountError extends Error {

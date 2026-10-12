@@ -1,4 +1,6 @@
+import { constants as zlib } from 'node:zlib';
 import Fastify, { type FastifyError } from 'fastify';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { ERROR_CODES, LIMITS } from '@booktrap/shared';
@@ -49,6 +51,14 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['content-type', 'authorization'],
     maxAge: 600,
+  });
+
+  // Phase 9: a 1,000-book shelf is 1.1 MB of JSON. Brotli at quality 4 shrinks it about 10x for a few ms of
+  // CPU (the default, 11, costs far more on half a CPU). Images (covers) aren't compressible and pass through.
+  await app.register(compress, {
+    encodings: ['br', 'gzip'],
+    threshold: 1024,
+    brotliOptions: { params: { [zlib.BROTLI_PARAM_QUALITY]: 4 } },
   });
 
   await app.register(rateLimit, {

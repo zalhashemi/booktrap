@@ -116,6 +116,19 @@ describe('API', () => {
     expect(res.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
   });
 
+  it('compresses a big shelf for a browser that accepts it', async () => {
+    const store = createMemoryLibraryStore();
+    const compressing = await testApp({}, store);
+    onTestFinished(() => compressing.close());
+    const { headers, userId } = await sessions.signIn();
+    for (let i = 0; i < 200; i++) await store.insertBook(userId, { ...BOOK, title: `Book ${i}`, normalizedKey: `book ${i}` });
+    const plain = await compressing.inject({ method: 'GET', url: '/v1/books', headers });
+    const brotli = await compressing.inject({ method: 'GET', url: '/v1/books', headers: { ...headers, 'accept-encoding': 'br, gzip' } });
+    expect(plain.headers['content-encoding']).toBeUndefined();
+    expect(brotli.headers['content-encoding']).toBe('br');
+    expect(brotli.rawPayload.length).toBeLessThan(plain.rawPayload.length / 5);
+  });
+
   it('uses the standard error shape for unknown routes', async () => {
     const res = await app.inject({ method: 'GET', url: '/nope' });
     expect(res.statusCode).toBe(404);

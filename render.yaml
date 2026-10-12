@@ -3,7 +3,8 @@ services:
   - type: web
     name: booktrap-api
     runtime: node
-    plan: free
+    # Always on, about $7 a month. Free sleeps after 15 minutes idle, which pauses reading and the 6-hourly cleanup.
+    plan: starter
     # Same region as the Supabase project (ap-southeast-1, Singapore); it can't be changed later. Every request
     # makes several database round trips.
     region: singapore
@@ -12,14 +13,13 @@ services:
     startCommand: npm start -w @booktrap/api
     # Liveness only: /health/ready reaches the database and is rate limited.
     healthCheckPath: /health
-    autoDeploy: true
+    # Deploy a push to main only once GitHub CI is green.
+    autoDeployTrigger: checksPass
+    # Only secrets and what differs from the API's defaults (api/src/config.ts) are set here.
     envVars:
       - key: NODE_ENV
         value: production
-      - key: LOG_LEVEL
-        value: info
-      - key: TRUST_PROXY_HOPS
-        value: "1"
+      # TRUST_PROXY_HOPS defaults to 1 in production. Phase 10 measures Render's real proxy chain.
       - key: IP_HASH_KEY
         generateValue: true
       # The hidden admin page's key: copy it from the dashboard to open /admin.
@@ -36,28 +36,10 @@ services:
         sync: false
       - key: GOOGLE_BOOKS_API_KEY
         sync: false
-      # The Cloudflare Pages address (and a custom domain later), comma-separated.
+      # The site's origins, comma-separated: https://booktrap.app (and https://booktrap.pages.dev while testing).
       - key: ALLOWED_ORIGIN
         sync: false
-      - key: EXTRACTION_MODEL
-        value: claude-sonnet-5-5
-      - key: EXTRACTION_EFFORT
-        value: medium
-      - key: DAILY_LINK_CAP_PER_USER
-        value: "40"
-      - key: DAILY_LINK_CAP_GUEST
-        value: "5"
-      - key: DAILY_LINK_CAP_PER_IP
-        value: "120"
-      - key: MAX_VIDEOS_PER_COLLECTION
-        value: "100"
       # Posts read at once. Phase 9: Starter (0.5 CPU, 512 MB) is CPU-bound at 2 or more and used
       # 326 MB at 4; 3 covers the waits on Apify and Claude. Raise to 6 on Standard (1 CPU, 2 GB).
       - key: JOB_CONCURRENCY
         value: "3"
-      - key: MONTHLY_BUDGET_USD
-        value: "20"
-      - key: GLOBAL_SPEND_KILL_SWITCH
-        value: "false"
-      - key: POST_CACHE_DAYS
-        value: "90"

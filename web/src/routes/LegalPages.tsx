@@ -2,7 +2,8 @@ import { useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
 
-const LAST_UPDATED = '11 October 2026';
+/** Both pages are drafts for the operator's or a lawyer's review before launch (PROGRESS.md, Phase 10). */
+const LAST_UPDATED = '12 October 2026';
 
 /**
  * How long things are kept. These mirror the API's defaults (POST_CACHE_DAYS, the 2-day network hash,
@@ -144,13 +145,17 @@ export function PrivacyPage() {
       <P>We use these providers to run BookTrap. Each handles only what its job needs:</P>
       <List>
         <li>
-          <strong>Supabase</strong>: the database that holds shelves, and sign-in (including sending sign-in emails).
+          <strong>Supabase</strong>: the database that holds shelves, and sign-in.
+        </li>
+        <li>
+          <strong>Resend</strong>: sends the sign-in emails, so it sees your email address and the code or link in them.
         </li>
         <li>
           <strong>Render</strong>: runs the BookTrap server.
         </li>
         <li>
-          <strong>Cloudflare</strong>: serves this website.
+          <strong>Cloudflare</strong>: serves this website. Its Turnstile check also confirms that whoever starts a shelf or signs in
+          isn&rsquo;t a bot, using signals from your browser. It doesn&rsquo;t set tracking cookies.
         </li>
         <li>
           <strong>Apify</strong>: fetches the public posts you paste from TikTok and Instagram.
@@ -171,8 +176,8 @@ export function PrivacyPage() {
 
       <H2>Why we&rsquo;re allowed to</H2>
       <P>
-        We process your shelf and the links you paste because you ask us to: it&rsquo;s the service itself. We process network hashes
-        and costs because we have a legitimate interest in preventing abuse and keeping BookTrap free. A creator&rsquo;s public handle
+        We process your shelf and the links you paste because you ask us to: it&rsquo;s the service itself. We process network hashes,
+        costs and the bot check because we have a legitimate interest in preventing abuse and keeping BookTrap free. A creator&rsquo;s public handle
         is kept as the source of a book, so you can go back to the post, which is a legitimate interest too. You can object at any
         time.
       </P>

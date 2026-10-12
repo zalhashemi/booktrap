@@ -10,6 +10,7 @@ describe('toAccountError', () => {
     [new AuthApiError('Signups not allowed for otp', 422, 'otp_disabled'), 'bad_login'],
     [new AuthApiError('Password should be at least 8 characters.', 422, 'weak_password'), 'weak_password'],
     [new AuthApiError('Email rate limit exceeded', 429, 'over_email_send_rate_limit'), 'rate_limited'],
+    [new AuthApiError('captcha protection: request disallowed (no captcha response)', 400, 'captcha_failed'), 'captcha'],
     [new AuthRetryableFetchError('Failed to fetch', 0), 'network'],
     [new TypeError('Failed to fetch'), 'network'],
   ])('maps %s', (error, code) => {

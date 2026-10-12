@@ -33,6 +33,9 @@ export function toAccountError(error: unknown): AccountError {
         return new AccountError('rate_limited', 'Too many tries for now. Wait a few minutes, then try again.');
       case 'email_address_invalid':
         return new AccountError('unknown', 'That doesn’t look like an email address.');
+      // Turnstile's token was missing, used or refused (Supabase checks it).
+      case 'captcha_failed':
+        return new AccountError('captcha', 'BookTrap couldn’t check this browser. Reload the page and try again.');
       case 'email_address_not_authorized':
         return new AccountError('unknown', 'BookTrap can’t send email to that address yet. Try another one.');
     }
