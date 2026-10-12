@@ -279,7 +279,12 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
   const sendLoginCode = useCallback(
     async (email: string) => {
       const authApi = requireAuth();
-      await call(async () => authApi.signInWithOtp({ email, options: { shouldCreateUser: false, captchaToken: await captchaToken() } }));
+      try {
+        await call(async () => authApi.signInWithOtp({ email, options: { shouldCreateUser: false, captchaToken: await captchaToken() } }));
+      } catch (error) {
+        // An email with no account looks the same as one with: whether an address is registered stays private.
+        if (!(error instanceof AccountError && error.code === 'no_account')) throw error;
+      }
     },
     [requireAuth, call],
   );

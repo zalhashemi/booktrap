@@ -21,10 +21,11 @@ export function toAccountError(error: unknown): AccountError {
         return new AccountError('bad_code', 'That code is wrong or has expired. Check the latest email, or send a new code.');
       case 'invalid_credentials':
         return new AccountError('bad_login', 'That email and password don’t match. Try again, or email yourself a code.');
+      // No account uses the email. Never shown: a login code is "sent" either way, so the sheet can't be used to test emails.
       case 'otp_disabled':
       case 'signup_disabled':
       case 'user_not_found':
-        return new AccountError('bad_login', 'No account uses that email. Save your shelf to make one.');
+        return new AccountError('no_account', 'That email and password don’t match. Try again, or email yourself a code.');
       case 'weak_password':
       case 'same_password':
         return new AccountError('weak_password', error.message);

@@ -156,7 +156,8 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
   let sub: string;
   if (step.name === 'code') {
     title = 'Check your email';
-    sub = step.purpose === 'save' ? 'We sent a code to confirm it’s your email.' : 'We sent a code to log you in.';
+    // Worded the same whether or not the email has an account: the sheet never says which.
+    sub = step.purpose === 'save' ? 'We sent a code to confirm it’s your email.' : 'If an account uses this email, we sent it a code to log you in.';
   } else if (step.name === 'new-password') {
     title = 'Set a new password';
     sub = 'You’re logged in. Choose the password to use next time.';
@@ -189,7 +190,7 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
 
       <div ref={bodyRef} className="flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 pt-4 pb-8 md:px-8">
         {step.name === 'email' && (
-          <form onSubmit={(event) => onEmail(event, 'code')} className="space-y-5">
+          <form onSubmit={(event) => onEmail(event, 'password')} className="space-y-5">
             {mode === 'login' && isGuest && count > 0 && (
               <p className="rounded-[16px] bg-surface-sunk px-4 py-3 text-[0.92rem] shadow-[inset_0_0_0_1.5px_var(--rule-accent)]">
                 The {plural(count)} on this browser join your account’s shelf when you log in.
@@ -201,12 +202,12 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
                 {mode === 'save' ? 'How do you want to sign in next time?' : 'How do you want to log in?'}
               </p>
               <Button type="submit" disabled={busy} className="w-full">
-                <EnvelopeSimple size={20} weight="bold" aria-hidden="true" />
-                {busy ? 'Sending…' : 'Email me a code'}
-              </Button>
-              <Button type="button" variant="quiet" disabled={busy} className="w-full" onClick={(event) => onEmail(event, 'password')}>
                 <Password size={20} weight="bold" aria-hidden="true" />
                 Use a password
+              </Button>
+              <Button type="button" variant="quiet" disabled={busy} className="w-full" onClick={(event) => onEmail(event, 'code')}>
+                <EnvelopeSimple size={20} weight="bold" aria-hidden="true" />
+                {busy ? 'Sending…' : 'Email me a code'}
               </Button>
             </div>
             <CaptchaSlot className="-mt-5 data-[captcha-shown]:mt-0" />
@@ -264,6 +265,16 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
             </Button>
             <Problem error={error} onLogIn={step.purpose === 'save' ? () => switchMode('login') : undefined} />
             <Resend sentAt={step.sentAt} disabled={busy} onResend={() => void sendCode(step.purpose, step.password)} />
+            {step.purpose === 'login' && (
+              <InlineButton
+                onClick={() => {
+                  setError(null);
+                  setStep({ name: 'password' });
+                }}
+              >
+                Use a password instead
+              </InlineButton>
+            )}
             <CaptchaSlot className="-mt-5 data-[captcha-shown]:mt-0" />
           </form>
         )}

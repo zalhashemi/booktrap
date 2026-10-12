@@ -44,6 +44,7 @@ function fakeAuth(initial: Session | null) {
       emit('SIGNED_IN', next);
       return ok(next);
     }),
+    signInWithOtp: vi.fn(async () => ({ data: { session: null, user: null }, error: null as unknown })),
     getUser: vi.fn(async () => ({ data: { user: current?.user ?? null }, error: null })),
     signOut: vi.fn(async () => {
       emit('SIGNED_OUT', null);
@@ -158,6 +159,17 @@ describe('AccountProvider', () => {
     const { get } = setup(auth);
     await screen.findByText('guest guest-1');
     await expect(get().logInWithPassword('reader@example.com', 'nope')).rejects.toMatchObject({ code: 'bad_login' });
+  });
+
+  it('answers a login code for an email with no account exactly as for one with', async () => {
+    const { auth } = fakeAuth(session('guest-1', { guest: true }));
+    const { AuthApiError } = await import('@supabase/supabase-js');
+    auth.signInWithOtp.mockResolvedValueOnce({ data: { session: null, user: null }, error: new AuthApiError('Signups not allowed for otp', 422, 'otp_disabled') });
+    const { get } = setup(auth);
+    await screen.findByText('guest guest-1');
+    await expect(get().sendLoginCode('stranger@example.com')).resolves.toBeUndefined();
+    auth.signInWithOtp.mockResolvedValueOnce({ data: { session: null, user: null }, error: new AuthApiError('Email rate limit exceeded', 429, 'over_email_send_rate_limit') });
+    await expect(get().sendLoginCode('stranger@example.com')).rejects.toMatchObject({ code: 'rate_limited' });
   });
 
   it('never reports an account deleted when the API only refused an expired sign-in', async () => {
