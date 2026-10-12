@@ -19,7 +19,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # TRUST_PROXY_HOPS defaults to 1 in production. Phase 10 measures Render's real proxy chain.
+      # Measured on 12 Oct 2026 (Phase 10): a request reaches the API through Render's in-container proxy
+      # (the socket, 127.0.0.1), its load balancer (10.x) and Cloudflare in front of Render (162.158.x), so
+      # the reader is the 4th address. At 1, every reader shared the load balancer's IP and one daily cap.
+      - key: TRUST_PROXY_HOPS
+        value: "3"
       - key: IP_HASH_KEY
         generateValue: true
       # The hidden admin page's key: copy it from the dashboard to open /admin.

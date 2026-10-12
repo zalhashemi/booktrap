@@ -40,7 +40,7 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
       // Request lines carry the method and path only: no client IP in the logs (privacy policy).
       serializers: { req: (request: { method: string; url: string }) => ({ method: request.method, url: request.url }) },
     },
-    // Trust exactly the proxy hops we deploy behind (Render's edge = 1). Trusting "all" would let
+    // Trust exactly the proxy hops we deploy behind (on Render, 3: render.yaml). Trusting "all" would let
     // clients pick their own IP via X-Forwarded-For and walk around every IP rate limit.
     trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS,
     bodyLimit: LIMITS.requestBodyBytes,
