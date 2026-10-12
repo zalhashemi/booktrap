@@ -290,7 +290,14 @@ Built (code side):
 
 The user's checklist (README, Deploy): buy the domain; Resend domain and DNS (SPF, DKIM, DMARC); Supabase SMTP, templates, URLs and CAPTCHA; Email Routing; the Turnstile widget; Render Blueprint and custom domain; Pages. **Order matters for CAPTCHA**: put the site key in `web/.env` and Pages before turning CAPTCHA on in Supabase, or every sign-in (local too, since it's the same project) fails. Also: notify Bahrain's Personal Data Protection Authority, and have a lawyer review the policies before any paid tier.
 
-Still to do after the deploy: measure the client IP chain on Render and set `TRUST_PROXY_HOPS`; test share links and media downloads from Render (2 uncached posts, about $0.10-0.20); a security review; a Playwright full-flow test against production at 390 and 1280 in both themes; the final Code Review (high).
+Deployed (12 Oct 2026): the API on Render Starter at `https://api.booktrap.app` (DNS-only CNAME, Render's certificate), the site on Cloudflare Pages at `https://booktrap.app` (`booktrap.pages.dev` stays behind Cloudflare Access). Resend verified `booktrap.app` (Resend's newer CNAME records `send` and `rsend`, which must be DNS only; Resend's "receiving" MX was removed, since Cloudflare Email Routing receives mail). Supabase sends from `hello@booktrap.app` with the Bookmark templates; a log-in code arrived and worked. DMARC is `p=none` for now.
+- Snags on the way, for next time: resuming the suspended Render service restarted the October build (a manual deploy fixed it); Pages' "Retry deployment" rebuilds the same old commit (a push started a fresh build); Supabase's CAPTCHA provider defaults to hCaptcha, which answers a Turnstile token with `invalid-input-response` and locked new visitors out until it was set to Turnstile.
+- CAPTCHA checked live: a sign-up without a token is refused (`captcha_failed`); a fresh browser gets an invisible Turnstile token and opens a shelf.
+- **Client IP measured** with a temporary `/health/whoami` (removed): socket 127.0.0.1 (Render's in-container proxy), then X-Forwarded-For `client, 162.158.x (Cloudflare in front of Render), 10.x (Render's load balancer)`. At the old `TRUST_PROXY_HOPS=1` every reader got the load balancer's address, sharing one per-network cap. Now **3** in `render.yaml`. A forged X-Forwarded-For only adds entries on the left, and Cloudflare refuses a client-sent `CF-Connecting-IP` (error 1000).
+- **Reading from Render**, 2 uncached posts pasted on the live site: a TikTok photo carousel (7 books) and an Instagram post (9 books), all 14 covers loading. $0.066 in all (Apify $0.007, Claude $0.058). Share-link lookup from Render not tested yet (both were full links).
+- Cloudflare Web Analytics was on for the site; its beacon is blocked by the CSP. The user is switching it off (the policy says no analytics).
+
+Still to do after the deploy: a share-link lookup from Render; a security review; a Playwright full-flow test against production at 390 and 1280 in both themes; the final Code Review (high).
 
 ## Phase 9: Scale, storage and cost (done, 2026-10-11)
 
