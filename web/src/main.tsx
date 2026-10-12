@@ -12,7 +12,10 @@ import { PrivacyPage, TermsPage } from './routes/LegalPages';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { SettingsPage } from './routes/SettingsPage';
 import { ShelfPage } from './routes/ShelfPage';
+import { watchForStaleBuild } from './stale-build';
 import './styles/index.css';
+
+watchForStaleBuild();
 
 const queryClient = new QueryClient();
 
