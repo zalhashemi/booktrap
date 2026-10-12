@@ -11,13 +11,17 @@ interface Props {
   onToggle: (book: Book) => void;
 }
 
+/** Columns auto-fill at a minimum cover width. The empty shelf's ghost books use the same grid, so they line up with real ones. */
+export const SHELF_GRID =
+  'grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-x-4 sm:grid-cols-[repeat(auto-fill,minmax(132px,1fr))] sm:gap-x-6';
+
 /**
  * The shelf: covers registered at one 2:3 size on a shared baseline, each carrying its state as
- * page-tabs peeking from the top edge. Columns auto-fill at a minimum cover width.
+ * page-tabs peeking from the top edge.
  */
 export function ShelfGrid({ books, onOpen, selecting, selected, onToggle }: Props) {
   return (
-    <ul aria-label="Books on your shelf" className="mt-7 grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-x-4 gap-y-8 sm:grid-cols-[repeat(auto-fill,minmax(132px,1fr))] sm:gap-x-6">
+    <ul aria-label="Books on your shelf" className={`mt-7 gap-y-8 ${SHELF_GRID}`}>
       {books.map((book) => {
         const isSelected = selected.has(book.id);
         const flags = coverTabs(book);

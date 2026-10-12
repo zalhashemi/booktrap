@@ -8,19 +8,22 @@ import { BookSheet } from '../components/BookSheet';
 import { Button, ButtonLink } from '../components/Button';
 import { ExportSheet, type ExportScope } from '../components/ExportSheet';
 import { SelectionBar } from '../components/SelectionBar';
-import { ShelfGrid } from '../components/ShelfGrid';
+import { SHELF_GRID, ShelfGrid } from '../components/ShelfGrid';
 import { ShelfToolbar, type ViewMode } from '../components/ShelfToolbar';
 import { useToast } from '../components/toast-context';
 import { DEFAULT_QUERY, applyQuery, flagCounts, isFiltered, type ShelfQuery, type SortKey } from '../library/filters';
 import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBooks, useTags } from '../library/hooks';
 
-/** Ghost books for the empty shelf: an optional page-tab colour and lean. */
+/** Ghost books for the empty shelf: an optional page-tab colour and lean. Enough to fill the widest row; the rest are clipped. */
 const GHOST_BOOKS: { tab?: string; lean?: number }[] = [
   { tab: 'bg-lime' },
-  { lean: -2 },
-  { tab: 'bg-reading', lean: 1.5 },
+  { lean: -1.5 },
+  { tab: 'bg-reading', lean: 1 },
   {},
-  { tab: 'bg-success', lean: 3 },
+  { tab: 'bg-success', lean: 1.5 },
+  { lean: -1 },
+  {},
+  { tab: 'bg-lime', lean: 1 },
 ];
 
 const PREFS_KEY = 'booktrap.shelf.prefs';
@@ -276,16 +279,17 @@ export function ShelfPage() {
 /** The empty shelf: ghost books waiting for their covers, a few already flagged with page-tabs. */
 function EmptyShelf() {
   return (
-    <div className="relative mt-10 max-w-[560px]" aria-hidden="true">
-      <div className="flex items-end gap-3 sm:gap-4">
+    <div aria-hidden="true">
+      {/* The shelf grid's columns, one row: later rows collapse to nothing and are clipped. Ghosts sit 12px lower in
+          their cells than real covers (the grid's top margin is 12px less to match), so a collapsed row's page-tabs
+          fall below the clip too. Side padding, offset by margin, leaves room for the lean. */}
+      <div className={`-mx-2 mt-4 overflow-hidden px-2 pb-1 [grid-auto-rows:0] [grid-template-rows:auto] ${SHELF_GRID}`}>
         {GHOST_BOOKS.map((book, index) => (
-          <div
-            key={index}
-            className="ghost-book relative flex-1"
-            style={{ '--i': index, '--lean': `${book.lean ?? 0}deg`, maxWidth: 104 } as CSSProperties}
-          >
-            {book.tab && <span className={`absolute -top-2 right-3 h-4 w-3 rounded-t-[4px] ${book.tab}`} />}
-            <div className="aspect-[2/3] rounded-cover border-2 border-dashed border-rule-accent bg-surface/60" />
+          <div key={index} className="min-w-0 pt-5">
+            <div className="ghost-book relative" style={{ '--i': index, '--lean': `${book.lean ?? 0}deg` } as CSSProperties}>
+              {book.tab && <span className={`cover-tab absolute -top-3.5 right-2 h-7 w-[24%] max-w-7 min-w-5 rounded-t-[6px] ${book.tab}`} />}
+              <div className="relative aspect-[2/3] rounded-cover border-2 border-dashed border-rule-accent bg-surface/60" />
+            </div>
           </div>
         ))}
       </div>
