@@ -13,8 +13,9 @@ export async function testSessions() {
   const jwk = { ...(await exportJWK(publicKey)), kid: 'test-key', alg: 'ES256' };
   const verify = createSessionVerifier({ supabaseUrl: PROJECT, getKey: createLocalJWKSet({ keys: [jwk] }) });
 
-  const token = (userId: string, { guest = false }: { guest?: boolean } = {}) =>
-    new SignJWT({ role: 'authenticated', is_anonymous: guest })
+  /** `amr`: how the session signed in, e.g. [{ method: 'otp', timestamp }], as Supabase records it. */
+  const token = (userId: string, { guest = false, amr }: { guest?: boolean; amr?: { method: string; timestamp: number }[] } = {}) =>
+    new SignJWT({ role: 'authenticated', is_anonymous: guest, ...(amr && { amr }) })
       .setProtectedHeader({ alg: 'ES256', kid: 'test-key', typ: 'JWT' })
       .setSubject(userId)
       .setIssuer(`${PROJECT}/auth/v1`)
@@ -24,9 +25,9 @@ export async function testSessions() {
       .sign(privateKey);
 
   /** A new user id and the headers that sign in as them. */
-  const signIn = async ({ guest = false }: { guest?: boolean } = {}) => {
+  const signIn = async (options: Parameters<typeof token>[1] = {}) => {
     const userId = randomUUID();
-    return { userId, headers: { authorization: `Bearer ${await token(userId, { guest })}` } };
+    return { userId, headers: { authorization: `Bearer ${await token(userId, options)}` } };
   };
 
   return { verify, token, signIn };

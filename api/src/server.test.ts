@@ -142,8 +142,9 @@ describe('accounts', () => {
     const users = createMemoryUserDirectory();
     const app = await testApp({}, store, users);
     onTestFinished(() => app.close());
-    const signIn = async (guest = false) => {
-      const session = await sessions.signIn({ guest });
+    // Members sign in by an emailed code just now unless told otherwise: deleting an account asks for one.
+    const signIn = async (guest = false, amr = guest ? undefined : [{ method: 'otp', timestamp: Math.floor(Date.now() / 1000) }]) => {
+      const session = await sessions.signIn({ guest, amr });
       users.add(session.userId, { guest });
       return { ...session, token: session.headers.authorization.slice('Bearer '.length) };
     };
@@ -160,6 +161,24 @@ describe('accounts', () => {
     expect(await store.listBooks(reader.userId)).toEqual([]);
     expect(await store.listTags(reader.userId)).toEqual([]);
     expect(users.has(reader.userId)).toBe(false);
+  });
+
+  it('deletes an account only for a session signed in by an emailed code in the last 10 minutes', async () => {
+    const { app, users, signIn } = await setup();
+    const minutesAgo = (minutes: number) => Math.floor(Date.now() / 1000) - minutes * 60;
+    const byPassword = await signIn(false, [{ method: 'password', timestamp: minutesAgo(0) }]);
+    const staleCode = await signIn(false, [{ method: 'otp', timestamp: minutesAgo(11) }]);
+    for (const reader of [byPassword, staleCode]) {
+      const res = await app.inject({ method: 'DELETE', url: '/v1/account', headers: reader.headers });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe('reauth_required');
+      expect(users.has(reader.userId)).toBe(true);
+    }
+    const freshCode = await signIn(false, [{ method: 'password', timestamp: minutesAgo(30) }, { method: 'otp', timestamp: minutesAgo(1) }]);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: freshCode.headers })).statusCode).toBe(204);
+    // A guest has no email: their shelf is deleted without a code.
+    const guest = await signIn(true);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/account', headers: guest.headers })).statusCode).toBe(204);
   });
 
   it('merges a guest shelf into the account logged in to, folding duplicates', async () => {
@@ -426,7 +445,7 @@ describe('jobs API', () => {
   it('erases a deleted account’s books and jobs, but its posts still count against the network’s cap', async () => {
     const store = createMemoryLibraryStore();
     const app = await testApp({ ...KEYS, DAILY_LINK_CAP_PER_USER: '10', DAILY_LINK_CAP_PER_IP: '2' }, store);
-    const first = await sessions.signIn();
+    const first = await sessions.signIn({ amr: [{ method: 'otp', timestamp: Math.floor(Date.now() / 1000) }] });
     const urls = ['7672440936101727519', '7672440936101727520'].map((id) => `https://www.tiktok.com/@reader/video/${id}`);
     expect((await app.inject({ method: 'POST', url: '/v1/jobs', headers: first.headers, payload: { urls } })).statusCode).toBe(201);
     await store.insertBook(first.userId, { ...BOOK, title: 'Babel', normalizedKey: 'babel' });

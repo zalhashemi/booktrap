@@ -40,8 +40,13 @@ export interface AccountContextValue {
   setPassword: (password: string) => Promise<void>;
   /** Signs out of this browser; it opens a new, empty guest shelf. */
   signOut: () => Promise<void>;
-  /** Deletes the account (or guest shelf) and everything on it, then opens a new guest shelf. */
-  deleteAccount: () => Promise<void>;
+  /** Emails the signed-in account a code that confirms deleting it. */
+  sendDeleteCode: () => Promise<void>;
+  /**
+   * Deletes the account (or guest shelf) and everything on it, then opens a new guest shelf. An account
+   * needs the code from `sendDeleteCode`, so a stolen sign-in alone can't delete it; a guest needs none.
+   */
+  deleteAccount: (code?: string) => Promise<void>;
   /** Tries again to add the guest shelf whose merge failed at login (while its token lasts). */
   retryGuestMerge: () => Promise<LoginResult>;
 }

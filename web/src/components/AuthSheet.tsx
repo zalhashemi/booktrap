@@ -358,7 +358,7 @@ function PasswordField({ label, value, onChange, hint, isNew }: { label: string;
 }
 
 /** One field for the whole code, so pasting it and the phone's "from Messages/Mail" suggestion both work. */
-function CodeField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function CodeField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const id = useId();
   const hintId = useId();
   return (
@@ -396,7 +396,7 @@ function EmailChip({ email, onChange }: { email: string; onChange: () => void })
   );
 }
 
-function Resend({ sentAt, disabled, onResend }: { sentAt: number; disabled: boolean; onResend: () => void }) {
+export function Resend({ sentAt, disabled, onResend }: { sentAt: number; disabled: boolean; onResend: () => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);

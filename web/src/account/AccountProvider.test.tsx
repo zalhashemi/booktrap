@@ -45,6 +45,7 @@ function fakeAuth(initial: Session | null) {
       return ok(next);
     }),
     signInWithOtp: vi.fn(async () => ({ data: { session: null, user: null }, error: null as unknown })),
+    verifyOtp: vi.fn(async () => ok(current)),
     getUser: vi.fn(async () => ({ data: { user: current?.user ?? null }, error: null })),
     signOut: vi.fn(async () => {
       emit('SIGNED_OUT', null);
@@ -170,6 +171,33 @@ describe('AccountProvider', () => {
     await expect(get().sendLoginCode('stranger@example.com')).resolves.toBeUndefined();
     auth.signInWithOtp.mockResolvedValueOnce({ data: { session: null, user: null }, error: new AuthApiError('Email rate limit exceeded', 429, 'over_email_send_rate_limit') });
     await expect(get().sendLoginCode('stranger@example.com')).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('deletes an account by the code emailed to it: signs in by the code first, then asks the API', async () => {
+    const { auth } = fakeAuth(session('member', { email: 'reader@example.com' }));
+    const client = createApiClient('http://api.test');
+    const order: string[] = [];
+    auth.verifyOtp.mockImplementationOnce(async () => (order.push('verify'), { data: { session: null, user: null }, error: null }) as never);
+    vi.spyOn(client, 'deleteAccount').mockImplementation(async () => void order.push('delete'));
+    const { get } = setup(auth, client);
+    await screen.findByText('member member');
+    await act(() => get().sendDeleteCode());
+    expect(auth.signInWithOtp).toHaveBeenCalledWith(expect.objectContaining({ email: 'reader@example.com' }));
+    await act(() => get().deleteAccount('123456'));
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ email: 'reader@example.com', token: '123456', type: 'email' });
+    expect(order).toEqual(['verify', 'delete']);
+  });
+
+  it('deletes nothing when the code is wrong', async () => {
+    const { auth } = fakeAuth(session('member', { email: 'reader@example.com' }));
+    const { AuthApiError } = await import('@supabase/supabase-js');
+    auth.verifyOtp.mockResolvedValueOnce({ data: { session: null, user: null }, error: new AuthApiError('Token has expired or is invalid', 403, 'otp_expired') } as never);
+    const client = createApiClient('http://api.test');
+    const remove = vi.spyOn(client, 'deleteAccount').mockResolvedValue(undefined);
+    const { get } = setup(auth, client);
+    await screen.findByText('member member');
+    await expect(get().deleteAccount('000000')).rejects.toMatchObject({ code: 'bad_code' });
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it('never reports an account deleted when the API only refused an expired sign-in', async () => {

@@ -7,6 +7,7 @@ import { AccountError, useAccount, useUser } from '../account/account-context';
 import { api, NetworkError } from '../api/client';
 import { useAuthSheet } from '../components/auth-sheet-context';
 import { Button } from '../components/Button';
+import { DeleteAccountSheet } from '../components/DeleteAccountSheet';
 import { Section, ShelvesSection } from '../components/SettingsSections';
 import { useToast } from '../components/toast-context';
 import { downloadFile, exportFileName } from '../library/export';
@@ -211,13 +212,13 @@ function DataSection() {
   const books = useBooks();
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
+  const [deleteSheet, setDeleteSheet] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
   const count = books.data?.length ?? 0;
-  const thing = user.isGuest ? 'shelf' : 'account';
 
-  // Opening the confirmation moves focus to the safe choice.
+  // A guest confirms here (an account confirms by emailed code, in DeleteAccountSheet). Opening it moves focus to the safe choice.
   useEffect(() => {
     if (confirming) keepRef.current?.focus();
   }, [confirming]);
@@ -232,13 +233,13 @@ function DataSection() {
     setError(null);
     try {
       await deleteAccount();
-      toast(user.isGuest ? 'Your shelf is deleted. This is a new, empty one.' : 'Your account is deleted. This browser has a new, empty guest shelf.');
+      toast('Your shelf is deleted. This is a new, empty one.');
     } catch (failure) {
       // A lost answer may hide a delete that went through; trying again is safe either way.
       setError(
         failure instanceof NetworkError
-          ? `Couldn’t reach BookTrap, so your ${thing} may not be deleted yet. Try again in a moment.`
-          : `Couldn’t delete your ${thing} just now. Nothing was removed. Try again in a moment.`,
+          ? 'Couldn’t reach BookTrap, so your shelf may not be deleted yet. Try again in a moment.'
+          : 'Couldn’t delete your shelf just now. Nothing was removed. Try again in a moment.',
       );
       setDeleting(false);
     }
@@ -268,7 +269,12 @@ function DataSection() {
           Download my data
         </Button>
         {!confirming && (
-          <Button type="button" variant="quiet" onClick={() => setConfirming(true)} className="text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]">
+          <Button
+            type="button"
+            variant="quiet"
+            onClick={() => (user.isGuest ? setConfirming(true) : setDeleteSheet(true))}
+            className="text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]"
+          >
             <Trash size={18} weight="bold" aria-hidden="true" />
             {user.isGuest ? 'Delete my shelf' : 'Delete account'}
           </Button>
@@ -281,17 +287,15 @@ function DataSection() {
       {confirming && (
         <div role="group" aria-labelledby="delete-confirm" className="mt-4 rounded-[16px] bg-surface-sunk p-4 shadow-[inset_0_0_0_1.5px_var(--note)]">
           <p id="delete-confirm" className="font-display text-[1.2rem] leading-snug">
-            {user.isGuest ? 'Delete this shelf' : 'Delete your account'}
+            Delete this shelf
             {count > 0 ? ` and all ${count} ${count === 1 ? 'book' : 'books'}?` : '?'}
           </p>
           <p className="mt-1 text-sm text-text-muted">
-            {user.isGuest
-              ? 'Every book, shelf, note and paste history goes for good. This can’t be undone.'
-              : 'Your shelf, shelves and history go for good, on every device. This can’t be undone.'}
+            Every book, shelf, note and paste history goes for good. This can’t be undone.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button ref={keepRef} type="button" variant="quiet" onClick={() => setConfirming(false)} disabled={deleting}>
-              {user.isGuest ? 'Keep my shelf' : 'Keep my account'}
+              Keep my shelf
             </Button>
             <Button type="button" variant="quiet" onClick={() => void onDelete()} disabled={deleting} className="text-note-ink shadow-[inset_0_0_0_1.5px_var(--note)]">
               <Trash size={18} weight="bold" aria-hidden="true" />
@@ -304,6 +308,19 @@ function DataSection() {
             </p>
           )}
         </div>
+      )}
+
+      {!user.isGuest && (
+        <DeleteAccountSheet
+          open={deleteSheet}
+          onClose={() => setDeleteSheet(false)}
+          email={user.email ?? ''}
+          count={count}
+          onDeleted={() => {
+            setDeleteSheet(false);
+            toast('Your account is deleted. This browser has a new, empty guest shelf.');
+          }}
+        />
       )}
     </Section>
   );

@@ -308,8 +308,21 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     await call(() => authApi.signOut({ scope: 'local' }));
   }, [requireAuth, call]);
 
-  const deleteAccount = useCallback(async () => {
+  const sendDeleteCode = useCallback(async () => {
+    const { data } = await requireAuth().getSession();
+    const email = data.session?.user.email;
+    if (!email) throw new AccountError('unknown', 'This shelf has no email to send a code to.');
+    await sendLoginCode(email);
+  }, [requireAuth, sendLoginCode]);
+
+  const deleteAccount = useCallback(async (code?: string) => {
     const authApi = requireAuth();
+    if (code) {
+      // Signing in again by the emailed code is what the API asks of a session before it deletes an account.
+      const { data } = await authApi.getSession();
+      const email = data.session?.user.email ?? '';
+      await call(() => authApi.verifyOtp({ email, token: code, type: 'email' }));
+    }
     try {
       await client.deleteAccount();
     } catch (error) {
@@ -321,7 +334,7 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     }
     // The user no longer exists, so the server may refuse to sign out: the local session goes anyway.
     await authApi.signOut({ scope: 'local' }).catch(() => {});
-  }, [requireAuth, client]);
+  }, [requireAuth, call, client]);
 
   const value: AccountContextValue = {
     status: state.status,
@@ -336,6 +349,7 @@ export function AccountProvider({ children, auth = authClient, client = defaultA
     confirmLoginCode,
     setPassword,
     signOut,
+    sendDeleteCode,
     deleteAccount,
     retryGuestMerge,
   };

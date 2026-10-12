@@ -4,6 +4,9 @@ import { deleteAccount, GuestBusyError, mergeGuestShelf, type AccountDeps } from
 import type { SessionVerifier } from '../auth/session-auth';
 import { HttpError } from '../errors';
 
+/** An account is deleted only by a session signed in with an emailed code this recently, so a stolen sign-in alone can't delete it. */
+export const DELETE_CODE_WINDOW_MS = 10 * 60 * 1000;
+
 export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: preHandlerAsyncHookHandler; verify: SessionVerifier }) {
   const auth = { preHandler: deps.auth };
 
@@ -17,7 +20,12 @@ export function accountRoutes(app: FastifyInstance, deps: AccountDeps & { auth: 
    * owns, then the user in Supabase Auth. A guest deleting their shelf goes through here too.
    */
   app.delete('/v1/account', { ...auth, config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (request, reply) => {
-    await deleteAccount(request.user!.id, deps);
+    const user = request.user!;
+    // A guest has no email to send a code to: their shelf lives only in this browser anyway.
+    if (!user.isAnonymous && (!user.emailCodeAt || Date.now() - user.emailCodeAt.getTime() > DELETE_CODE_WINDOW_MS)) {
+      throw new HttpError(403, ERROR_CODES.reauthRequired, 'Confirm with the code we email you, then delete the account.');
+    }
+    await deleteAccount(user.id, deps);
     request.log.info('account deleted by its owner');
     reply.code(204);
   });

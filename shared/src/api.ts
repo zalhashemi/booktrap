@@ -47,4 +47,5 @@ export const ERROR_CODES = {
   limitReached: 'limit_reached',
   busy: 'busy',
   paused: 'processing_paused',
+  reauthRequired: 'reauth_required',
 } as const;

@@ -48,7 +48,7 @@ function token({ claims = {}, issuer = ISSUER, audience = 'authenticated', expir
 describe('createSessionVerifier', () => {
   it('accepts a signed-in user', async () => {
     const id = randomUUID();
-    await expect(verify(await token({ claims: { sub: id } }))).resolves.toEqual({ id, isAnonymous: false });
+    await expect(verify(await token({ claims: { sub: id } }))).resolves.toEqual({ id, isAnonymous: false, emailCodeAt: null });
   });
 
   it('accepts a guest and says so', async () => {
@@ -56,6 +56,7 @@ describe('createSessionVerifier', () => {
     await expect(verify(await token({ claims: { sub: id, is_anonymous: true } }))).resolves.toEqual({
       id,
       isAnonymous: true,
+      emailCodeAt: null,
     });
   });
 
@@ -64,6 +65,21 @@ describe('createSessionVerifier', () => {
     await expect(verify(await token({ claims: { sub: id, is_anonymous: undefined } }))).resolves.toEqual({
       id,
       isAnonymous: false,
+      emailCodeAt: null,
+    });
+  });
+
+  it('notes when the session last signed in by an emailed code, ignoring other methods', async () => {
+    const id = randomUUID();
+    const amr = [
+      { method: 'otp', timestamp: 1_700_000_000 },
+      { method: 'password', timestamp: 1_800_000_000 },
+      { method: 'magiclink', timestamp: 1_750_000_000 },
+    ];
+    await expect(verify(await token({ claims: { sub: id, amr } }))).resolves.toEqual({
+      id,
+      isAnonymous: false,
+      emailCodeAt: new Date(1_750_000_000_000),
     });
   });
 
@@ -126,6 +142,7 @@ describe('createSessionVerifier', () => {
     await expect(remote(await token({ claims: { sub: id }, issuer: `${origin}/auth/v1` }))).resolves.toEqual({
       id,
       isAnonymous: false,
+      emailCodeAt: null,
     });
   });
 });
@@ -152,7 +169,7 @@ describe('requireUser', () => {
       headers: { authorization: `Bearer ${await token({ claims: { sub: id, is_anonymous: true } })}` },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ id, isAnonymous: true });
+    expect(response.json()).toEqual({ id, isAnonymous: true, emailCodeAt: null });
   });
 
   it('gives every failure the same 401', async () => {

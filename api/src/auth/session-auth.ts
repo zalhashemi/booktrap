@@ -12,6 +12,8 @@ export interface AuthedUser {
   id: string;
   /** A guest: a Supabase anonymous user who hasn't added an email yet. */
   isAnonymous: boolean;
+  /** When this session last proved the reader has the inbox (signed in by an emailed code), or null. */
+  emailCodeAt: Date | null;
 }
 
 declare module 'fastify' {
@@ -21,12 +23,17 @@ declare module 'fastify' {
 }
 
 // Supabase access tokens: `sub` is the user id, `role` is "authenticated" for every signed-in user
-// (guests included), and `is_anonymous` marks guests.
+// (guests included), and `is_anonymous` marks guests. `amr` lists how the session was signed in, and when
+// (Unix seconds); refreshing the token keeps it.
 const ClaimsSchema = z.object({
   sub: z.uuid(),
   role: z.literal('authenticated'),
   is_anonymous: z.boolean().optional().default(false),
+  amr: z.array(z.object({ method: z.string(), timestamp: z.number() })).optional().default([]),
 });
+
+/** Sign-in methods that prove the reader opened an email BookTrap sent. */
+const EMAIL_CODE_METHODS = new Set(['otp', 'magiclink']);
 
 export type SessionVerifier = (token: string) => Promise<AuthedUser>;
 
@@ -55,7 +62,8 @@ export function createSessionVerifier({ supabaseUrl, getKey }: SessionVerifierOp
       requiredClaims: ['exp', 'sub'],
     });
     const claims = ClaimsSchema.parse(payload);
-    return { id: claims.sub, isAnonymous: claims.is_anonymous };
+    const codeTimes = claims.amr.filter((entry) => EMAIL_CODE_METHODS.has(entry.method)).map((entry) => entry.timestamp);
+    return { id: claims.sub, isAnonymous: claims.is_anonymous, emailCodeAt: codeTimes.length ? new Date(Math.max(...codeTimes) * 1000) : null };
   };
 }
 
