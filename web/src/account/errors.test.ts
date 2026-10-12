@@ -17,6 +17,11 @@ describe('toAccountError', () => {
     expect(toAccountError(error).code).toBe(code);
   });
 
+  it('passes on Cloudflare’s reason when Supabase refuses a CAPTCHA token', () => {
+    const error = toAccountError(new AuthApiError('captcha protection: request disallowed (invalid-input-secret)', 400, 'captcha_failed'));
+    expect(error.message).toMatch(/\(Reason: invalid-input-secret\.\)$/);
+  });
+
   it('says the email couldn’t be sent, not that the network is down, when Supabase’s mailer refuses', () => {
     const error = toAccountError(new AuthRetryableFetchError('Error sending email change email', 500));
     expect(error.code).toBe('unknown');

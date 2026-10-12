@@ -34,11 +34,14 @@ export function toAccountError(error: unknown): AccountError {
       case 'email_address_invalid':
         return new AccountError('unknown', 'That doesn’t look like an email address.');
       // Turnstile's token was missing, used or refused (Supabase checks it).
-      case 'captcha_failed':
+      // Supabase names Cloudflare's reason in brackets (invalid-input-secret, timeout-or-duplicate, …): shown so a report can be traced.
+      case 'captcha_failed': {
+        const reason = /\(([^)]+)\)\s*$/.exec(error.message)?.[1];
         return new AccountError(
           'captcha',
-          'This browser passed the check, but sign-in didn’t accept it. Close this tab, open booktrap.app in a new one, and try again.',
+          `This browser passed the check, but sign-in didn’t accept it. Close this tab, open booktrap.app in a new one, and try again.${reason ? ` (Reason: ${reason}.)` : ''}`,
         );
+      }
       case 'email_address_not_authorized':
         return new AccountError('unknown', 'BookTrap can’t send email to that address yet. Try another one.');
     }
