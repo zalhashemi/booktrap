@@ -135,6 +135,8 @@ export default defineConfig(({ command, mode }) => {
     preview: { port: 4173, strictPort: true },
     test: {
       environment: 'jsdom',
+      // Tests never load Turnstile, whatever web/.env holds (captcha.test.ts sets its own key).
+      env: { VITE_TURNSTILE_SITE_KEY: '' },
     },
   };
 });

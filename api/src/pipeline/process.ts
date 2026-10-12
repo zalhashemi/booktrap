@@ -21,6 +21,23 @@ import { isSameBook, normalizedKey } from './normalize';
 import { resolveLink } from './resolve';
 import { verifyBook, type Verification } from './verify';
 
+/** Catalogue lookups per post at once: fast enough, and well inside Google Books' per-user rate. */
+const LOOKUPS_AT_ONCE = 4;
+
+/** `run` over `items` with at most `limit` running at once; results keep the items' order. */
+async function mapLimited<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await run(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export interface PipelineSettings {
   apifyToken?: string;
   anthropic?: Anthropic;
@@ -428,12 +445,16 @@ export async function processItem(itemId: string, deps: PipelineDeps): Promise<v
     const room = await bookRoom(item.userId, wanted.length, deps);
     let added = 0;
     let full = 0;
-    for (const book of wanted) {
-      const verification = await verify(book.title, book.author, {
+    // Catalogue lookups run a few at a time (one by one, 16 books took 49s on Render, cached post or not);
+    // books are still shelved in the post's order.
+    const verifications = await mapLimited(wanted, LOOKUPS_AT_ONCE, (book) =>
+      verify(book.title, book.author, {
         googleBooksApiKey: deps.settings.googleBooksApiKey,
         log: (message, detail) => log.warn({ detail }, message),
-      });
-      const outcome = await shelve(item.userId, item.jobId, book, verification, post, deps, room);
+      }),
+    );
+    for (const [index, book] of wanted.entries()) {
+      const outcome = await shelve(item.userId, item.jobId, book, verifications[index]!, post, deps, room);
       if (outcome === 'added') added++;
       if (outcome === 'full') full++;
     }

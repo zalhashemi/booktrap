@@ -110,6 +110,32 @@ describe('processItem', () => {
     expect(await store.spendSince(new Date(0))).toBeCloseTo(0.085);
   });
 
+  it('looks books up a few at a time, and still shelves them in the post’s order', async () => {
+    const store = createMemoryLibraryStore();
+    const titles = Array.from({ length: 9 }, (_, i) => `Book ${i}`);
+    let running = 0;
+    let most = 0;
+    const verifyBook = vi.fn(async (title: string, author: string | null) => {
+      most = Math.max(most, ++running);
+      // Earlier books answer last, so finishing order is the reverse of the post's order.
+      await new Promise((resolve) => setTimeout(resolve, 30 - Number(title.slice(5)) * 3));
+      running--;
+      return verified(title, author);
+    });
+    const { deps } = makeDeps(store, { x: titles.map((title) => book(title, 'Author')) }, { verifyBook });
+    const inserted: string[] = [];
+    const insertBook = store.insertBook.bind(store);
+    store.insertBook = async (userId, newBook) => {
+      inserted.push(newBook.title);
+      return insertBook(userId, newBook);
+    };
+    await runJob(store, deps, [URL_A]);
+
+    expect(verifyBook).toHaveBeenCalledTimes(9);
+    expect(most).toBe(4);
+    expect(inserted).toEqual(titles);
+  });
+
   it('adds low-confidence and unmatched books as read, without flagging them', async () => {
     const store = createMemoryLibraryStore();
     const { deps } = makeDeps(store, { x: [book('Secret Hist', 'Donna T', { confidence: 0.4 }), book('Zine', 'Sam Lee')] });
