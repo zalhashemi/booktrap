@@ -13,7 +13,7 @@ Phases from `BUILD_BRIEF_BookCatcher.md` §12.
 | 7 | Accounts (Supabase Auth) | Done (2026-10-11): built, code-reviewed and tested live, including the email-code flows. Real users need a verified email domain first (Phase 10) |
 | 8 | Limits, moderation, report and takedown | Done (2026-10-11): built, code-reviewed, 0010 applied, tested live |
 | 9 | Scale, storage and cost | Done (2026-10-11): load-tested at Render's limits, storage measured, fair queue and busy notice built, cost report written |
-| 10 | Legal and deploy (the old Phase 7) | Partly done: 7a hardening and 7b privacy built on device identity (parts to redo after Phase 7); 7c deploy is live on Render and Cloudflare Pages but is to be taken offline until Phases 7 to 9 are done |
+| 10 | Legal and deploy (the old Phase 7) | In progress (2026-10-12): code side built (compression, Turnstile, Render Starter, branded emails, policies). Waiting on the domain, Resend, Turnstile and dashboard setup (README, Deploy), then the deploy checks |
 
 The old "Phase 7: Hardening and deploy" became Phase 10 on 2026-10-10. Its finished work keeps the names 7a, 7b and 7c in the sections below. Section §12 of the brief follows the new order.
 
@@ -114,6 +114,11 @@ Every phase: Impeccable, Taste and UI/UX Pro Max for UI, with options shown firs
 
 ## Decisions log
 
+- 2026-10-12: **Phase 10 decisions (user):**
+  - Domain **booktrap.app** (it was free on 12 Oct; about $14 a year at Cloudflare Registrar, beside Pages). The API goes on `api.booktrap.app`, a DNS-only CNAME to Render.
+  - **Cloudflare Turnstile** CAPTCHA on guest starts, password logins and code requests, in Invisible mode.
+  - Sign-in emails in style **C, Bookmark** (https://claude.ai/artifact/GmH1mGoSuBUo2UjgozneQi): a dark band with a lime ribbon and a big centred code.
+  - Contact address **hello@booktrap.app**, forwarded by Cloudflare Email Routing. The emails come from the same address through Resend.
 - 2026-10-11: **Queue estimate is option C** (user), with their wording: one line above the job cards, "BookTrap is busy. Your links start in about 4 minutes." Nothing about closing the page. Shown only when the wait is 20 seconds or more (https://claude.ai/artifact/XJwFtbRfZpmcQgmyU8bGiM). **0011 is applied** (user). The user wants a visual cost report covering monthly spend and what testing has cost.
 - 2026-10-11: **Phase 9 set-up (user):**
   - The load test runs in Docker at Render-like limits, through **Colima**. There's no Homebrew, so Lima 2.2.1, Colima 0.10.3 and the Docker 29.9.0 CLI were installed from their official releases into `~/.local` (no sudo; Lima and Colima checked against their published checksums).
@@ -270,6 +275,22 @@ Tests: 164 API, 55 shared, 32 web. The retest live: a guest's reel merged into t
 Supabase setup: the project was already on ES256 keys; 0009 is applied; anonymous sign-ins and Email are on; Site URL and redirect `http://localhost:5180/**` are set. `{{ .Token }}` is needed in both the Magic Link and the Change Email Address templates (saving a guest's shelf sends the latter).
 
 Known limit to note: a guest can start a new anonymous session to get another 5 posts. The per-network cap (120) and Supabase's limit on anonymous sign-ins per IP still hold. A CAPTCHA on sign-ins is listed for Phase 10.
+
+## Phase 10: Legal and deploy (in progress, 2026-10-12)
+
+Built (code side):
+- **Response compression** (`@fastify/compress`): Brotli at quality 4, or gzip, for responses over 1 KB. A 200-book shelf comes back at under a fifth of its size (test). Covers pass through.
+- **render.yaml**: the Starter plan (always on), `autoDeployTrigger: checksPass` (a red CI never deploys), and only the secrets and settings that differ from the API's defaults (`NODE_ENV`, `JOB_CONCURRENCY=3`, the generated keys, the secrets, `ALLOWED_ORIGIN`). With Starter awake, the 6-hourly cleanup stays in the API: idle-guest deletion needs Supabase's admin API, so `pg_cron` would only cover part of it.
+- **Turnstile** (`web/src/account/captcha.ts`): a fresh single-use token for `signInAnonymously`, `signInWithPassword` and `signInWithOtp`. The script loads only when `VITE_TURNSTILE_SITE_KEY` is set. A blocked script or failed check gives a plain-words error (the new `captcha` code) on the opening screen and in the sign-in sheet; Supabase's `captcha_failed` maps to it too. The CSP allows `challenges.cloudflare.com` for script and frame.
+- **Sign-in emails** in `supabase/templates/` (option C, email-safe tables with inline styles): `magic-link.html` (log-in code) and `email-change.html` (save your shelf; only guests get it). The code is set in bold Nunito: Young Serif's old-style figures, and Georgia's in Gmail, made the digits bob. Checked at 390.
+- **Policies**: Resend (sees the email address and the code) and Cloudflare Turnstile (browser signals, no tracking cookies) added as processors, with the bot check under legitimate interest; dated 12 October 2026; contact `hello@booktrap.app`. Still drafts for the user's or a lawyer's review.
+- **Post cache slimming**: checked, nothing left to cut. The cache holds the post's link, kind, creator and thumbnail plus the books, model and verdict, which is what dedupe, sources and unblocking need (the caption went in 7a).
+- Cleanups from the 7c review: the Pages build command without `npm ci`, `theme-init.js` out of `includeAssets`, the plugin's redundant `apply: 'build'`. The opening screen no longer says the server naps.
+- README "Deploy" rewritten for the domain, Resend, Turnstile, Email Routing, Render's custom domain and Pages.
+
+The user's checklist (README, Deploy): buy the domain; Resend domain and DNS (SPF, DKIM, DMARC); Supabase SMTP, templates, URLs and CAPTCHA; Email Routing; the Turnstile widget; Render Blueprint and custom domain; Pages. **Order matters for CAPTCHA**: put the site key in `web/.env` and Pages before turning CAPTCHA on in Supabase, or every sign-in (local too, since it's the same project) fails. Also: notify Bahrain's Personal Data Protection Authority, and have a lawyer review the policies before any paid tier.
+
+Still to do after the deploy: measure the client IP chain on Render and set `TRUST_PROXY_HOPS`; test share links and media downloads from Render (2 uncached posts, about $0.10-0.20); a security review; a Playwright full-flow test against production at 390 and 1280 in both themes; the final Code Review (high).
 
 ## Phase 9: Scale, storage and cost (done, 2026-10-11)
 

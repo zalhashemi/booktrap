@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<title>Your BookTrap log-in code</title>
+<link href="https://fonts.googleapis.com/css2?family=Young+Serif&amp;family=Nunito:wght@400;800&amp;display=swap" rel="stylesheet">
+</head>
+<!-- BookTrap log-in code email, option C "Bookmark" (Phase 10). Paste into Supabase: Authentication, Emails, Magic Link. -->
+<body style="margin:0;padding:0;background:#f1f7f3;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your code to open your BookTrap shelf. It works for an hour.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f7f3;">
+<tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+    <!-- The band, with a lime bookmark ribbon -->
+    <tr><td style="background:#2b2733;border-radius:16px 16px 0 0;padding:0 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding:24px 0 26px;font-family:'Young Serif',Georgia,'Times New Roman',serif;font-size:24px;line-height:1;color:#ceeddb;">BookTrap</td>
+        <td width="22" valign="top" style="width:22px;">
+          <div style="width:22px;height:44px;background:#c6e04a;font-size:0;line-height:0;">&nbsp;</div>
+          <div style="width:0;height:0;border-left:11px solid #c6e04a;border-right:11px solid #c6e04a;border-bottom:9px solid transparent;font-size:0;line-height:0;"></div>
+        </td>
+      </tr></table>
+    </td></tr>
+    <!-- The sheet -->
+    <tr><td style="background:#fbfdfc;padding:28px 36px 8px;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#2b2733;">
+      <h1 style="margin:0 0 10px;font-family:'Young Serif',Georgia,'Times New Roman',serif;font-weight:400;font-size:25px;line-height:1.2;color:#2b2733;">Your code to log in</h1>
+      <p style="margin:0 0 18px;">Type this code into BookTrap to open your shelf, or tap the button.</p>
+    </td></tr>
+    <tr><td style="background:#fbfdfc;padding:0 36px;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;color:#2b2733;" align="center">
+      <p style="margin:0;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#3e7a60;">Your code</p>
+      <p style="margin:4px 0 20px;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:800;font-size:38px;line-height:1.2;letter-spacing:8px;font-variant-numeric:tabular-nums;color:#2b2733;">{{ .Token }}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="background:#2b2733;border-radius:999px;">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 26px;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:800;color:#ceeddb;text-decoration:none;border-radius:999px;">Log in to BookTrap</a>
+        </td>
+      </tr></table>
+      <p style="margin:16px 0 0;font-size:14px;line-height:1.5;color:#54506a;">The code and the button work for an hour.</p>
+    </td></tr>
+    <tr><td style="background:#fbfdfc;border-radius:0 0 16px 16px;padding:20px 36px 26px;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#54506a;" align="center">
+      <div style="border-top:1px solid #cfdcd5;padding-top:16px;">Didn’t ask for this? You can ignore it. Nobody can log in without the code.</div>
+    </td></tr>
+    <tr><td style="padding:16px 12px 0;font-family:Nunito,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#6a6680;" align="center">
+      BookTrap finds the books in TikTok and Instagram posts. <a href="{{ .SiteURL }}/privacy" style="color:#3e7a60;">Privacy</a>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

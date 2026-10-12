@@ -51,7 +51,7 @@ To bring the list into Goodreads, download the Goodreads CSV and upload it at go
 
 ## Environment
 
-All API configuration is in `api/.env.example`. The web app reads only `VITE_API_URL`, which is public. **Never put a key in `web/.env`**: anything prefixed `VITE_` ships to every visitor. CI fails the build if a known key pattern shows up in `web/dist`.
+All API configuration is in `api/.env.example`. The web app reads only public values (`web/.env.example`): the API URL, the Supabase URL and publishable key, and the Turnstile site key. **Never put a secret key in `web/.env`**: anything prefixed `VITE_` ships to every visitor. CI fails the build if a known key pattern shows up in `web/dist`.
 
 ## Privacy and removal requests
 
@@ -65,17 +65,23 @@ Readers delete their own account (or guest shelf) in Settings, Your data (`DELET
 
 ## Deploy
 
-Three services: **Supabase** (database, already set up), **Render** (the API, `render.yaml`) and **Cloudflare Pages** (the web app). Pushing to `main` on GitHub runs CI and redeploys both.
+Four services: **Supabase** (database and sign-in), **Render** (the API, `render.yaml`, Starter plan), **Cloudflare** (the domain `booktrap.app`, Pages for the web app, Turnstile, email forwarding) and **Resend** (sign-in emails). After setup, a push to `main` runs CI; Render deploys only once CI is green.
 
-1. **Supabase**: every file in `supabase/migrations/` must have been run in order (0001 to 0010).
-2. **Render** (API): New, Blueprint, pick this GitHub repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY`, and `ALLOWED_ORIGIN` (the Pages address from step 3; put a placeholder first and fix it after). `IP_HASH_KEY` and `ADMIN_TOKEN` (the key for `/admin`; copy it from the dashboard) are generated. `region` in `render.yaml` matches the Supabase project (Singapore); a Render service can't be moved later. When it's live, `https://<service>.onrender.com/health/ready` answers `{"ok":true}`.
-3. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this GitHub repo.
-   - Build command: `npm ci && npm run build -w @booktrap/web`
-   - Build output directory: `web/dist`
-   - Environment variable: `VITE_API_URL` = the Render address (e.g. `https://booktrap-api.onrender.com`). It's public; it ships in the bundle.
-   - Node comes from `.nvmrc`. Unknown paths fall back to `index.html` (no `404.html`), so `/shelf` and `/privacy` load directly.
-   - The build writes `web/dist/_headers`: a Content-Security-Policy naming the API origin, `nosniff`, `frame-ancestors 'none'` and long caching for hashed assets.
-4. Set Render's `ALLOWED_ORIGIN` to the Pages address (`https://<project>.pages.dev`) and let it redeploy.
-5. Check: open the Pages address, paste a link, and see it shelved.
-
-The free Render plan sleeps after about 15 minutes idle; the first request then takes 30 to 60 seconds, and the app says so. Unfinished jobs resume when it wakes.
+1. **Domain** (Cloudflare Registrar): `booktrap.app`. The site is `https://booktrap.app` and the API is `https://api.booktrap.app`.
+2. **Supabase**:
+   - Run every file in `supabase/migrations/` in order (0001 to 0011).
+   - Authentication, URL Configuration: Site URL `https://booktrap.app`; redirect URLs `https://booktrap.app/**` (keep `http://localhost:5180/**` for development).
+   - Authentication, Emails: paste `supabase/templates/magic-link.html` into **Magic Link** (subject "Your BookTrap log-in code") and `email-change.html` into **Change Email Address** (subject "Save your BookTrap shelf"). Both need `{{ .Token }}`: the app asks for the code.
+   - Authentication, Emails, SMTP: host `smtp.resend.com`, port 465, user `resend`, password a Resend API key (sending access, this domain only), sender `hello@booktrap.app`, name `BookTrap`.
+   - Authentication, Attack Protection: turn on CAPTCHA, provider Turnstile, with the Turnstile **secret** key.
+3. **Resend**: add the domain `booktrap.app` (region close to Singapore if offered) and add its DNS records (SPF, DKIM, and the return-path MX) in Cloudflare DNS. Add a DMARC record: `_dmarc` TXT `v=DMARC1; p=quarantine; rua=mailto:hello@booktrap.app`. Wait for "Verified".
+4. **Cloudflare**:
+   - Email Routing: forward `hello@booktrap.app` to the operator's inbox (the policies show this address).
+   - Turnstile: a widget for `booktrap.app` and `localhost`, mode **Invisible**. The site key goes to Pages (`VITE_TURNSTILE_SITE_KEY`) and `web/.env`; the secret goes to Supabase only.
+5. **Render** (API): New, Blueprint, pick this repo. Render reads `render.yaml` and asks for the secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_BOOKS_API_KEY` and `ALLOWED_ORIGIN` (`https://booktrap.app`). `IP_HASH_KEY` and `ADMIN_TOKEN` (the key for `/admin`) are generated. `region` matches the Supabase project (Singapore) and can't be changed later. Settings, Custom Domains: add `api.booktrap.app`, then in Cloudflare DNS a CNAME `api` to the `onrender.com` address, **DNS only** (grey cloud), so requests reach Render directly and the client IP chain stays Render's. When it's live, `https://api.booktrap.app/health/ready` answers `{"ok":true}`.
+6. **Cloudflare Pages** (web): Workers & Pages, Create, Pages, connect this repo.
+   - Build command: `npm run build -w @booktrap/web` (Pages installs dependencies itself). Build output directory: `web/dist`.
+   - Environment variables (all public; they ship in the bundle): `VITE_API_URL=https://api.booktrap.app`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_TURNSTILE_SITE_KEY`.
+   - Custom domains: add `booktrap.app`.
+   - Node comes from `.nvmrc`. Unknown paths fall back to `index.html`, so `/shelf` and `/privacy` load directly. The build writes `web/dist/_headers`: a Content-Security-Policy naming the API, Supabase and Turnstile, `nosniff`, `frame-ancestors 'none'` and long caching for hashed assets. Preview deployments have their own address, which `ALLOWED_ORIGIN` doesn't list, so they can't reach the API.
+7. Check: open `https://booktrap.app`, paste a link, see it shelved, then save the shelf with an email and log in on another browser with the emailed code.
