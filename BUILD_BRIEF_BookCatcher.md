@@ -242,7 +242,7 @@ Indexes on `(device_id, normalized_key)` and `(device_id, isbn13)` for dedup.
 7. **Accounts** (Supabase Auth, replacing device identity): guests as anonymous users (5 posts a day, deleted after 30 idle days), sign-up with email and password or an email code that keeps the guest's shelf (no passkeys for now), delete account. Device registration and backup codes are removed.
 8. **Limits, moderation, report and takedown**: upload and payload limits in `shared/`, content classification in extraction (block only explicit non-book content), "Report this post", an admin takedown route and page.
 9. **Scale, storage and cost**: measured storage per user, a load test of 100 users at once, queue tuning, and a cost report against the budgets.
-10. **Legal and deploy** (was Phase 7; 7a hardening and 7b privacy done): policies rewritten for accounts, a domain with Resend email, Render Starter, Cloudflare Pages, Supabase production settings, a proxy check, a security review, a Playwright full-flow test against production, and a final Code Review.
+10. **Legal and deploy** (was Phase 7; 7a hardening and 7b privacy done): policies rewritten for accounts, the domain booktrap.app with Resend email (branded templates) and a Turnstile CAPTCHA on sign-ins, Render Starter, Cloudflare Pages, Supabase production settings, a proxy check, a security review, a Playwright full-flow test against production, and a final Code Review.
 
 Full detail for Phases 7 to 10 is in `PROGRESS.md`, "Plan for Phases 7 to 10".
 
