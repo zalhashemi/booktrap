@@ -28,7 +28,6 @@ export function SettingsPage() {
       <ShelvesSection />
       <AppearanceSection />
       <DataSection />
-      <ServerSection />
     </div>
   );
 }
@@ -342,31 +341,6 @@ function AppearanceSection() {
           ))}
         </div>
       </fieldset>
-    </Section>
-  );
-}
-
-function ServerSection() {
-  const health = useQuery({ queryKey: ['health'], queryFn: ({ signal }) => api.health(signal), retry: false });
-
-  let status: ReactNode;
-  if (health.isPending) status = <span className="text-text-muted">Checking</span>;
-  else if (health.isError) status = <span className="text-note-ink">Unreachable right now</span>;
-  else
-    status = (
-      <span className="text-success-ink">
-        Connected
-        {health.data.storage === 'memory' && (
-          <span className="text-text-muted"> (development storage, wiped on restart)</span>
-        )}
-      </span>
-    );
-
-  return (
-    <Section title="Server">
-      <dl className="mt-4">
-        <Row label="Status">{status}</Row>
-      </dl>
     </Section>
   );
 }

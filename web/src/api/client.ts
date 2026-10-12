@@ -8,7 +8,6 @@ import {
   TagSchema,
   type CreateReportRequest,
   type UpdateBookRequest,
-  HealthResponseSchema,
   JobListResponseSchema,
   JobSchema,
   MeResponseSchema,
@@ -49,8 +48,6 @@ interface RequestOptions<T> {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   schema: z.ZodType<T>;
-  /** False for the few routes anyone may call (health). */
-  auth?: boolean;
   signal?: AbortSignal;
 }
 
@@ -65,14 +62,14 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
    */
   async function send<R>(
     path: string,
-    options: { method?: RequestOptions<unknown>['method']; body?: unknown; auth?: boolean; signal?: AbortSignal; timeoutMs?: number },
+    options: { method?: RequestOptions<unknown>['method']; body?: unknown; signal?: AbortSignal; timeoutMs?: number },
     read: (response: Response) => Promise<R>,
   ): Promise<R> {
     const { signal, dispose } = withTimeout(options.signal, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const exchange = async (refresh: boolean) => {
       const headers: Record<string, string> = {};
       if (options.body !== undefined) headers['content-type'] = 'application/json';
-      const token = options.auth === false ? null : await tokenSource({ refresh });
+      const token = await tokenSource({ refresh });
       if (token) headers.authorization = `Bearer ${token}`;
       const response = await fetchImpl(`${root}${path}`, {
         method: options.method ?? 'GET',
@@ -152,7 +149,6 @@ export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = (...a
       tokenSource = source;
     },
     bookCover,
-    health: (signal?: AbortSignal) => request('/health', { schema: HealthResponseSchema, auth: false, signal }),
     me: () => request('/v1/me', { schema: MeResponseSchema }),
     /** Deletes the account (or guest shelf) and everything on it, for good. */
     deleteAccount: () => request('/v1/account', { method: 'DELETE', schema: z.unknown() }),

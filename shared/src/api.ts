@@ -1,13 +1,5 @@
 import { z } from 'zod';
 
-export const HealthResponseSchema = z.object({
-  ok: z.boolean(),
-  service: z.literal('booktrap-api'),
-  version: z.string(),
-  storage: z.enum(['supabase', 'memory']),
-});
-export type HealthResponse = z.infer<typeof HealthResponseSchema>;
-
 export const MeResponseSchema = z.object({
   userId: z.string(),
   /** A guest: an anonymous Supabase user who hasn't added an email yet. */

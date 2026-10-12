@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ERROR_CODES, type HealthResponse } from '@booktrap/shared';
+import { ERROR_CODES } from '@booktrap/shared';
 import { errorBody } from '../errors';
 import type { UserDirectory } from '../users/types';
 
@@ -7,7 +7,7 @@ export const API_VERSION = '0.1.0';
 
 export function healthRoutes(app: FastifyInstance, users: UserDirectory) {
   // Liveness: the process is up. Never touches the database.
-  app.get('/health', { config: { rateLimit: false } }, async (): Promise<HealthResponse> => ({
+  app.get('/health', { config: { rateLimit: false } }, async () => ({
     ok: true,
     service: 'booktrap-api',
     version: API_VERSION,
