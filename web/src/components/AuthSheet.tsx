@@ -5,6 +5,7 @@ import { AccountError, useAccount, type LoginResult } from '../account/account-c
 import { useBooks } from '../library/hooks';
 import { AuthSheetContext, type AuthSheetMode } from './auth-sheet-context';
 import { Button } from './Button';
+import { CaptchaSlot } from './CaptchaSlot';
 import { Sheet } from './Sheet';
 import { useToast } from './toast-context';
 
@@ -208,6 +209,7 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
                 Use a password
               </Button>
             </div>
+            <CaptchaSlot className="-mt-5 data-[captcha-shown]:mt-0" />
             <Problem error={error} onLogIn={mode === 'save' ? () => switchMode('login') : undefined} />
             {mode === 'save' && <Terms onNavigate={onClose} />}
             <p className="text-[0.88rem] text-text-muted">
@@ -246,6 +248,7 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
             <Button type="submit" disabled={busy} className="w-full">
               {busy ? (mode === 'save' ? 'Sending…' : 'Logging in…') : mode === 'save' ? 'Continue' : 'Log in'}
             </Button>
+            <CaptchaSlot className="-mt-5 data-[captcha-shown]:mt-0" />
             {mode === 'save' && <p className="text-[0.88rem] text-text-muted">Next, we’ll email you a code to confirm it’s your address.</p>}
             <Problem error={error} onLogIn={mode === 'save' ? () => switchMode('login') : undefined} />
             {mode === 'save' && <Terms onNavigate={onClose} />}
@@ -261,6 +264,7 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
             </Button>
             <Problem error={error} onLogIn={step.purpose === 'save' ? () => switchMode('login') : undefined} />
             <Resend sentAt={step.sentAt} disabled={busy} onResend={() => void sendCode(step.purpose, step.password)} />
+            <CaptchaSlot className="-mt-5 data-[captcha-shown]:mt-0" />
           </form>
         )}
 

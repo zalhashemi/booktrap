@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AccountError, useAccount } from '../account/account-context';
 import { Button } from './Button';
+import { CaptchaSlot } from './CaptchaSlot';
 
 /** After this long, say it's taking longer than usual. */
 const SLOW_AFTER_MS = 4000;
@@ -32,13 +33,16 @@ function Opening() {
   }, []);
 
   return (
-    <section aria-live="polite" aria-busy="true" className="max-w-[34rem] pt-10">
+    <section aria-live="polite" aria-busy="true" className="group max-w-[34rem] pt-10">
       <p className="font-display text-[1.6rem] leading-tight">Opening your shelf</p>
       <div className="mt-5 h-[2px] w-full overflow-hidden rounded-full bg-rule" aria-hidden="true">
         <div className="h-full w-1/3 animate-[shelf-sweep_1.4s_ease-in-out_infinite] bg-accent" />
       </div>
+      {/* Cloudflare wants a click: say so in place of "taking longer", with the checkbox right below. */}
+      <p className="mt-5 hidden text-text-muted group-has-[[data-captcha-shown]]:block">One quick check first. Tick the box to open your shelf.</p>
+      <CaptchaSlot className="data-[captcha-shown]:mt-4" />
       {slow && (
-        <p className="mt-5 text-text-muted">
+        <p className="mt-5 text-text-muted group-has-[[data-captcha-shown]]:hidden">
           This is taking longer than usual. Hang on a moment.
         </p>
       )}

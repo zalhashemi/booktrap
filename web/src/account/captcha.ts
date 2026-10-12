@@ -67,12 +67,18 @@ function loadTurnstile(): Promise<Turnstile> {
 export async function captchaToken(): Promise<string | undefined> {
   if (!SITE_KEY) return undefined;
   const turnstile = await loadTurnstile();
-  // A widget per token: each is used once. Should Turnstile ever need a click, it shows at the bottom,
-  // above the phone layout's tab bar.
+  // A widget per token: each is used once. Should Turnstile want a click, the checkbox shows in the
+  // newest <CaptchaSlot> (under the opening screen's heading, or in the login sheet, which is a modal
+  // dialog the page behind can't be clicked through); without one, at the bottom above the tab bar.
+  const slots = document.querySelectorAll<HTMLElement>('[data-captcha-slot]');
+  const slot = slots[slots.length - 1];
   const container = document.createElement('div');
-  container.style.cssText =
-    'position:fixed;left:50%;bottom:calc(5.5rem + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60';
-  document.body.append(container);
+  if (slot) slot.append(container);
+  else {
+    container.style.cssText =
+      'position:fixed;left:50%;bottom:calc(5.5rem + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;width:min(30rem,calc(100vw - 2rem))';
+    document.body.append(container);
+  }
   let widgetId: string | undefined;
   try {
     return await new Promise<string>((resolve, reject) => {
@@ -86,6 +92,8 @@ export async function captchaToken(): Promise<string | undefined> {
         widgetId = turnstile.render(container, {
           sitekey: SITE_KEY,
           appearance: 'interaction-only',
+          // As wide as the column it sits in (Turnstile's minimum is 300px).
+          size: 'flexible',
           callback: (token: string) => {
             window.clearTimeout(timer);
             resolve(token);
@@ -99,7 +107,10 @@ export async function captchaToken(): Promise<string | undefined> {
             return true;
           },
           // A checkbox is up and waiting on the person: Turnstile's own timeout-callback takes over.
-          'before-interactive-callback': () => window.clearTimeout(timer),
+          'before-interactive-callback': () => {
+            window.clearTimeout(timer);
+            slot?.setAttribute('data-captcha-shown', '');
+          },
           'expired-callback': fail,
           'timeout-callback': fail,
         });
@@ -111,5 +122,6 @@ export async function captchaToken(): Promise<string | undefined> {
   } finally {
     if (widgetId) turnstile.remove(widgetId);
     container.remove();
+    slot?.removeAttribute('data-captcha-shown');
   }
 }

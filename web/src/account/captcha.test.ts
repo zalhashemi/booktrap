@@ -35,6 +35,29 @@ describe('captchaToken', () => {
     expect(document.body.children).toHaveLength(0);
   });
 
+  it('puts the checkbox in the page’s slot, marked while it shows', async () => {
+    const slot = document.createElement('div');
+    slot.setAttribute('data-captcha-slot', '');
+    document.body.append(slot);
+    let shownDuringCheck = false;
+    window.turnstile = {
+      render: (el, options) => {
+        expect(el.parentElement).toBe(slot);
+        (options['before-interactive-callback'] as () => void)();
+        shownDuringCheck = slot.hasAttribute('data-captcha-shown');
+        queueMicrotask(() => (options.callback as (token: string) => void)('token'));
+        return 'widget';
+      },
+      remove: vi.fn(),
+    };
+    const captchaToken = await load('site-key');
+    await expect(captchaToken()).resolves.toBe('token');
+    expect(shownDuringCheck).toBe(true);
+    expect(slot.hasAttribute('data-captcha-shown')).toBe(false);
+    expect(slot.children).toHaveLength(0);
+    slot.remove();
+  });
+
   it('waits out a failed try while Turnstile retries', async () => {
     const remove = vi.fn();
     const render = vi.fn((_el: HTMLElement, options: Record<string, unknown>) => {
