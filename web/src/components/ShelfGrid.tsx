@@ -38,7 +38,7 @@ export function ShelfGrid({ books, onOpen, selecting, selected, onToggle }: Prop
               className="group block w-full rounded-[10px] pt-2 text-left"
             >
               <span className="relative block transition-transform duration-300 ease-snappy group-hover:-translate-y-1.5 group-focus-visible:-translate-y-1.5 group-active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none">
-                <CoverPlate book={book} flags={flags} className={`w-full transition-opacity duration-200 ${selecting && !isSelected ? 'opacity-55' : ''}`} />
+                <CoverPlate book={book} flags={flags} sizes="(min-width: 640px) 180px, 120px" className={`w-full transition-opacity duration-200 ${selecting && !isSelected ? 'opacity-55' : ''}`} />
                 {selecting && (
                   <span className="absolute top-2 left-2">
                     <SelectMark selected={isSelected} />

@@ -3,7 +3,6 @@ import {
   BookIdsRequestSchema,
   ERROR_CODES,
   LIMITS,
-  MEDIA_LIMITS,
   MergeBooksRequestSchema,
   TagNameSchema,
   bookLimitFor,
@@ -13,9 +12,9 @@ import {
   type Tag,
 } from '@booktrap/shared';
 import { z } from 'zod';
+import { fetchCover } from '../covers';
 import { HttpError } from '../errors';
 import { isSameBook, normalizedKey } from '../pipeline/normalize';
-import { COVER_HOSTS, safeFetch } from '../pipeline/safe-fetch';
 import { verifyBook } from '../pipeline/verify';
 import { TagNameTakenError, type BookPatch, type LibraryStore } from '../store/types';
 
@@ -31,24 +30,6 @@ export interface LibraryRouteDeps {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Ids reach uuid columns: anything else is simply not found (never a database error). */
 const isUuid = (value: string) => UUID.test(value);
-
-const COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-
-/** The body, or null once it passes `maxBytes` (content-length can be missing or wrong). */
-async function readCapped(response: Response, maxBytes: number): Promise<Buffer | null> {
-  if (Number(response.headers.get('content-length') ?? 0) > maxBytes) {
-    await response.body?.cancel();
-    return null;
-  }
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of (response.body ?? []) as AsyncIterable<Uint8Array>) {
-    total += chunk.byteLength;
-    if (total > maxBytes) return null;
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
 
 function firstIssue(error: z.ZodError): string {
   return error.issues[0]?.message ?? 'That change isn’t valid.';
@@ -130,21 +111,14 @@ export function libraryRoutes(app: FastifyInstance, deps: LibraryRouteDeps) {
       const missing = () => new HttpError(404, ERROR_CODES.notFound, 'No cover for this book.');
       if (!book.coverUrl) throw missing();
 
-      let image: { bytes: Buffer; type: string };
+      let image: { bytes: Buffer; type: string } | null;
       try {
-        const { response } = await safeFetch(book.coverUrl, { hosts: COVER_HOSTS, timeoutMs: 10_000, fetchImpl: deps.fetchImpl });
-        const type = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
-        if (!response.ok || !COVER_TYPES.has(type)) {
-          await response.body?.cancel();
-          throw missing();
-        }
-        const bytes = await readCapped(response, MEDIA_LIMITS.maxCoverBytes);
-        if (!bytes) throw missing();
-        image = { bytes, type };
+        image = await fetchCover(book.coverUrl, deps.fetchImpl);
       } catch (error) {
-        if (!(error instanceof HttpError)) request.log.warn({ err: error, bookId: book.id }, 'cover fetch failed');
+        request.log.warn({ err: error, bookId: book.id }, 'cover fetch failed');
         throw missing();
       }
+      if (!image) throw missing();
       reply.header('content-type', image.type).header('cache-control', 'private, max-age=86400');
       return reply.send(image.bytes);
     },

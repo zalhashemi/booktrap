@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BookOpen, Check, Sparkle, type Icon } from '@phosphor-icons/react';
 import type { Book } from '@booktrap/shared';
 import { sourceSummary } from '../library/links';
-import { bindingFor, claimHighlightSweep, clothFor, coverTabs, type CoverTab } from '../library/covers';
+import { bindingFor, claimHighlightSweep, clothFor, coverSrc, coverSrcSet, coverTabs, type CoverTab } from '../library/covers';
 import { STATUS_LABELS } from '../library/filters';
 
 /** Each cover tab carries a glyph as well as its colour, so state never rests on colour alone. */
@@ -15,9 +15,12 @@ export function CoverPlate({
   tabs = true,
   flags: givenFlags,
   dropTab = null,
+  sizes = '80px',
 }: {
   book: Book;
   className?: string;
+  /** How wide the cover shows (the `<img sizes>`), so the browser fetches no bigger a file than it needs. */
+  sizes?: string;
   tabs?: boolean;
   /** Precomputed tabs, when the caller already has them. */
   flags?: CoverTab[];
@@ -25,6 +28,8 @@ export function CoverPlate({
   dropTab?: CoverTab['key'] | null;
 }) {
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  // WebP through the API first; should that fail, straight from the catalogue; then the bookcloth plate.
+  const [direct, setDirect] = useState(false);
   const flags = tabs ? (givenFlags ?? coverTabs(book)) : [];
   return (
     <div className={`relative shrink-0 ${className}`}>
@@ -48,7 +53,10 @@ export function CoverPlate({
         <LetteredPlate book={book} />
         {book.coverUrl && state !== 'failed' && (
           <img
-            src={book.coverUrl}
+            key={direct ? 'direct' : 'webp'}
+            src={direct ? book.coverUrl : coverSrc(book.coverUrl, 160)}
+            srcSet={direct ? undefined : coverSrcSet(book.coverUrl)}
+            sizes={direct ? undefined : sizes}
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"
@@ -56,7 +64,7 @@ export function CoverPlate({
               // Some catalogues answer with a 1x1 "no cover" pixel instead of a 404.
               setState(event.currentTarget.naturalWidth > 10 ? 'loaded' : 'failed');
             }}
-            onError={() => setState('failed')}
+            onError={() => (direct ? setState('failed') : setDirect(true))}
             // Shown the moment it has loaded: no fade, so a paused animation clock can never hide a cover.
             className={`absolute inset-0 h-full w-full object-cover ${state === 'loaded' ? 'visible' : 'invisible'}`}
           />

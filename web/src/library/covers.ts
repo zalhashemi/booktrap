@@ -1,4 +1,18 @@
 import type { Book } from '@booktrap/shared';
+import { API_URL } from '../api/client';
+
+/** The widths the API serves covers at (api/src/covers.ts COVER_WIDTHS). */
+const COVER_WIDTHS = [160, 320];
+
+/** A catalogue cover through the API, as WebP at `width` px: several times smaller than the catalogue's JPEG. */
+export function coverSrc(url: string, width: number): string {
+  return `${API_URL}/v1/covers?u=${encodeURIComponent(url)}&w=${width}`;
+}
+
+/** The `srcSet` for a cover: the browser picks the width its size and screen need. */
+export function coverSrcSet(url: string): string {
+  return COVER_WIDTHS.map((width) => `${coverSrc(url, width)} ${width}w`).join(', ');
+}
 
 /** Bookcloth colours for covers we don't have, picked per title so a shelf of placeholders still varies. */
 const CLOTHS = ['bg-cloth-1', 'bg-cloth-2', 'bg-cloth-3', 'bg-cloth-4'];

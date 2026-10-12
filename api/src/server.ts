@@ -9,6 +9,7 @@ import { requireUser, type SessionVerifier } from './auth/session-auth';
 import type { Config } from './config';
 import { HttpError, errorBody } from './errors';
 import type { JobQueue } from './pipeline/queue';
+import { createCoverCache } from './covers';
 import { createExportJobs } from './export-jobs';
 import type { verifyBook } from './pipeline/verify';
 import { jobRoutes } from './routes/jobs';
@@ -16,6 +17,7 @@ import { libraryRoutes } from './routes/library';
 import { adminRoutes, reportRoutes } from './routes/reports';
 import type { LibraryStore } from './store/types';
 import { accountRoutes } from './routes/account';
+import { coverRoutes } from './routes/covers';
 import { healthRoutes } from './routes/health';
 import type { UserDirectory } from './users/types';
 
@@ -115,6 +117,7 @@ export async function buildApp({ config, verifySession, users, store, queue, ver
     },
   });
   libraryRoutes(app, { auth, store, googleBooksApiKey: config.GOOGLE_BOOKS_API_KEY, verify, fetchImpl });
+  coverRoutes(app, { covers: createCoverCache({ fetchImpl }) });
   reportRoutes(app, { auth, store });
   if (config.ADMIN_TOKEN) adminRoutes(app, { store, adminToken: config.ADMIN_TOKEN, monthlyBudgetUsd: config.MONTHLY_BUDGET_USD });
 

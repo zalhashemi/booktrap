@@ -65,6 +65,14 @@ describe('API', () => {
   });
   afterEach(() => app.close());
 
+  it('serves covers only from the cover hosts, at the fixed widths', async () => {
+    for (const url of ['/v1/covers', '/v1/covers?u=https%3A%2F%2Fcovers.openlibrary.org%2Fb%2Fid%2F1-L.jpg&w=999']) {
+      expect((await app.inject({ method: 'GET', url })).statusCode).toBe(400);
+    }
+    const res = await app.inject({ method: 'GET', url: '/v1/covers?u=https%3A%2F%2Fevil.example%2Fa.jpg&w=160' });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('reports health without auth', async () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);

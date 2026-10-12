@@ -63,6 +63,29 @@ export async function normalizeImage(bytes: Buffer, longEdge: number = MEDIA_LIM
   }
 }
 
+/** Re-encodes a book cover as WebP `width` px wide (never wider than the original), for the shelf. */
+export async function toWebp(bytes: Buffer, width: number): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), 'booktrap-cover-'));
+  try {
+    const input = join(dir, 'in');
+    const output = join(dir, 'out.webp');
+    await writeFile(input, bytes);
+    await runFfmpeg([
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-i', input,
+      '-vf', `scale='min(${width},iw)':-2`,
+      '-frames:v', '1',
+      '-c:v', 'libwebp',
+      '-quality', '78',
+      output,
+    ]);
+    return await readFile(output);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export async function downloadSlides(urls: string[], deps: MediaDeps): Promise<ImageInput[]> {
   const slides = urls.slice(0, MEDIA_LIMITS.maxSlides);
   const images = await Promise.all(
