@@ -140,6 +140,8 @@ export default defineConfig(({ command, mode }) => {
           // the hidden admin page is for the operator alone.
           globIgnores: ['**/renderPdf-*.js', '**/AdminPage-*.js'],
           navigateFallback: 'index.html',
+          // Files that must reach the visitor as themselves, not as the app's not-found page (AdSense reads ads.txt).
+          navigateFallbackDenylist: [/^\/ads\.txt$/],
           // The API lives on another origin and is never cached by the service worker.
           runtimeCaching: [],
         },
