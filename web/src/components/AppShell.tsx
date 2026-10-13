@@ -2,6 +2,7 @@ import { Books, Coffee, GearSix, Plus, type Icon } from '@phosphor-icons/react';
 import { Link, NavLink, Outlet, useMatches } from 'react-router';
 import { SUPPORT_URL, contactHref } from '../legal';
 import { useAccount } from '../account/account-context';
+import { useReportIssue } from '../report/report-issue-context';
 import { AuthSheetProvider } from './AuthSheet';
 import { ConnectionGate } from './ConnectionGate';
 import { LibraryBackdrop, ShelfFooter } from './LibraryBackdrop';
@@ -108,6 +109,7 @@ export function AppShell() {
 }
 
 function SiteFooter() {
+  const report = useReportIssue();
   const link = 'inline-flex min-h-11 items-center px-2 underline-offset-[0.2em] hover:text-text hover:underline';
   return (
     <footer className="mt-16 border-t-[1.5px] border-rule pt-4 text-sm text-text-muted md:mt-20">
@@ -127,6 +129,11 @@ function SiteFooter() {
             <a href={contactHref()} className={link}>
               Contact
             </a>
+          </li>
+          <li>
+            <button type="button" onClick={() => report()} className={link}>
+              Report an issue
+            </button>
           </li>
         </ul>
       </nav>

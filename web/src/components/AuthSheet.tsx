@@ -8,6 +8,7 @@ import { Button } from './Button';
 import { CaptchaSlot } from './CaptchaSlot';
 import { Sheet } from './Sheet';
 import { useToast } from './toast-context';
+import { useErrorToast } from '../report/report-issue-context';
 
 const MIN_PASSWORD = 8;
 const RESEND_AFTER_S = 60;
@@ -41,6 +42,7 @@ function plural(count: number) {
 function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClose: () => void }) {
   const account = useAccount();
   const toast = useToast();
+  const errorToast = useErrorToast();
   const books = useBooks();
   const [mode, setMode] = useState<AuthSheetMode>(initialMode);
   const [step, setStep] = useState<Step>({ name: 'email' });
@@ -130,7 +132,7 @@ function AuthFlow({ initialMode, onClose }: { initialMode: AuthSheetMode; onClos
         const result = await account.confirmLoginCode(email.trim(), token);
         if (step.purpose === 'reset') {
           // Signed in by the code: the books (if any) already joined, now the new password.
-          if (result.mergeFailed) toast('The books from this browser couldn’t be added to your shelf.');
+          if (result.mergeFailed) errorToast('The books from this browser couldn’t be added to your shelf.');
           setPassword('');
           setStep({ name: 'new-password' });
         } else loggedIn(result);

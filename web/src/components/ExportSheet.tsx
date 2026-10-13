@@ -6,6 +6,7 @@ import { useAccount } from '../account/account-context';
 import { downloadFile, exportFileName } from '../library/export';
 import { Sheet } from './Sheet';
 import { useToast } from './toast-context';
+import { useErrorToast } from '../report/report-issue-context';
 
 export type ExportScope = 'all' | 'view' | 'selected';
 
@@ -54,6 +55,7 @@ export function ExportSheet({ open, onClose, ...rest }: Props) {
 function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Omit<Props, 'open'>) {
   const { user } = useAccount();
   const toast = useToast();
+  const errorToast = useErrorToast();
   const [scope, setScope] = useState<ExportScope>(initialScope);
   const [textPrefs, setTextPrefs] = useState(loadTextPrefs);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -106,7 +108,7 @@ function ExportBody({ onClose, all, view, filtered, selected, initialScope }: Om
       downloadFile(exportFileName('reading-list', 'pdf'), blob);
       markDone('pdf');
     } catch {
-      if (!signal.aborted) toast('Couldn’t make the PDF. Check your connection and try again.');
+      if (!signal.aborted) errorToast('Couldn’t make the PDF. Check your connection and try again.');
     } finally {
       if (!signal.aborted) setPdfBusy(false);
     }

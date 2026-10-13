@@ -2,6 +2,7 @@ import { ArrowClockwise, CaretDown, CheckCircle, HourglassMedium, Images, Info, 
 import { Link } from 'react-router';
 import { BLOCKED_MESSAGES, PLATFORM_LABELS, parseSourceUrl, type Job, type JobItem, type SourceLink } from '@booktrap/shared';
 import { useJobs, useRetryItem } from '../library/hooks';
+import { useReportIssue } from '../report/report-issue-context';
 import { describeKind } from '../library/links';
 import { aboutWait } from '../library/wait';
 import { PlatformIcon } from './PlatformIcon';
@@ -33,6 +34,7 @@ function describeItem(item: JobItem) {
 
 function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?: JobItem[] }) {
   const retry = useRetryItem();
+  const report = useReportIssue();
   const isCollection = item.kind === 'collection';
   const stage = isCollection && item.status === 'fetching' ? { label: 'Listing the collection’s videos', step: 1 } : STAGES[item.status];
   const { platform, who, what, Icon } = describeItem(item);
@@ -99,10 +101,19 @@ function ItemCard({ job, item, videos = [] }: { job: Job; item: JobItem; videos?
 
       {item.status === 'failed' && (
         <div className="mt-2 flex items-start justify-between gap-3">
-          <p className="flex items-start gap-1.5 text-sm text-note-ink">
-            <WarningCircle size={18} weight="fill" className="mt-px shrink-0" aria-hidden="true" />
-            {item.error ?? 'Something went wrong.'}
-          </p>
+          <div>
+            <p className="flex items-start gap-1.5 text-sm text-note-ink">
+              <WarningCircle size={18} weight="fill" className="mt-px shrink-0" aria-hidden="true" />
+              {item.error ?? 'Something went wrong.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => report({ error: item.error ?? 'A link failed with no reason given.', link: item.inputUrl })}
+              className="-my-2 ml-6 inline-flex min-h-11 items-center text-sm text-text-muted underline underline-offset-4 hover:text-text"
+            >
+              Report this problem
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => retry.mutate({ jobId: job.id, itemId: item.id })}

@@ -11,6 +11,7 @@ import { SelectionBar } from '../components/SelectionBar';
 import { SHELF_GRID, ShelfGrid } from '../components/ShelfGrid';
 import { ShelfToolbar, type ViewMode } from '../components/ShelfToolbar';
 import { useToast } from '../components/toast-context';
+import { useErrorToast } from '../report/report-issue-context';
 import { DEFAULT_QUERY, applyQuery, flagCounts, isFiltered, type ShelfQuery, type SortKey } from '../library/filters';
 import { useBooks, useDeleteBooks, useMarkAllSeen, useMergeBooks, useRestoreBooks, useTags } from '../library/hooks';
 
@@ -53,6 +54,7 @@ export function ShelfPage() {
   const books = useBooks();
   const tags = useTags();
   const toast = useToast();
+  const errorToast = useErrorToast();
   const deleteBooks = useDeleteBooks();
   const restoreBooks = useRestoreBooks();
   const markAllSeen = useMarkAllSeen();
@@ -111,7 +113,7 @@ export function ShelfPage() {
         toast(ids.length === 1 ? 'Book deleted' : `${ids.length} books deleted`, {
           action: { label: 'Undo', run: () => restoreBooks.mutate(ids) },
         }),
-      () => toast('Couldn’t delete. Check your connection and try again.'),
+      () => errorToast('Couldn’t delete. Check your connection and try again.'),
     );
   };
 
@@ -266,7 +268,7 @@ export function ShelfPage() {
                   toast(`Merged into “${keep.title}”`);
                   stopSelecting();
                 },
-                onError: () => toast('Couldn’t merge. Try again.'),
+                onError: () => errorToast('Couldn’t merge. Try again.'),
               },
             )
           }

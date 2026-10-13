@@ -9,6 +9,7 @@ import { Button } from '../components/Button';
 import { DeleteAccountSheet } from '../components/DeleteAccountSheet';
 import { Section, ShelvesSection } from '../components/SettingsSections';
 import { useToast } from '../components/toast-context';
+import { useErrorToast, useReportIssue } from '../report/report-issue-context';
 import { downloadFile, exportFileName } from '../library/export';
 import { useBooks, useDataExport, useRequestDataExport } from '../library/hooks';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
@@ -47,6 +48,7 @@ function AccountSection() {
   const { signOut } = useAccount();
   const { openAuth } = useAuthSheet();
   const toast = useToast();
+  const errorToast = useErrorToast();
   const books = useBooks();
   const [changing, setChanging] = useState(false);
   const usage = useQuery({ queryKey: ['usage', user.id], queryFn: ({ signal }) => api.usage(signal) });
@@ -96,7 +98,7 @@ function AccountSection() {
       await signOut();
       toast('Signed out. This browser now has a new, empty guest shelf.');
     } catch (failure) {
-      toast(failure instanceof AccountError ? failure.message : 'Couldn’t sign out just now. Try again.');
+      errorToast(failure instanceof AccountError ? failure.message : 'Couldn’t sign out just now. Try again.');
     }
   };
 
@@ -210,6 +212,7 @@ function DataSection() {
   const { deleteAccount } = useAccount();
   const books = useBooks();
   const toast = useToast();
+  const report = useReportIssue();
   const [confirming, setConfirming] = useState(false);
   const [deleteSheet, setDeleteSheet] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -255,6 +258,10 @@ function DataSection() {
         <a href={contactHref()} className="underline">
           {CONTACT_EMAIL}
         </a>
+        . Something not working?{' '}
+        <button type="button" onClick={() => report()} className="font-bold text-accent-ink underline">
+          Report an issue
+        </button>
         .
       </p>
 
@@ -324,6 +331,7 @@ function DataSection() {
  */
 function DownloadDataButton() {
   const toast = useToast();
+  const errorToast = useErrorToast();
   const status = useDataExport();
   const requestExport = useRequestDataExport();
   const [saving, setSaving] = useState(false);
@@ -332,7 +340,7 @@ function DownloadDataButton() {
 
   const ask = () =>
     requestExport.mutate(undefined, {
-      onError: (error) => toast(error instanceof NetworkError ? 'Couldn’t reach BookTrap. Try again in a moment.' : 'Couldn’t start your download. Try again in a moment.'),
+      onError: (error) => errorToast(error instanceof NetworkError ? 'Couldn’t reach BookTrap. Try again in a moment.' : 'Couldn’t start your download. Try again in a moment.'),
     });
 
   const save = async () => {
