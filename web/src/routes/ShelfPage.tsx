@@ -5,6 +5,7 @@ import { useUser } from '../account/account-context';
 import { useAuthSheet } from '../components/auth-sheet-context';
 import { BookRow } from '../components/BookRow';
 import { BookSheet } from '../components/BookSheet';
+import { AdSlot } from '../components/AdSlot';
 import { Button, ButtonLink } from '../components/Button';
 import { ExportSheet, type ExportScope } from '../components/ExportSheet';
 import { SelectionBar } from '../components/SelectionBar';
@@ -167,6 +168,8 @@ export function ShelfPage() {
         )}
       </div>
 
+      <AdSlot position="top" className="mt-6" />
+
       {books.isPending ? (
         <p className="mt-10 text-text-muted">Taking books off the shelf…</p>
       ) : books.isError ? (
@@ -230,6 +233,8 @@ export function ShelfPage() {
           )}
         </>
       )}
+
+      <AdSlot position="bottom" className="mt-12" />
 
       <BookSheet
         book={openBook}

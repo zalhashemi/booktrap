@@ -13,6 +13,7 @@ import {
   type SourceLink,
 } from '@booktrap/shared';
 import { ApiRequestError, NetworkError } from '../api/client';
+import { AdSlot } from '../components/AdSlot';
 import { Button } from '../components/Button';
 import { JobPanel } from '../components/JobPanel';
 import { ReadingRoomStrip } from '../components/LibraryBackdrop';
@@ -238,11 +239,15 @@ export function AddPage() {
             </div>
           )}
         </form>
+        {/* Well clear of "Catch books", so a tap meant for the button never lands on the ad. */}
+        <AdSlot position="top" className="mt-10" />
       </div>
 
       <div className="lg:pt-2">
         <JobPanel />
       </div>
+
+      <AdSlot position="bottom" className="lg:col-span-2" />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { CloudCheck, CloudSlash, DownloadSimple, Eye, EyeSlash, Key, SignOut, Tr
 import { AccountError, useAccount, useUser } from '../account/account-context';
 import { api, NetworkError } from '../api/client';
 import { useAuthSheet } from '../components/auth-sheet-context';
+import { AdSlot } from '../components/AdSlot';
 import { Button } from '../components/Button';
 import { DeleteAccountSheet } from '../components/DeleteAccountSheet';
 import { Section, ShelvesSection } from '../components/SettingsSections';
@@ -26,9 +27,11 @@ export function SettingsPage() {
     <div className="max-w-[640px]">
       <h1 className="font-display text-[2.4rem] leading-[1.05] md:text-[3.1rem]">Settings</h1>
       <AccountSection />
+      <AdSlot position="top" className="mt-10" />
       <ShelvesSection />
       <AppearanceSection />
       <DataSection />
+      <AdSlot position="bottom" className="mt-12" />
     </div>
   );
 }

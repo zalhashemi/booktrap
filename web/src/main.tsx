@@ -15,9 +15,18 @@ import { NotFoundPage } from './routes/NotFoundPage';
 import { SettingsPage } from './routes/SettingsPage';
 import { ShelfPage } from './routes/ShelfPage';
 import { watchForStaleBuild } from './stale-build';
+import { adsEnabled, loadAdsense } from './ads/ads';
 import './styles/index.css';
 
 watchForStaleBuild();
+
+// AdSense (and Google's consent message, which every page needs, not only those with ads) loads once the
+// page has, so it never slows the shelf. The admin page has no ads.
+const isAdminPath = window.location.pathname.replace(/\/+$/, '') === '/admin';
+if (adsEnabled() && !isAdminPath) {
+  if (document.readyState === 'complete') void loadAdsense();
+  else window.addEventListener('load', () => void loadAdsense(), { once: true });
+}
 
 const queryClient = new QueryClient();
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { CONTACT_EMAIL, OPERATOR, contactHref } from '../legal';
 
 /** Both pages are drafts for the operator's or a lawyer's review before launch (PROGRESS.md, Phase 10). */
-const LAST_UPDATED = '12 October 2026';
+const LAST_UPDATED = '13 October 2026';
 
 /**
  * How long things are kept. These mirror the API's defaults (POST_CACHE_DAYS, the 2-day network hash,
@@ -78,10 +78,14 @@ export function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      note="no ads, no tracking"
+      note="small ads, no analytics"
       summary={
         <>
-          <li>No tracking cookies, no ads, no analytics. You can use BookTrap as a guest, without an email.</li>
+          <li>
+            BookTrap is free, paid for by two small Google ads on some pages. In the EU, UK and Switzerland, Google asks before it sets
+            any ad cookie. We have no analytics, and advertisers never get your shelf, your email or the links you paste.
+          </li>
+          <li>You can use BookTrap as a guest, without an email.</li>
           <li>If you save your shelf, we keep your email address to sign you in. We keep your shelf until you delete it; an unsaved guest shelf goes after 30 days without a visit.</li>
           <li>To find books, we read the public posts you paste. We keep the book titles, the post link and the creator&rsquo;s public handle, never the video or images.</li>
           <li>
@@ -122,7 +126,42 @@ export function PrivacyPage() {
       </List>
       <P>
         In your browser we store your sign-in session and display choices such as the theme. These stay on your device and
-        aren&rsquo;t used for tracking.
+        aren&rsquo;t used for tracking. Google&rsquo;s ads use cookies of their own: see{' '}
+        <a href="#ads" className="underline">
+          Ads
+        </a>
+        .
+      </P>
+
+      <H2 id="ads">Ads</H2>
+      <P>
+        BookTrap shows up to two small ads on the Add, Shelf and Settings pages, served by Google AdSense. Never in the privacy policy
+        or terms, and never inside a book or sign-in sheet. Google, and the ad companies it works with, use cookies and similar
+        technology to show ads, avoid showing you the same one again and again, count views and clicks, prevent fraud and, where
+        you allow it, choose ads based on your visits to this and other websites.
+      </P>
+      <P>
+        To do that, Google receives what any website you load an ad from receives: the page address, your network address, your
+        browser and device type, and its own cookies. It never receives your shelf, your email address or the links you paste.
+        Google uses this data under its own privacy policy, as a separate controller: see{' '}
+        <a href="https://policies.google.com/technologies/partner-sites" className="underline" target="_blank" rel="noreferrer">
+          how Google uses information from sites that use its services
+        </a>
+        .
+      </P>
+      <P>
+        <strong>Your choices.</strong> In the European Economic Area, the UK and Switzerland, Google&rsquo;s consent message asks you
+        first, and you can say no; ads you then see aren&rsquo;t personalised. You can change your answer at any time with{' '}
+        <strong>Privacy choices</strong> at the bottom of every page. Elsewhere, you can turn off personalised ads in{' '}
+        <a href="https://adssettings.google.com" className="underline" target="_blank" rel="noreferrer">
+          Google&rsquo;s ad settings
+        </a>{' '}
+        or at{' '}
+        <a href="https://www.aboutads.info/choices/" className="underline" target="_blank" rel="noreferrer">
+          aboutads.info
+        </a>
+        , and US residents can opt out of the sale or sharing of their data through Privacy choices too. An ad blocker hides the ads
+        and BookTrap works the same.
       </P>
 
       <H2>Reading public posts</H2>
@@ -169,6 +208,13 @@ export function PrivacyPage() {
           commercial terms, it doesn&rsquo;t train its models on this data.
         </li>
         <li>
+          <strong>Google AdSense</strong>: shows the ads and Google&rsquo;s consent message (see{' '}
+          <a href="#ads" className="underline">
+            Ads
+          </a>
+          ).
+        </li>
+        <li>
           <strong>Google Books</strong> and <strong>Open Library</strong>: we send them book titles and authors (never anything about
           you) to find covers and ISBNs.
         </li>
@@ -181,7 +227,9 @@ export function PrivacyPage() {
       <H2>Why we&rsquo;re allowed to</H2>
       <P>
         We process your shelf and the links you paste because you ask us to: it&rsquo;s the service itself. We process network hashes,
-        costs and the bot check because we have a legitimate interest in preventing abuse and keeping BookTrap free. A creator&rsquo;s public handle
+        costs and the bot check because we have a legitimate interest in preventing abuse and keeping BookTrap free. Ads are
+        shown for the same reason; where the law requires consent for ad cookies (the EEA, UK and Switzerland), they&rsquo;re set
+        only once you give it. A creator&rsquo;s public handle
         is kept as the source of a book, so you can go back to the post, which is a legitimate interest too. You can object at any
         time.
       </P>
@@ -256,7 +304,7 @@ export function TermsPage() {
       note="be kind to the bookworm"
       summary={
         <>
-          <li>BookTrap is free, has daily limits and comes as it is.</li>
+          <li>BookTrap is free (small ads pay for it), has daily limits and comes as it is.</li>
           <li>Only paste links to public posts, and don&rsquo;t try to get around the limits.</li>
           <li>Books are found automatically and can be wrong, so check before you buy.</li>
           <li>Save your shelf with an email to keep it: a guest shelf lives in one browser and goes after 30 days without a visit.</li>
@@ -266,7 +314,11 @@ export function TermsPage() {
       <H2>The service</H2>
       <P>
         BookTrap ({OPERATOR}) finds the books in TikTok and Instagram posts you paste and keeps them on a shelf you can export. It&rsquo;s
-        free. It has daily limits, a monthly budget and a cap on videos per collection, all of which may change. If we ever offer paid
+        free, paid for by small ads from Google (see the{' '}
+        <Link to="/privacy#ads" className="underline">
+          privacy policy
+        </Link>
+        ). It has daily limits, a monthly budget and a cap on videos per collection, all of which may change. If we ever offer paid
         features, they&rsquo;ll come with their own terms. By using BookTrap you agree to these terms and to the{' '}
         <Link to="/privacy" className="underline">
           privacy policy

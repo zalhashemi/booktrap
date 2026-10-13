@@ -723,3 +723,8 @@ dialog.sheet[open]::backdrop {
     animation: none !important;
   }
 }
+
+/* An ad space Google had nothing for goes away entirely, label and all (AdSlot). */
+.ad-card:has(ins.adsbygoogle[data-ad-status='unfilled']) {
+  display: none;
+}

@@ -43,24 +43,39 @@ function assertApiUrl(url: string | undefined) {
 const TURNSTILE = 'https://challenges.cloudflare.com';
 
 /**
+ * Google AdSense and its consent message (src/ads/ads.ts): the ad script, the ad frames, and the hosts
+ * they report to. Google's ad hosts change, so these are its documented families rather than single hosts.
+ */
+const ADSENSE = [
+  'https://pagead2.googlesyndication.com',
+  'https://*.googlesyndication.com',
+  'https://*.doubleclick.net',
+  'https://*.googleadservices.com',
+  'https://*.google.com',
+  'https://*.gstatic.com',
+  'https://*.adtrafficquality.google',
+].join(' ');
+
+/**
  * Cloudflare Pages response headers (`dist/_headers`), written at build time because the
  * Content-Security-Policy names the API's origin and the Supabase project (sign-in). Scripts come from
- * this site only (plus WebAssembly for the PDF engine's layout, and Cloudflare Turnstile's script and
- * frame, the CAPTCHA), the page talks only to itself, the API and Supabase Auth, and covers and
- * thumbnails may come from any https image host.
+ * this site (plus WebAssembly for the PDF engine's layout), Cloudflare Turnstile (the CAPTCHA) and
+ * Google AdSense; frames only from those two; the page talks to itself, the API, Supabase Auth and
+ * AdSense; and covers, thumbnails and ads may show images from any https host.
  */
 function cloudflareHeaders(apiUrl: string, supabaseUrl: string | undefined): Plugin {
   const api = new URL(apiUrl).origin;
   const auth = supabaseUrl ? ` ${new URL(supabaseUrl).origin}` : '';
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'wasm-unsafe-eval' ${TURNSTILE}`,
-    `frame-src ${TURNSTILE}`,
+    `script-src 'self' 'wasm-unsafe-eval' ${TURNSTILE} ${ADSENSE}`,
+    `frame-src ${TURNSTILE} ${ADSENSE}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
+    // Google's consent message uses its own web fonts.
+    "font-src 'self' data: https://fonts.gstatic.com",
     // data: lets the PDF engine load its WebAssembly from an inlined file (it can't reach other sites).
-    `connect-src 'self' data: ${api}${auth}`,
+    `connect-src 'self' data: ${api}${auth} ${ADSENSE}`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",

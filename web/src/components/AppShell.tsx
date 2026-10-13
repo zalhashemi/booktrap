@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useMatches } from 'react-router';
 import { SUPPORT_URL, contactHref } from '../legal';
 import { useAccount } from '../account/account-context';
 import { useReportIssue } from '../report/report-issue-context';
+import { adsEnabled, showPrivacyChoices } from '../ads/ads';
 import { AuthSheetProvider } from './AuthSheet';
 import { ConnectionGate } from './ConnectionGate';
 import { LibraryBackdrop, ShelfFooter } from './LibraryBackdrop';
@@ -135,6 +136,13 @@ function SiteFooter() {
               Report an issue
             </button>
           </li>
+          {adsEnabled() && (
+            <li>
+              <button type="button" onClick={showPrivacyChoices} className={link}>
+                Privacy choices
+              </button>
+            </li>
+          )}
         </ul>
       </nav>
     </footer>
