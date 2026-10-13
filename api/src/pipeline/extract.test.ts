@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dedupe, type ExtractedBook } from './extract';
-import { normalizeImage, vttToText } from './media';
+import { downloadSlides, normalizeImage, vttToText } from './media';
 
 const book = (overrides: Partial<ExtractedBook>): ExtractedBook => ({
   title: 'Babel',
@@ -50,5 +50,22 @@ describe('vttToText', () => {
   it('removes cue numbers and timings but keeps spoken numeric titles', () => {
     const vtt = ['WEBVTT', '', '1', '00:00:01.000 --> 00:00:02.000', 'my favourite is', '', '2', '00:00:02.000 --> 00:00:03.000', '1984'].join('\n');
     expect(vttToText(vtt)).toBe('my favourite is 1984');
+  });
+});
+
+describe('downloadSlides', () => {
+  it('downloads a big carousel’s slides two at a time', async () => {
+    let active = 0;
+    let peak = 0;
+    const fetchImpl = async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active--;
+      return new Response('gone', { status: 404 });
+    };
+    const urls = Array.from({ length: 20 }, (_, n) => `https://scontent-a.cdninstagram.com/${n}.jpg`);
+    await expect(downloadSlides(urls, { apifyToken: 't', fetchImpl: fetchImpl as never })).rejects.toThrow(/couldn’t download/);
+    expect(peak).toBe(2);
   });
 });

@@ -118,6 +118,19 @@ const purge = () =>
 void purge();
 setInterval(() => void purge(), PURGE_EVERY_MS).unref();
 
+// Memory, in Render's logs: checked every minute, logged every 10, and at once when it nears the
+// Starter plan's 512 MB (Render restarts the instance past it), so a spike lines up with what ran.
+const MB = 1024 * 1024;
+const MEMORY_WARN_BYTES = 400 * MB;
+let memoryChecks = 0;
+setInterval(() => {
+  const { rss, heapUsed, external, arrayBuffers } = process.memoryUsage();
+  const usage = { rssMb: Math.round(rss / MB), heapMb: Math.round(heapUsed / MB), externalMb: Math.round(external / MB), buffersMb: Math.round(arrayBuffers / MB), jobItems: queue.size };
+  if (rss > MEMORY_WARN_BYTES) app.log.warn(usage, 'memory high');
+  else if (memoryChecks % 10 === 0) app.log.info(usage, 'memory');
+  memoryChecks++;
+}, 60_000).unref();
+
 // Resume work that was queued or mid-flight when the process last stopped (free hosting sleeps).
 // Mid-flight items restart from the top; the post cache makes a repeated step free.
 try {

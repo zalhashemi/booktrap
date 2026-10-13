@@ -7,6 +7,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
 import { MEDIA_LIMITS } from '@booktrap/shared';
+import { createLimiter } from '../limiter';
 import { PipelineError } from './errors';
 import { MEDIA_HOSTS, safeFetch } from './safe-fetch';
 
@@ -86,25 +87,33 @@ export async function toWebp(bytes: Buffer, width: number): Promise<Buffer> {
   }
 }
 
+/**
+ * Slides downloaded and re-encoded at once, across every job: each holds up to 15 MB raw and starts
+ * an ffmpeg, so a few 20-slide carousels read together could otherwise run out the 512 MB instance.
+ */
+const slideWork = createLimiter(2);
+
 export async function downloadSlides(urls: string[], deps: MediaDeps): Promise<ImageInput[]> {
   const slides = urls.slice(0, MEDIA_LIMITS.maxSlides);
   const images = await Promise.all(
-    slides.map(async (url, index) => {
-      try {
-        const { response } = await safeFetch(url, { hosts: MEDIA_HOSTS, apifyToken: deps.apifyToken, fetchImpl: deps.fetchImpl });
-        if (!response.ok) return null;
-        const raw = await readCapped(response, MEDIA_LIMITS.maxImageBytes);
-        const bytes = await normalizeImage(raw);
-        const image: ImageInput = {
-          label: `Slide ${index + 1} of ${slides.length}`,
-          mediaType: 'image/jpeg',
-          base64: bytes.toString('base64'),
-        };
-        return image;
-      } catch {
-        return null;
-      }
-    }),
+    slides.map((url, index) =>
+      slideWork.run(async () => {
+        try {
+          const { response } = await safeFetch(url, { hosts: MEDIA_HOSTS, apifyToken: deps.apifyToken, fetchImpl: deps.fetchImpl });
+          if (!response.ok) return null;
+          const raw = await readCapped(response, MEDIA_LIMITS.maxImageBytes);
+          const bytes = await normalizeImage(raw);
+          const image: ImageInput = {
+            label: `Slide ${index + 1} of ${slides.length}`,
+            mediaType: 'image/jpeg',
+            base64: bytes.toString('base64'),
+          };
+          return image;
+        } catch {
+          return null;
+        }
+      }),
+    ),
   );
   const ok = images.filter((image): image is ImageInput => image !== null);
   if (ok.length === 0) throw new PipelineError('media_failed', 'BookTrap couldn’t download this post’s photos. Try again in a minute.', true);

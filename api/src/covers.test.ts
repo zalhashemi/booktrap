@@ -55,6 +55,25 @@ describe('createCoverCache', () => {
     await covers.get(url(2), 160);
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
+
+  it('fetches only a few covers at once and turns away the rest when too many wait', async () => {
+    let active = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return image();
+    });
+    const covers = createCoverCache({ fetchImpl: fetchImpl as never, convert: async () => Buffer.from('x'), fetchConcurrency: 3, maxWaiting: 4 });
+    const url = (id: number) => `https://covers.openlibrary.org/b/id/${id}-L.jpg`;
+    const results = await Promise.all(Array.from({ length: 10 }, (_, id) => covers.get(url(id), 160)));
+    expect(peak).toBe(3);
+    expect(results.filter(Boolean)).toHaveLength(7);
+    // A cover turned away isn't remembered as missing: asked again later, it's made.
+    expect(await covers.get(url(9), 160)).not.toBeNull();
+  });
 });
 
 describe('toWebp', () => {

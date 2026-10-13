@@ -44,6 +44,11 @@ export class JobQueue {
     private readonly concurrency = 2,
   ) {}
 
+  /** Items running or waiting (for the memory log). */
+  get size(): number {
+    return this.running + this.pending.length;
+  }
+
   enqueue(itemId: string, userId: string): void {
     if (this.activeItems.has(itemId)) {
       this.rerun.set(itemId, userId);

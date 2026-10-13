@@ -1,5 +1,6 @@
 import { MEDIA_LIMITS } from '@booktrap/shared';
 import { toWebp } from './pipeline/media';
+import { createLimiter } from './limiter';
 import { COVER_HOSTS, isAllowedUrl, safeFetch } from './pipeline/safe-fetch';
 
 const COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -52,6 +53,10 @@ export interface CoverCacheOptions {
   maxBytes?: number;
   /** Conversions running at once: ffmpeg shares a small CPU with the API. */
   concurrency?: number;
+  /** Covers fetched at once: each holds its original (up to 2 MB) in memory until it's converted. */
+  fetchConcurrency?: number;
+  /** Covers waiting for a turn; past this, a request is turned away and the shelf shows the catalogue's own image. */
+  maxWaiting?: number;
   now?: () => number;
 }
 
@@ -60,24 +65,25 @@ const MISS_TTL_MS = 2 * 60 * 1000;
 
 /**
  * Covers as small WebP, made once and kept in memory: the catalogues' JPEGs are several times larger
- * than a shelf needs. Requests for the same cover at once share one conversion.
+ * than a shelf needs. Requests for the same cover at once share one conversion. A big shelf opened for
+ * the first time asks for hundreds at once: only a few are fetched at a time, and past `maxWaiting` the
+ * rest are turned away (the 512 MB instance was restarted for running out of memory on 12 Oct 2026).
  */
-export function createCoverCache({ fetchImpl, convert = toWebp, maxBytes = 50 * 1024 * 1024, concurrency = 2, now = Date.now }: CoverCacheOptions = {}) {
+export function createCoverCache({
+  fetchImpl,
+  convert = toWebp,
+  maxBytes = 24 * 1024 * 1024,
+  concurrency = 2,
+  fetchConcurrency = 6,
+  maxWaiting = 100,
+  now = Date.now,
+}: CoverCacheOptions = {}) {
   const images = new Map<string, Buffer>();
   const misses = new Map<string, number>();
   const pending = new Map<string, Promise<Buffer | null>>();
   let total = 0;
-  let active = 0;
-  const waiting: (() => void)[] = [];
-
-  const slot = async () => {
-    if (active >= concurrency) await new Promise<void>((resolve) => waiting.push(resolve));
-    active++;
-  };
-  const release = () => {
-    active--;
-    waiting.shift()?.();
-  };
+  const fetches = createLimiter(fetchConcurrency);
+  const conversions = createLimiter(concurrency);
 
   const keep = (key: string, image: Buffer) => {
     images.set(key, image);
@@ -91,15 +97,12 @@ export function createCoverCache({ fetchImpl, convert = toWebp, maxBytes = 50 * 
 
   const make = async (key: string, url: string, width: CoverWidth): Promise<Buffer | null> => {
     try {
-      const cover = await fetchCover(url, fetchImpl);
-      if (!cover) throw new Error('no cover');
-      await slot();
-      let image: Buffer;
-      try {
-        image = await convert(cover.bytes, width);
-      } finally {
-        release();
-      }
+      // The original is dropped once converted, so at most `fetchConcurrency` are ever in memory.
+      const image = await fetches.run(async () => {
+        const cover = await fetchCover(url, fetchImpl);
+        if (!cover) throw new Error('no cover');
+        return conversions.run(() => convert(cover.bytes, width));
+      });
       keep(key, image);
       return image;
     } catch {
@@ -125,6 +128,8 @@ export function createCoverCache({ fetchImpl, convert = toWebp, maxBytes = 50 * 
       misses.delete(key);
       let made = pending.get(key);
       if (!made) {
+        // Too busy: not remembered as a miss, so it's made on a later visit.
+        if (fetches.size >= fetchConcurrency + maxWaiting) return null;
         made = make(key, url, width).finally(() => pending.delete(key));
         pending.set(key, made);
       }
